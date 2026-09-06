@@ -1,0 +1,106 @@
+# c-app — Mandarin-Lernkarten für iOS
+
+Private, native iOS-App zum Lernen von Mandarin-Chinesisch mit Lernkarten.
+Deutsch als Ausgangssprache, Hanzi + Pinyin als Zielinhalt, Aussprache über
+Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
+
+## Status
+
+**Planungsphase — es existiert noch kein App-Code.**
+
+Dieses Repository enthält derzeit ausschließlich Architektur- und Planungs-
+dokumentation. Die Umsetzung erfolgt anschließend Phase für Phase gemäß
+[docs/roadmap.md](docs/roadmap.md), mit einem Test nach jeder Phase.
+
+Nächster Schritt: **Phase 0 — Foundation & Projekt-Setup**.
+
+## Ziel
+
+Bestehende Sprachlern-Apps erfüllen einzelne Anforderungen, kombinieren sie
+aber nicht in der gewünschten Form. Diese App soll deshalb zunächst eine
+fokussierte, hochwertige Flashcard-App werden:
+
+- strikte Trennung von **Wortkarten** und **Satzkarten**
+- Karten anlegen mit minimaler Tipparbeit: deutscher Text rein, Hanzi und
+  Pinyin werden automatisch erzeugt und bleiben **jederzeit editierbar**
+- inhaltliche **Kategorien/Tags** getrennt vom **Lernstatus**
+- zwei Abfragerichtungen: Deutsch → Chinesisch (laut sprechen) und
+  chinesisches Audio → Deutsch (Hörverstehen)
+- Lernsessions, die sich unbegrenzt anfühlen, intern aber in kleinen
+  dynamischen Gruppen von ~7 Karten arbeiten
+- gewichtete Kartenauswahl nach Lernbedarf statt starrer Stapel oder
+  reinem Zufall
+
+Ausdrücklich **nicht** Teil des Produkts: Herzen, Streaks, Zeitlimits,
+Tageslimits, Gamification, Werbung, In-App-Käufe, Accounts, Analytics.
+
+## Tech Stack
+
+| Bereich | Entscheidung |
+| --- | --- |
+| Sprache | Swift |
+| UI | SwiftUI |
+| Persistenz | SwiftData (lokal, keine CloudKit-Synchronisation) |
+| Übersetzung DE → ZH | Translation Framework (`TranslationSession`) |
+| Hanzi → Pinyin | CoreFoundation-Transliteration (`CFStringTokenizer` / `CFStringTransform`) |
+| Sprachausgabe | AVFoundation (`AVSpeechSynthesizer`, `zh-CN`-Stimme) |
+| Spracherkennung | Speech Framework (`SpeechAnalyzer` / `SpeechTranscriber`) |
+| Externe Dependencies | keine |
+| Backend | keines |
+| Deployment Target | **iOS 26.0** |
+| Build-Toolchain | Xcode 26.x (stabil) |
+
+Begründung des Deployment Targets und die geprüfte API-Verfügbarkeit stehen in
+[docs/apple-frameworks.md](docs/apple-frameworks.md). Kurzfassung: `SpeechAnalyzer`
+und `SpeechTranscriber` gibt es erst ab iOS 26.0, und der UI-freie Initializer
+`TranslationSession(installedSource:target:)` ebenfalls erst ab iOS 26.0. Da die
+App privat auf einem eigenen Gerät läuft, gibt es keinen Grund, ältere iOS-
+Versionen zu unterstützen.
+
+## Entwicklungsprinzipien
+
+1. **MVP zuerst.** Kein Feature bauen, bevor die Foundation dafür nötig ist.
+2. **Kleine, testbare Schritte.** Jede Roadmap-Phase endet in einem Zustand,
+   der auf dem Gerät überprüfbar ist.
+3. **Apple-native Lösungen bevorzugen.**
+4. **Keine unnötigen Dependencies.** Aktuell null externe Pakete.
+5. **Geschäftslogik unabhängig von Views.** Die Learning Engine kennt weder
+   SwiftUI noch SwiftData.
+6. **Learning Engine separat testbar** — reine Swift-Typen, Unit-Tests ohne
+   Simulator-Abhängigkeit.
+7. **Automatik ist Komfort, kein Zwang.** Übersetzung und Pinyin dürfen das
+   Speichern einer Karte nie blockieren; manuelle Eingabe ist immer möglich.
+8. **Keine vorzeitige Optimierung.**
+9. **Keine Gamification.**
+10. **Local-first.** Keine Cloud-Architektur ohne konkrete Notwendigkeit.
+
+Bewusst *nicht* verwendet: Repository-Abstraktionen, DI-Frameworks,
+Coordinator-Patterns und Drittanbieter-State-Management. SwiftUI und SwiftData
+reichen für den Umfang dieser App aus. Details und Begründung in
+[docs/architecture.md](docs/architecture.md).
+
+## Dokumentation
+
+| Dokument | Inhalt |
+| --- | --- |
+| [docs/roadmap.md](docs/roadmap.md) | 11 Entwicklungsphasen (0–10) mit Ziel, Scope, Tasks, Akzeptanzkriterien, Abhängigkeiten und expliziten Nicht-Zielen |
+| [docs/architecture.md](docs/architecture.md) | Ordnerstruktur, SwiftData-Modell, Schichten, Services, Fehlerbehandlung, Erweiterbarkeit |
+| [docs/learning-engine.md](docs/learning-engine.md) | Spezifikation von Gewichtung, Mini-Batch-Auswahl, Queue-Verhalten und Statusübergängen |
+| [docs/apple-frameworks.md](docs/apple-frameworks.md) | Geprüfte API-Verfügbarkeit, Permissions, Offline-/Online-Verhalten, offene technische Fragen, Quellen |
+| [CLAUDE.md](CLAUDE.md) | Arbeitsanweisungen für die Entwicklung mit Claude |
+
+## Datenschutz
+
+Die App ist local-first konzipiert: keine Accounts, kein Login, kein eigener
+Server, keine Analytics, keine Telemetrie, keine Werbung.
+
+Zwei Einschränkungen sind dokumentiert und technisch bedingt:
+
+- Sprachmodelle für **Übersetzung** und **Spracherkennung** werden beim ersten
+  Gebrauch von Apple-Servern heruntergeladen. Das erfordert einmalig eine
+  Internetverbindung; danach läuft die Verarbeitung auf dem Gerät.
+- Apple gibt für `TranslationSession` an, dass API-Nutzungs- und
+  Performance-Metriken erhoben werden können (Bundle-ID, Sprachpaar) — jedoch
+  **keine Inhalte**.
+
+Details in [docs/apple-frameworks.md](docs/apple-frameworks.md).
