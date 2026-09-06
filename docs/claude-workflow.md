@@ -162,6 +162,12 @@ Gerätetests kann nur der Nutzer durchführen. Solange welche offen sind, wird
 die Phase nicht als fertig gemeldet, sondern die offenen Punkte werden
 namentlich benannt.
 
+`/verify-phase` gibt `READY` nur aus, wenn dieses Gate vollständig erfüllt
+ist. **Ein ausstehender erforderlicher Gerätetest bedeutet `NOT READY`** —
+auch dann, wenn es der einzige noch offene Punkt ist. Der Bericht muss dabei
+erkennbar trennen, ob echte Implementierungs- oder Testprobleme bestehen oder
+ausschließlich Nutzer-Gerätetests ausstehen.
+
 ---
 
 ## 6. Bewusst nicht eingerichtet
