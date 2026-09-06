@@ -1,8 +1,12 @@
 # Entwicklungs-Roadmap
 
-11 Phasen (0–10). Jede Phase endet in einem Zustand, der auf einem echten
-iPhone überprüfbar ist. Nach jeder Phase wird getestet, bevor die nächste
-beginnt.
+Eine vorgeschaltete Bootstrap-Phase (**B**) für die Entwicklungsinfrastruktur,
+danach 11 Produktphasen (**0–10**). Jede Produktphase endet in einem Zustand,
+der auf einem echten iPhone überprüfbar ist. Nach jeder Phase wird getestet,
+bevor die nächste beginnt.
+
+Die Bootstrap-Phase trägt absichtlich den Buchstaben B statt einer Nummer,
+damit die fachliche Nummerierung 0–10 stabil bleibt.
 
 Verbindliche Regel: **Kein Feature einer späteren Phase vorziehen.** Wenn
 während einer Phase eine gute Idee für später auftaucht, wandert sie in den
@@ -33,6 +37,7 @@ Modus A funktioniert vollständig ohne sie.
 
 | Phase | Titel | Ergebnis |
 | --- | --- | --- |
+| B | Development Workflow Bootstrap | Claude-Code-Infrastruktur und Workflow stehen, kein App-Code |
 | 0 | Foundation & Projekt-Setup | App startet auf dem Gerät, leeres Tab-Gerüst |
 | 1 | Datenmodell & Persistenz | Karten und Tags überleben den App-Neustart |
 | 2 | Kartenverwaltung | Karten manuell anlegen, suchen, filtern, bearbeiten, löschen |
@@ -44,6 +49,58 @@ Modus A funktioniert vollständig ohne sie.
 | 8 | Lernmodus B | chinesisches Audio → Deutsch |
 | 9 | Spracherkennung | Mandarin-Spracheingabe mit einfachem Textvergleich |
 | 10 | Einstellungen, Fehlerbehandlung & Polish | Release-fähiger Zustand für den privaten Gebrauch |
+
+---
+
+## Phase B — Development Workflow Bootstrap
+
+**Status: abgeschlossen.** Voraussetzung für den Beginn von Phase 0.
+
+### Ziel
+Die Claude-Code-Entwicklungsinfrastruktur des Projekts steht, damit die
+Produktphasen einem festen, überprüfbaren Ablauf folgen statt jedes Mal neu
+erklärt zu werden.
+
+### Scope
+Projektinstruktionen, Subagents, Skills, pfadgebundene Regeln und die
+Dokumentation des Workflows. **Ausdrücklich kein App-Code.**
+
+### Tasks
+- **B.1** Aktuelle Claude-Code-Konventionen gegen die offizielle
+  Dokumentation verifizieren (Frontmatter-Schemata, Dateiorte,
+  Werkzeugbeschränkungen, Abgrenzung Skill / Subagent / Rule / Agent Team).
+- **B.2** Drei Subagents unter `.claude/agents/` anlegen:
+  `apple-api-researcher`, `code-reviewer`, `test-auditor` — alle ohne
+  Schreibrechte auf Projektdateien.
+- **B.3** Drei Skills unter `.claude/skills/` anlegen: `implement-phase`,
+  `verify-phase`, `apple-api-spike`.
+- **B.4** Pfadgebundene Regel `.claude/rules/learning-layer.md` für
+  `Learning/**` anlegen.
+- **B.5** `CLAUDE.md` um einen Routing-Abschnitt ergänzen, ohne die Datei
+  zum Handbuch anwachsen zu lassen.
+- **B.6** `docs/claude-workflow.md` mit Rollen, Phase-Workflow,
+  Delegationsregeln, Git-Regel und Phase-Gate anlegen.
+- **B.7** Bewusst nicht eingerichtete Bestandteile mit Begründung
+  dokumentieren (Agent Teams, weitere Implementierungsagenten, Hooks, MCP,
+  Plugins).
+- **B.8** Frontmatter aller Agent- und Skill-Dateien gegen die verifizierte
+  Spezifikation prüfen.
+
+### Akzeptanzkriterien
+- [x] Alle Agent- und Skill-Dateien haben gültiges, dokumentiertes Frontmatter.
+- [x] Kein Subagent besitzt `Write` oder `Edit`.
+- [x] Kein Skill und kein Agent dupliziert die Verantwortung eines anderen.
+- [x] `CLAUDE.md` bleibt deutlich unter 200 Zeilen.
+- [x] Der Phase-Workflow ist dokumentiert und von `CLAUDE.md` aus erreichbar.
+- [x] Agent Teams sind nicht aktiviert.
+- [x] Es ist kein produktiver Swift-Code entstanden.
+
+### Abhängigkeiten
+Keine.
+
+### Ausdrücklich nicht in dieser Phase
+Xcode-Projekt, App-Code, Datenmodell, Hooks, MCP-Server, Plugins, Agent
+Teams, zusätzliche Implementierungsagenten.
 
 ---
 
@@ -74,6 +131,11 @@ auf das Gerät. Keine Fachlogik.
   App auf dem physischen iPhone starten.
 - **0.8** `.gitignore` prüfen (liegt bereits vor) und den ersten Code-Commit
   anlegen.
+- **0.9** Jetzt, mit existierendem Xcode-Projekt, bewerten, ob ein Hook einen
+  echten Vorteil bringt — etwa Absicherung von `project.pbxproj` oder ein
+  Formatierungslauf nach jedem Edit. Nur einrichten, wenn ja; sonst die
+  Entscheidung in [claude-workflow.md §6](claude-workflow.md#6-bewusst-nicht-eingerichtet)
+  vermerken.
 
 ### Akzeptanzkriterien
 - [ ] Die App startet auf dem echten iPhone (nicht nur im Simulator).
@@ -84,7 +146,7 @@ auf das Gerät. Keine Fachlogik.
 - [ ] Keine externe Dependency im Projekt.
 
 ### Abhängigkeiten
-Keine.
+Phase B (Entwicklungsinfrastruktur).
 
 ### Ausdrücklich nicht in dieser Phase
 Datenmodell, Persistenz, jegliche UI über Platzhalter hinaus, App-Icon,

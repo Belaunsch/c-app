@@ -9,7 +9,9 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 **Planungsphase — es existiert noch kein App-Code.**
 
 Dieses Repository enthält derzeit ausschließlich Architektur- und Planungs-
-dokumentation. Die Umsetzung erfolgt anschließend Phase für Phase gemäß
+dokumentation sowie die Claude-Code-Entwicklungsinfrastruktur
+(`.claude/agents/`, `.claude/skills/`, `.claude/rules/`). Die Umsetzung
+erfolgt anschließend Phase für Phase gemäß
 [docs/roadmap.md](docs/roadmap.md), mit einem Test nach jeder Phase.
 
 Nächster Schritt: **Phase 0 — Foundation & Projekt-Setup**.
@@ -83,11 +85,12 @@ reichen für den Umfang dieser App aus. Details und Begründung in
 
 | Dokument | Inhalt |
 | --- | --- |
-| [docs/roadmap.md](docs/roadmap.md) | 11 Entwicklungsphasen (0–10) mit Ziel, Scope, Tasks, Akzeptanzkriterien, Abhängigkeiten und expliziten Nicht-Zielen |
+| [docs/roadmap.md](docs/roadmap.md) | Bootstrap-Phase B plus 11 Produktphasen (0–10) mit Ziel, Scope, Tasks, Akzeptanzkriterien, Abhängigkeiten und expliziten Nicht-Zielen |
 | [docs/architecture.md](docs/architecture.md) | Ordnerstruktur, SwiftData-Modell, Schichten, Services, Fehlerbehandlung, Erweiterbarkeit |
 | [docs/learning-engine.md](docs/learning-engine.md) | Spezifikation von Gewichtung, Mini-Batch-Auswahl, Queue-Verhalten und Statusübergängen |
 | [docs/apple-frameworks.md](docs/apple-frameworks.md) | Geprüfte API-Verfügbarkeit, Permissions, Offline-/Online-Verhalten, offene technische Fragen, Quellen |
-| [CLAUDE.md](CLAUDE.md) | Arbeitsanweisungen für die Entwicklung mit Claude |
+| [docs/claude-workflow.md](docs/claude-workflow.md) | Rollen, Phase-Workflow, Delegationsregeln und Phase-Gate für die Entwicklung mit Claude Code |
+| [CLAUDE.md](CLAUDE.md) | Projektregeln und Routing zu Skills und Subagents |
 
 ## Datenschutz
 

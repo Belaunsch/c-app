@@ -6,7 +6,8 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Planungsphase. Es existiert noch kein App-Code.**
+**Aktueller Stand: Planung und Entwicklungsinfrastruktur stehen. Es existiert
+noch kein App-Code. Nächster Schritt ist Phase 0 der Roadmap.**
 
 ## Vor jeder Änderung lesen
 
@@ -16,6 +17,21 @@ local-first.
 | Wo gehört mein Code hin? | [docs/architecture.md](docs/architecture.md) |
 | Wie funktioniert die Lernlogik genau? | [docs/learning-engine.md](docs/learning-engine.md) |
 | Ab welcher iOS-Version gibt es diese API? Was ist unklar? | [docs/apple-frameworks.md](docs/apple-frameworks.md) |
+| Wie arbeiten wir, wer darf was? | [docs/claude-workflow.md](docs/claude-workflow.md) |
+
+## Routing
+
+| Aufgabe | Weg |
+| --- | --- |
+| Normale Feature-Implementierung | Skill `/implement-phase` |
+| Abschlussprüfung einer Phase | Skill `/verify-phase` |
+| Apple-API- oder Verfügbarkeitsfrage | Skill `/apple-api-spike`, für Einzelfragen Subagent `apple-api-researcher` |
+| Unabhängiges Code Review | Subagent `code-reviewer` |
+| Unabhängige Test- und Acceptance-Prüfung | Subagent `test-auditor` |
+
+Produktivcode schreibt **immer der Hauptagent**, nie ein Subagent. Die drei
+Subagenten prüfen und recherchieren; sie ändern keine Dateien. Details und
+Begründung in [docs/claude-workflow.md](docs/claude-workflow.md).
 
 ## Harte Regeln
 
@@ -27,6 +43,8 @@ local-first.
    Drittanbieter-State-Management.** Begründung in
    [architecture.md §1](docs/architecture.md#1-schichten).
 4. **`Learning/` importiert nur `Foundation`.** Kein SwiftUI, kein SwiftData.
+   Detailregeln der Schicht: `.claude/rules/learning-layer.md` (lädt
+   automatisch beim Arbeiten an diesen Dateien).
 5. **Automatik blockiert nie.** Übersetzung und Pinyin sind Vorschläge.
    Eine Karte muss sich immer speichern lassen, auch wenn beides fehlschlägt.
    Manuell geänderte Werte werden nie automatisch überschrieben.
@@ -40,7 +58,10 @@ local-first.
    gehören als Q-Eintrag in
    [apple-frameworks.md §10](docs/apple-frameworks.md#10-offene-technische-fragen-zu-klären-vor-der-jeweiligen-phase).
 10. **Am Ende jeder Phase:** Akzeptanzkriterien durchgehen, Tests laufen
-    lassen, auf dem echten Gerät prüfen. Erst dann die nächste Phase.
+    lassen, Review durchführen lassen, auf dem echten Gerät prüfen. Ein
+    grüner Testlauf allein ist kein Phasenabschluss. Vollständiges
+    Phase-Gate: [docs/claude-workflow.md §5](docs/claude-workflow.md#5-phase-gate).
+    Erst danach die nächste Phase.
 
 ## Konventionen
 
