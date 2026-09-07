@@ -57,8 +57,10 @@ Was es bewusst **nicht** gibt — und warum:
 
 ## 2. Ordnerstruktur
 
-Arbeitsname des Targets: `CApp` (endgültiger App-Name und Bundle-ID werden in
-Phase 0 festgelegt).
+In Phase 0 festgelegt (Task 0.1): Target-Name **`CApp`**, Bundle-ID
+**`de.belaunsch.CApp`**. Der nach außen sichtbare App-Name lässt sich später
+jederzeit über `INFOPLIST_KEY_CFBundleDisplayName` ändern, ohne das Target
+oder die Bundle-ID anzufassen — daraus wird kein Naming-Projekt gemacht.
 
 ```
 c-app/
@@ -66,6 +68,7 @@ c-app/
 ├── CApp/
 │   ├── CAppApp.swift               App-Entry, ModelContainer-Setup
 │   ├── RootView.swift              TabView: Lernen · Karten
+│   ├── Assets.xcassets/            App-Icon-Slots, Akzentfarbe (Xcode-Template)
 │   │
 │   ├── Models/
 │   │   ├── Card.swift              @Model
@@ -124,7 +127,23 @@ c-app/
 *synchronisierte Ordner* („file system synchronized groups“, Xcode 16+) ins
 Projekt einbinden. Dann landen neue Dateien, die in VS Code angelegt werden,
 automatisch im Target — ohne manuelles Hinzufügen in Xcode und ohne ständige
-Änderungen an `project.pbxproj`.
+Änderungen an `project.pbxproj`. In Phase 0 gemessen und bestätigt: drei
+Dateioperationen erzeugten **null** Änderungen an `project.pbxproj`, und alle
+`PBXSourcesBuildPhase`-Listen sind leer — die Mitgliedschaft kommt
+ausschließlich aus der Synchronisation.
+
+**Achtung, in Phase 0 auf die harte Tour gelernt:** Ein synchronisierter Ordner
+nimmt **jede** Datei auf, auch versteckte. Fünf Platzhalter-Dateien namens
+`.gitkeep` wurden als Ressourcen ins App-Bundle kopiert und kollidierten dort
+auf demselben Ausgabepfad — der Build brach mit
+`duplicate output file '…/CApp.app/.gitkeep'` ab.
+
+Konsequenz: **keine Platzhalter-Dateien in leeren Ordnern.** Ein Ordner wird
+mit seiner ersten echten Datei angelegt. Weil Git keine leeren Verzeichnisse
+versioniert, ist die Ordnerliste oben die verbindliche Quelle für die
+Struktur — nicht der Inhalt des Repositories. Wer künftig eine Datei nur zum
+Ordner-Erhalt anlegen will, braucht dafür eine Ausnahme in der synchronisierten
+Gruppe; einfacher ist es, darauf zu verzichten.
 
 ---
 
@@ -238,6 +257,16 @@ struct CardSnapshot: Identifiable, Equatable {
 
 Damit ist die gesamte Lernlogik ohne `ModelContainer`, ohne Simulator und
 ohne Netzwerk testbar.
+
+**Offener Punkt für Phase 5:** Das Xcode-26-Template setzt im App-Target
+`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` (bei `SWIFT_VERSION = 5.0`).
+Damit landet auch unannotierter Code unter `Learning/` standardmäßig auf dem
+Main-Actor. Das verhindert die Tests nicht, steht aber quer zur Absicht von
+A2, diese Schicht als reine, actor-freie Logik zu halten. In Phase 0 bewusst
+unverändert gelassen, weil dort noch kein Code unter `Learning/` existiert und
+eine Änderung ohne Anlass nur Risiko wäre. Vor der Umsetzung von Phase 5
+bewusst entscheiden: Isolation für das Target abschalten, oder die betroffenen
+Typen einzeln als `nonisolated` markieren.
 
 ---
 

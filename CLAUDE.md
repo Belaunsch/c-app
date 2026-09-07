@@ -6,8 +6,10 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Planung und Entwicklungsinfrastruktur stehen. Es existiert
-noch kein App-Code. Nächster Schritt ist Phase 0 der Roadmap.**
+**Aktueller Stand: Phase 0 (Foundation) ist abgeschlossen** — Xcode-Projekt,
+zwei Tabs mit Platzhaltern, Test-Target, Build und Tests grün, Gerätetest
+bestanden. Es gibt noch kein Datenmodell und keine Fachlogik.
+**Nächster Schritt ist Phase 1 (Datenmodell & Persistenz).**
 
 ## Vor jeder Änderung lesen
 

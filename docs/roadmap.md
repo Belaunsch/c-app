@@ -106,6 +106,9 @@ Teams, zusätzliche Implementierungsagenten.
 
 ## Phase 0 — Foundation & Projekt-Setup
 
+**Status: abgeschlossen.** Gerätetest auf physischem iPhone (iOS 26) am
+2026-09-07 bestanden.
+
 ### Ziel
 Ein lauffähiges, signiertes iOS-Projekt mit leerem Navigationsgerüst, das auf
 dem echten iPhone startet.
@@ -138,12 +141,12 @@ auf das Gerät. Keine Fachlogik.
   vermerken.
 
 ### Akzeptanzkriterien
-- [ ] Die App startet auf dem echten iPhone (nicht nur im Simulator).
-- [ ] Beide Tabs sind sichtbar und umschaltbar.
-- [ ] `xcodebuild test` läuft grün durch.
-- [ ] Eine in VS Code neu angelegte Swift-Datei erscheint ohne manuellen
+- [x] Die App startet auf dem echten iPhone (nicht nur im Simulator).
+- [x] Beide Tabs sind sichtbar und umschaltbar.
+- [x] `xcodebuild test` läuft grün durch.
+- [x] Eine in VS Code neu angelegte Swift-Datei erscheint ohne manuellen
       Schritt im Xcode-Target.
-- [ ] Keine externe Dependency im Projekt.
+- [x] Keine externe Dependency im Projekt.
 
 ### Abhängigkeiten
 Phase B (Entwicklungsinfrastruktur).

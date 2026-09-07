@@ -6,15 +6,19 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Planungsphase — es existiert noch kein App-Code.**
+**Phase 0 — Foundation & Projekt-Setup: abgeschlossen.**
 
-Dieses Repository enthält derzeit ausschließlich Architektur- und Planungs-
-dokumentation sowie die Claude-Code-Entwicklungsinfrastruktur
-(`.claude/agents/`, `.claude/skills/`, `.claude/rules/`). Die Umsetzung
-erfolgt anschließend Phase für Phase gemäß
+Vorhanden sind die Architektur- und Planungsdokumentation, die
+Claude-Code-Entwicklungsinfrastruktur (`.claude/agents/`, `.claude/skills/`,
+`.claude/rules/`) und das Xcode-Projekt mit dem leeren Navigationsgerüst
+(zwei Tabs, Platzhalterinhalt). Build und Unit-Tests laufen grün
+(iPhone-17-Simulator, iOS 26.5), der Start auf dem echten iPhone ist
+bestätigt. Es gibt noch kein Datenmodell und keine Fachlogik.
+
+Nächster Schritt: **Phase 1 — Datenmodell & Persistenz**.
+
+Die Umsetzung erfolgt Phase für Phase gemäß
 [docs/roadmap.md](docs/roadmap.md), mit einem Test nach jeder Phase.
-
-Nächster Schritt: **Phase 0 — Foundation & Projekt-Setup**.
 
 ## Ziel
 

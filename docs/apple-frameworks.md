@@ -313,6 +313,7 @@ nicht, und ein unnötiger Berechtigungsdialog wäre ein Rückschritt.
 | Q5 | Welche `zh-CN`-Stimmen und welche Qualität liegen auf dem Gerät vor? | Phase 7, Task 7.1 | gering — Hinweis auf manuellen Stimmen-Download |
 | Q6 | Ist die ICU-Pinyin-Qualität für den echten Kartenbestand ausreichend? | Phase 3, Task 3.4 | gering — Feld ist editierbar |
 | Q7 | Reicht die automatische SwiftData-Migration über die Projektlaufzeit? | Phase 1, Task 1.6 | gering — `SchemaMigrationPlan` nachrüstbar |
+| Q8 | Muss `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` für `Learning/` abgeschaltet werden? Das Xcode-26-Template setzt es im App-Target, wodurch auch unannotierter Code der Learning-Schicht auf dem Main-Actor landet. | Phase 5, Task 5.1 | gering — alternativ die betroffenen Typen einzeln `nonisolated` markieren; Analyse in [architecture.md §4](architecture.md#4-learning-engine) |
 
 ---
 
