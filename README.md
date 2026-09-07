@@ -6,20 +6,23 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 und 1 abgeschlossen.**
+**Phasen 0 bis 2 abgeschlossen.**
 
 Vorhanden sind die Architektur- und Planungsdokumentation, die
 Claude-Code-Entwicklungsinfrastruktur (`.claude/agents/`, `.claude/skills/`,
-`.claude/rules/`), das Xcode-Projekt mit dem Navigationsgerüst (zwei Tabs,
-Platzhalterinhalt) sowie die SwiftData-Modelle für Karten und Tags mit einem
-rein lokalen `ModelContainer` und Beispieldaten für Previews und Tests.
-Build und Unit-Tests laufen grün (iPhone-17-Simulator, iOS 26.5), und der
-Start auf dem echten iPhone ist für beide Phasen bestätigt.
+`.claude/rules/`), das Xcode-Projekt, die SwiftData-Modelle für Karten und
+Tags mit einem rein lokalen `ModelContainer` — und eine nutzbare
+Kartenverwaltung: Wörter und Sätze getrennt, Karten anlegen, bearbeiten und
+löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
+Lernstatus, Kategorien umbenennen und löschen.
 
-Es gibt noch **keine Karten-UI** und keine Fachlogik — Karten lassen sich
-also noch nicht in der App anlegen.
+Build und Unit-Tests laufen grün (iPhone-17-Simulator, iOS 26.5), und alle
+drei Phasen sind auf dem echten iPhone bestätigt.
 
-Nächster Schritt: **Phase 2 — Kartenverwaltung**.
+Noch nicht vorhanden: jede Form von **Automatik** (Übersetzung, Pinyin, Audio,
+Spracherkennung) und der **Lernmodus** — der Tab „Lernen" ist ein Platzhalter.
+
+Nächster Schritt: **Phase 3 — Pinyin-Generierung**.
 
 Die Umsetzung erfolgt Phase für Phase gemäß
 [docs/roadmap.md](docs/roadmap.md), mit einem Test nach jeder Phase.

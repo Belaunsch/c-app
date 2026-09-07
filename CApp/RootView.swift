@@ -3,6 +3,7 @@
 //  CApp
 //
 
+import SwiftData
 import SwiftUI
 
 /// Die Tabs der Bottom Navigation.
@@ -40,15 +41,21 @@ struct RootView: View {
         TabView {
             ForEach(AppTab.allCases, id: \.self) { tab in
                 Tab(tab.title, systemImage: tab.systemImage) {
-                    PlaceholderView(tab: tab)
+                    switch tab {
+                    case .learn:
+                        // Stays a placeholder until phase 6.
+                        PlaceholderView(tab: tab)
+                    case .cards:
+                        CardListView()
+                    }
                 }
             }
         }
     }
 }
 
-/// Platzhalter für Phase 0. Wird in Phase 2 (Karten) und Phase 6 (Lernen)
-/// durch die echten Ansichten ersetzt.
+/// Placeholder for the "Lernen" tab. Replaced by the real session views in
+/// phase 6. The "Karten" tab got its real content in phase 2.
 private struct PlaceholderView: View {
     let tab: AppTab
 
@@ -61,6 +68,15 @@ private struct PlaceholderView: View {
     }
 }
 
+#if DEBUG
 #Preview {
-    RootView()
+    // `CardListView` uses `@Query`, so the preview needs a container. This is
+    // what `SampleData` was built for in phase 1.
+    if let container = try? SampleData.makePreviewContainer() {
+        RootView()
+            .modelContainer(container)
+    } else {
+        Text("Vorschaudaten nicht verfügbar")
+    }
 }
+#endif

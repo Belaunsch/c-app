@@ -213,6 +213,11 @@ Antwort-Historie (`ReviewLog`).
 
 ## Phase 2 — Kartenverwaltung (manuell)
 
+**Status: abgeschlossen.** Gerätetest auf physischem iPhone (iOS 26) am
+2026-09-07 bestanden: gesamter Lebenszyklus für Wort- und Satzkarten, Suche
+inklusive Pinyin ohne Tonzeichen, kombinierte Filter, Kategorienverwaltung mit
+Umbenennen und Löschen, Persistenz über einen vollständigen App-Neustart.
+
 ### Ziel
 Karten vollständig manuell verwalten können. Ab hier ist die App real
 benutzbar und liefert Testdaten für alle Folgephasen.
@@ -242,22 +247,40 @@ Löschen, Tag-Verwaltung, manuelle Statusänderung. Keinerlei Automatik.
   gefüllt sind. Pinyin darf leer bleiben.
 - **2.11** Leerzustände: „Noch keine Karten“ mit direktem Weg zum Anlegen;
   „Keine Treffer“ bei leerem Filterergebnis.
+- **2.12** `TagListView`, erreichbar aus der Toolbar der Kartenübersicht:
+  bestehende Kategorien **umbenennen** und **löschen**. Umbenannt wird die
+  vorhandene `Tag`-Entität selbst — kein neuer Tag, keine Neuzuordnung von
+  Karten, dadurch bleiben alle Beziehungen erhalten. Löschen entfernt nur die
+  Zuordnung (`.nullify` aus Phase 1), niemals eine Karte. Bestätigung vor dem
+  Löschen.
+- **2.13** Für den neuen Namen gelten dieselben Regeln wie beim Anlegen
+  (trimmen, Case-insensitive Duplikaterkennung, Diakritika **nicht** falten,
+  Längengrenze). Zielt der neue Name auf einen bereits vergebenen Namen, wird
+  das Speichern verhindert und erklärt — **kein automatisches Zusammenführen**.
+  Tag-Merging ist nicht Teil von Phase 2.
 
 ### Akzeptanzkriterien
-- [ ] Eine Wortkarte lässt sich vollständig manuell anlegen, bearbeiten und löschen.
-- [ ] Eine Satzkarte ebenso.
-- [ ] Wörter und Sätze sind getrennt sichtbar; ein Umschalten ändert die Liste.
-- [ ] Suche findet Karten über alle drei Textfelder.
-- [ ] Filter nach Tag und Lernstatus lassen sich kombinieren.
-- [ ] Der Lernstatus lässt sich manuell setzen.
-- [ ] Alle Änderungen überleben einen App-Neustart.
+- [x] Eine Wortkarte lässt sich vollständig manuell anlegen, bearbeiten und löschen.
+- [x] Eine Satzkarte ebenso.
+- [x] Wörter und Sätze sind getrennt sichtbar; ein Umschalten ändert die Liste.
+- [x] Suche findet Karten über alle drei Textfelder.
+- [x] Filter nach Tag und Lernstatus lassen sich kombinieren.
+- [x] Der Lernstatus lässt sich manuell setzen.
+- [x] Alle Änderungen überleben einen App-Neustart.
+- [x] Eine Kategorie lässt sich umbenennen; alle zugeordneten Karten zeigen
+      danach den neuen Namen.
+- [x] Umbenennen auf einen bereits vergebenen Namen wird verhindert und
+      verständlich erklärt, ohne zusammenzuführen.
+- [x] Eine Kategorie lässt sich löschen; die zugeordneten Karten bleiben
+      erhalten.
 
 ### Abhängigkeiten
 Phase 1.
 
 ### Ausdrücklich nicht in dieser Phase
 Automatische Übersetzung, automatische Pinyin-Erzeugung, Audio-Wiedergabe,
-Lernmodus, Sortieroptionen, Import/Export, Massenbearbeitung.
+Lernmodus, Sortieroptionen, Import/Export, Massenbearbeitung,
+**Zusammenführen von Kategorien**.
 
 ---
 

@@ -64,8 +64,8 @@ struct SampleDataTests {
     @Test("Die Beispielkarten haben gestaffelte Erstellungsdaten")
     func previewCardsHaveStaggeredCreationDates() throws {
         // Ohne Staffelung hätten alle 30 Karten praktisch denselben
-        // Zeitstempel, und eine nach `createdAt` sortierte Liste in Phase 2
-        // wäre willkürlich sortiert.
+        // Zeitstempel. Die Kartenliste sortiert derzeit nach Deutsch, aber
+        // `createdAt` ist die Basis für Recency und spätere Sortieroptionen.
         let container = try SampleData.makePreviewContainer()
         let cards = try container.mainContext.fetch(FetchDescriptor<Card>())
 

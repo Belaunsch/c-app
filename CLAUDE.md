@@ -6,11 +6,12 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phase 1 (Datenmodell & Persistenz) ist abgeschlossen** —
-SwiftData-Modelle für Karten und Tags, lokaler `ModelContainer`,
-DEBUG-Beispieldaten, Build und Tests grün, Gerätetest bestanden. Es gibt noch
-keine Karten-UI und keine Fachlogik: Karten lassen sich in der App noch nicht
-anlegen. **Nächster Schritt ist Phase 2 (Kartenverwaltung).**
+**Aktueller Stand: Phase 2 (Kartenverwaltung) ist abgeschlossen** — der Tab
+„Karten" ist voll nutzbar: Karten anlegen, bearbeiten, löschen, suchen, nach
+Kategorie und Lernstatus filtern, Kategorien umbenennen und löschen. Build und
+Tests grün, Gerätetest bestanden. Der Tab „Lernen" ist noch ein Platzhalter,
+und es gibt keinerlei Automatik (keine Übersetzung, kein Pinyin, kein Audio)
+und keine Lernlogik. **Nächster Schritt ist Phase 3 (Pinyin-Generierung).**
 
 ## Vor jeder Änderung lesen
 

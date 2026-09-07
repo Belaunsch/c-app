@@ -102,16 +102,21 @@ c-app/
 │   │   │   └── SelfAssessmentBar.swift
 │   │   ├── Cards/
 │   │   │   ├── CardListView.swift          Liste, Suche, Filter
-│   │   │   ├── CardFilterBar.swift
+│   │   │   ├── CardFilterBar.swift         Status- und Kategoriefilter
+│   │   │   ├── CardFilter.swift            pure Filterlogik, testbar
 │   │   │   ├── CardEditorView.swift        Anlegen + Bearbeiten
-│   │   │   ├── CardEditorModel.swift       @Observable
-│   │   │   └── TranslationHostView.swift   unsichtbar, hält translationTask
+│   │   │   ├── CardEditorModel.swift       @Observable, Validierung, Merker
+│   │   │   ├── TagNormalization.swift      Duplikatvermeidung, Umbenennregeln
+│   │   │   ├── TagListView.swift           Kategorien umbenennen und löschen
+│   │   │   ├── TagManagement.swift          Umbenennen und Löschen, testbar
+│   │   │   ├── CardDisplay.swift           deutsche Anzeigenamen der Enums
+│   │   │   └── TranslationHostView.swift   Phase 4, hält translationTask
 │   │   └── Settings/
 │   │       └── SettingsView.swift
 │   │
 │   └── Support/
-│       ├── AppError.swift
-│       └── String+Normalization.swift
+│       ├── AppError.swift              nutzersichtbare Fehler (Phase 2)
+│       └── String+Normalization.swift  Phase 5
 │
 ├── CAppTests/
 │   ├── TestSupport.swift               Container-Helfer, Tag-Typealias
@@ -120,6 +125,11 @@ c-app/
 │   ├── CardTagRelationshipTests.swift  Phase 1
 │   ├── PersistenceTests.swift          Phase 1
 │   ├── SampleDataTests.swift           Phase 1
+│   ├── CardFilterTests.swift           Phase 2
+│   ├── CardEditorModelTests.swift      Phase 2
+│   ├── TagNormalizationTests.swift     Phase 2
+│   ├── CardDisplayTests.swift          Phase 2
+│   ├── TagManagementTests.swift        Phase 2
 │   ├── BatchSelectorTests.swift        Phase 5
 │   ├── SessionQueueTests.swift         Phase 5
 │   ├── StatusTransitionTests.swift     Phase 5
@@ -408,7 +418,17 @@ Grundsatz: **Automatik darf nie blockieren.**
 
 Technisch: ein `AppError`-Enum in `Support/` für alles, was der Nutzer sehen
 soll; Service-interne Fehler werden dorthin übersetzt. Keine `try!`, keine
-stillen `catch {}`-Blöcke.
+stillen `catch {}`-Blöcke. Seit Phase 2 vorhanden, mit den Fällen
+`cardIncomplete`, `cardSaveFailed` und `cardDeleteFailed`: Die Meldung ist
+deutsch, das technische Systemdetail wird als zweiter Absatz angehängt statt
+verworfen.
+
+**In Phase 2 nachgeschärft:** Schlägt ein `context.save()` fehl, genügt der
+Alert nicht — es wird zusätzlich `context.rollback()` aufgerufen. Sonst bleibt
+die Änderung im Kontext liegen, die Liste zeigt eine gelöschte Karte schon als
+verschwunden, und der nächste erfolgreiche Save an beliebiger Stelle committet
+die angeblich fehlgeschlagene Aktion doch noch. Ein Alert, der die Unwahrheit
+sagt, ist schlimmer als kein Alert.
 
 Kein Crash-Reporting, kein Logging-Framework. `os.Logger` reicht.
 
@@ -426,6 +446,20 @@ Kein Crash-Reporting, kein Logging-Framework. `os.Logger` reicht.
 
 Es wird nicht versucht, System-Frameworks zu mocken. Der Aufwand steht in
 keinem Verhältnis zum Nutzen bei einer App dieser Größe.
+
+**SwiftData-Modelle dürfen ihren Container nicht überleben.** In Phase 2 auf
+die harte Tour gelernt: Eine Test-Fixture erzeugte Container und Karten in
+einer Hilfsfunktion und gab nur die Karten zurück. Damit wurde der Container
+freigegeben, und der erste Zugriff auf eine Property der überlebenden Karte
+schlug im generierten Accessor mit `_assertionFailure` fehl — kein fangbarer
+Fehler, sondern ein Absturz des ganzen Testprozesses. Weil alle Tests einen
+Prozess teilen, meldeten anschließend **alle** übrigen Tests in 0,000 s
+„failed", ohne Fehlermeldung; die Ursache stand nur im Crash-Report des
+Simulators.
+
+Konsequenz: Container in einer Test-Suite als **gespeicherte Property** halten
+und in `init()` aufbauen. Eine Swift-Testing-Suite wird pro Test neu
+instanziiert, dadurch lebt der Container garantiert so lange wie der Test.
 
 **Namenskollision im Testziel:** Unser Modell `Tag` heißt genauso wie
 `Testing.Tag` aus dem Swift-Testing-Framework. In Testdateien, die beides
@@ -474,3 +508,8 @@ Konvention beim Schreiben des Modells.
 | A8 | Manuelle Bearbeitung schlägt Automatik immer | fachliche Kernanforderung, im Modell durch Merker abgesichert |
 | A9 | Keine externen Dependencies | Wartbarkeit, kein Update-Zwang, kleinere Angriffsfläche |
 | A10 | Kein Mocking von System-Frameworks | Aufwand/Nutzen bei dieser App-Größe |
+| A11 | Kartenliste filtert in reinem Swift, nicht per dynamischem `#Predicate` | Ein `@Query` ohne Prädikat lädt sortiert, `CardFilter` verengt danach. Vermeidet die `fatalError`-Falle aus §3 vollständig, ist ohne View testbar, und bei einigen hundert Karten kostet es nichts. Neu bewerten, falls der Bestand vierstellig wird. |
+| A12 | Mehrere gewählte Tags werden mit **UND** verknüpft | Jeder Filter in der Kartenübersicht verengt das Ergebnis — Typ, Suche und Status ebenso. OR nur für Tags wäre inkonsistent und überraschend. |
+| A14 | Neue Tags entstehen erst beim Speichern der Karte | Der Editor merkt getippte Namen nur vor. Würde er sie sofort einfügen, hinterließe ein abgebrochener Editor den Tag dauerhaft — der `mainContext` speichert automatisch, und die App hat **keine** Funktion zum Löschen eines Tags. Ein Vertipper wäre damit unumkehrbar. |
+| A13 | Tag-Deduplizierung über einen berechneten Schlüssel, ohne Schemafeld | „Essen", „essen" und „ESSEN" vergleichen sich über `TagNormalization.key`; die zuerst eingegebene Schreibweise bleibt sichtbar. Ein gespeichertes `normalizedName` wäre eine Schemaänderung samt Migration für eine Handvoll Tags. **Diakritika werden bewusst nicht gefaltet** (Produktentscheidung): „Café" und „Cafe" bleiben getrennt, weil „Grün" und „Grun" verschiedene Wörter sind und ein Zusammenführen die Daten stillschweigend umbenennen würde. Die **Suche** ist dagegen diakritikainsensitiv, damit Pinyin ohne Tonzeichen findbar bleibt — zwei verschiedene Zwecke, zwei verschiedene Regeln. |
+| A15 | Kategorien werden in place umbenannt, nie zusammengeführt | `TagManagement.rename` ändert die bestehende `Tag`-Entität. Ein neuer Tag plus Neuzuordnung würde dasselbe Ergebnis anstreben, aber jede Beziehung anfassen und dabei Fehler ermöglichen. Zielt der neue Name auf einen anderen bestehenden Tag, wird abgelehnt statt gemergt: Merging würde zwei Kategorien unumkehrbar verschmelzen, und der Nutzer hat kein Undo. |
