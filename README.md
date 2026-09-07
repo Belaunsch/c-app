@@ -6,16 +6,20 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phase 0 — Foundation & Projekt-Setup: abgeschlossen.**
+**Phasen 0 und 1 abgeschlossen.**
 
 Vorhanden sind die Architektur- und Planungsdokumentation, die
 Claude-Code-Entwicklungsinfrastruktur (`.claude/agents/`, `.claude/skills/`,
-`.claude/rules/`) und das Xcode-Projekt mit dem leeren Navigationsgerüst
-(zwei Tabs, Platzhalterinhalt). Build und Unit-Tests laufen grün
-(iPhone-17-Simulator, iOS 26.5), der Start auf dem echten iPhone ist
-bestätigt. Es gibt noch kein Datenmodell und keine Fachlogik.
+`.claude/rules/`), das Xcode-Projekt mit dem Navigationsgerüst (zwei Tabs,
+Platzhalterinhalt) sowie die SwiftData-Modelle für Karten und Tags mit einem
+rein lokalen `ModelContainer` und Beispieldaten für Previews und Tests.
+Build und Unit-Tests laufen grün (iPhone-17-Simulator, iOS 26.5), und der
+Start auf dem echten iPhone ist für beide Phasen bestätigt.
 
-Nächster Schritt: **Phase 1 — Datenmodell & Persistenz**.
+Es gibt noch **keine Karten-UI** und keine Fachlogik — Karten lassen sich
+also noch nicht in der App anlegen.
+
+Nächster Schritt: **Phase 2 — Kartenverwaltung**.
 
 Die Umsetzung erfolgt Phase für Phase gemäß
 [docs/roadmap.md](docs/roadmap.md), mit einem Test nach jeder Phase.

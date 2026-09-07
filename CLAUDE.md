@@ -6,10 +6,11 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phase 0 (Foundation) ist abgeschlossen** — Xcode-Projekt,
-zwei Tabs mit Platzhaltern, Test-Target, Build und Tests grün, Gerätetest
-bestanden. Es gibt noch kein Datenmodell und keine Fachlogik.
-**Nächster Schritt ist Phase 1 (Datenmodell & Persistenz).**
+**Aktueller Stand: Phase 1 (Datenmodell & Persistenz) ist abgeschlossen** —
+SwiftData-Modelle für Karten und Tags, lokaler `ModelContainer`,
+DEBUG-Beispieldaten, Build und Tests grün, Gerätetest bestanden. Es gibt noch
+keine Karten-UI und keine Fachlogik: Karten lassen sich in der App noch nicht
+anlegen. **Nächster Schritt ist Phase 2 (Kartenverwaltung).**
 
 ## Vor jeder Änderung lesen
 
@@ -67,8 +68,18 @@ Begründung in [docs/claude-workflow.md](docs/claude-workflow.md).
 
 ## Konventionen
 
-- **Code, Typnamen und Kommentare auf Englisch** (Swift-üblich).
-- **Alle nutzersichtbaren Texte auf Deutsch.**
+- **Swift-Code, Typnamen und Code-Kommentare auf Englisch** (Swift-üblich).
+  Das gilt auch für Doc-Comments und Testtitel.
+- **Projektdokumentation und alle nutzersichtbaren Texte auf Deutsch.**
+
+  **Bekannte Abweichung (Stand Phase 1):** Der in Phase 0 und 1 geschriebene
+  Swift-Code enthält deutsche Kommentare, Doc-Comments und Testtitel — rund
+  120 von etwa 240 Kommentarzeilen in 12 von 13 Dateien. Diese Dateien werden
+  **nicht** rückwirkend übersetzt; der Aufwand stünde in keinem Verhältnis
+  zum Nutzen. Die Regel gilt für **neu geschriebenen** Swift-Code ab Phase 2.
+  Bestehende deutsche Kommentare bleiben stehen, bis die betroffene Datei aus
+  fachlichem Grund ohnehin umgeschrieben wird — kein Übersetzen um des
+  Übersetzens willen.
 - Deployment Target **iOS 26.0**, nur iPhone, Portrait.
 - Fehlerbehandlung: kein `try!`, keine leeren `catch {}`. Für
   nutzersichtbare Fehler `AppError` in `Support/` verwenden.

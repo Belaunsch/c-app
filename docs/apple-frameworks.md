@@ -64,11 +64,15 @@ Xcode-26-Toolchain bleiben und iOS 27 später neu bewerten.
   `ModelContainer` wird ohne CloudKit-Konfiguration erstellt.
 - Kein Netzwerkzugriff, keine Berechtigung.
 
-Praktische Hinweise für die Umsetzung (Erfahrungswerte, in Phase 1 zu
-verifizieren):
+Praktische Hinweise für die Umsetzung:
 
-- Enums als gespeicherte Properties benötigen `Codable`-Konformität
-  (`RawRepresentable` mit `String`/`Int` als RawValue funktioniert).
+- **In Phase 1 verifiziert:** Codable-Enums werden korrekt gespeichert und
+  gelesen, lassen sich aber **nicht in einem `#Predicate` vergleichen**. Ein
+  Filter gegen den Enum-Typ wirft zur Laufzeit
+  `SwiftDataError.unsupportedPredicate` mit dem Klartext „Captured/constant
+  values of type 'CardType' are not supported". Konsequenz im Datenmodell:
+  RawValue-Backing plus berechnete Property, Details in
+  [architecture.md §3](architecture.md#3-datenmodell).
 - Für Suche/Filter über größere Kartenmengen lohnt sich `#Index`; das ist
   aber eine Optimierung und gehört **nicht** in Phase 1.
 - Migrationen: Solange die App privat ist und die Kartenmenge klein bleibt,
@@ -312,8 +316,8 @@ nicht, und ein unnötiger Berechtigungsdialog wäre ein Rückschritt.
 | Q4 | Braucht `SpeechAnalyzer` `NSSpeechRecognitionUsageDescription`? | Phase 9, Task 9.2 | gering — beide Schlüssel werden gesetzt |
 | Q5 | Welche `zh-CN`-Stimmen und welche Qualität liegen auf dem Gerät vor? | Phase 7, Task 7.1 | gering — Hinweis auf manuellen Stimmen-Download |
 | Q6 | Ist die ICU-Pinyin-Qualität für den echten Kartenbestand ausreichend? | Phase 3, Task 3.4 | gering — Feld ist editierbar |
-| Q7 | Reicht die automatische SwiftData-Migration über die Projektlaufzeit? | Phase 1, Task 1.6 | gering — `SchemaMigrationPlan` nachrüstbar |
-| Q8 | Muss `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` für `Learning/` abgeschaltet werden? Das Xcode-26-Template setzt es im App-Target, wodurch auch unannotierter Code der Learning-Schicht auf dem Main-Actor landet. | Phase 5, Task 5.1 | gering — alternativ die betroffenen Typen einzeln `nonisolated` markieren; Analyse in [architecture.md §4](architecture.md#4-learning-engine) |
+| Q7 | Reicht die automatische SwiftData-Migration über die Projektlaufzeit? **Strategie in Phase 1 festgelegt** (kein `VersionedSchema`, Begründung als Kommentar an `CAppApp.makeModelContainer()`); die Frage selbst beantwortet erst die erste nicht-additive Schemaänderung. | Phase 10, Task 10.10 (Rückblick) | gering — `SchemaMigrationPlan` nachrüstbar |
+| Q8 | Muss `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` für `Learning/` abgeschaltet werden? Das Xcode-26-Template setzt es im App-Target, wodurch auch unannotierter Code der Learning-Schicht auf dem Main-Actor landet. | Phase 5, Task 5.1 | gering — alternativ die betroffenen Typen einzeln `nonisolated` markieren; Analyse in [architecture.md §4](architecture.md#4-learning-engine). **In Phase 1 gemessen: es gibt einen Effekt.** Ein `nonisolated` Konsument — genau das, was `Learning/` sein muss — erzeugt bei einem `status < .good`-Vergleich die Warnung `call to main actor-isolated operator function '<' in a synchronous nonisolated context`, im Swift-6-Sprachmodus ein Fehler. Deshalb sind `CardType` und `LearningStatus` jetzt `nonisolated` deklariert, wie `AppTab` seit Phase 0. Der konkrete Bedarf ist damit gedeckt; die Grundsatzfrage, ob das Setting fürs Target abgeschaltet wird, bleibt offen. |
 
 ---
 

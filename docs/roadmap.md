@@ -159,6 +159,10 @@ Launch-Screen, Berechtigungen in der Info.plist.
 
 ## Phase 1 — Datenmodell & Persistenz
 
+**Status: abgeschlossen.** Gerätetest auf physischem iPhone (iOS 26) am
+2026-09-07 bestanden: App startet, öffnet beim zweiten Start den bestehenden
+lokalen Store, keine Fehleransicht.
+
 ### Ziel
 SwiftData-Modelle für Karten und Tags, die einen App-Neustart überleben.
 
@@ -192,11 +196,11 @@ Bedienoberfläche zum Bearbeiten.
   eine spätere CloudKit-Option offen — kostet jetzt nichts).
 
 ### Akzeptanzkriterien
-- [ ] Eine im Code angelegte Karte ist nach einem App-Neustart noch vorhanden.
-- [ ] Eine Karte lässt sich mehreren Tags zuordnen.
-- [ ] Das Löschen einer Karte löscht keinen Tag und umgekehrt.
-- [ ] Der Integrationstest läuft grün.
-- [ ] Vorschau-Daten stehen für SwiftUI-Previews bereit.
+- [x] Eine im Code angelegte Karte ist nach einem App-Neustart noch vorhanden.
+- [x] Eine Karte lässt sich mehreren Tags zuordnen.
+- [x] Das Löschen einer Karte löscht keinen Tag und umgekehrt.
+- [x] Der Integrationstest läuft grün.
+- [x] Vorschau-Daten stehen für SwiftUI-Previews bereit.
 
 ### Abhängigkeiten
 Phase 0.

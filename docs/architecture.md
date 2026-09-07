@@ -114,11 +114,17 @@ c-app/
 │       └── String+Normalization.swift
 │
 ├── CAppTests/
-│   ├── BatchSelectorTests.swift
-│   ├── SessionQueueTests.swift
-│   ├── StatusTransitionTests.swift
-│   ├── CardWeightingTests.swift
-│   └── PinyinServiceTests.swift
+│   ├── TestSupport.swift               Container-Helfer, Tag-Typealias
+│   ├── AppTabTests.swift               Phase 0
+│   ├── CardModelTests.swift            Phase 1
+│   ├── CardTagRelationshipTests.swift  Phase 1
+│   ├── PersistenceTests.swift          Phase 1
+│   ├── SampleDataTests.swift           Phase 1
+│   ├── BatchSelectorTests.swift        Phase 5
+│   ├── SessionQueueTests.swift         Phase 5
+│   ├── StatusTransitionTests.swift     Phase 5
+│   ├── CardWeightingTests.swift        Phase 5
+│   └── PinyinServiceTests.swift        Phase 3
 │
 └── docs/
 ```
@@ -149,26 +155,34 @@ Gruppe; einfacher ist es, darauf zu verzichten.
 
 ## 3. Datenmodell
 
-### Skizze (kein Produktivcode — Umsetzung in Phase 1)
+### Umsetzung (in Phase 1 gebaut, Code in `CApp/Models/`)
 
 ```swift
-enum CardType: String, Codable, CaseIterable {
+// `nonisolated`, weil `Learning/` diese Typen aus nonisolated Code
+// verwenden muss — siehe Q8 in apple-frameworks.md
+nonisolated enum CardType: String, Codable, CaseIterable, Sendable {
     case word, sentence
 }
 
-enum LearningStatus: Int, Codable, CaseIterable, Comparable {
+nonisolated enum LearningStatus: Int, Codable, CaseIterable, Comparable, Sendable {
     case new = 0, weak = 1, medium = 2, good = 3, secure = 4
 }
 
 @Model
 final class Card {
     var id: UUID
-    var type: CardType
+
+    // RawValue im Store, damit `#Predicate` filtern kann (siehe unten)
+    private(set) var typeRaw: String
+    private(set) var statusRaw: Int
+
+    var type: CardType { get { ... } set { ... } }        // berechnet
+    var status: LearningStatus { get { ... } set { ... } } // berechnet
+
     var german: String
     var hanzi: String
     var pinyin: String
 
-    var status: LearningStatus
     var createdAt: Date
     var lastReviewedAt: Date?
     var reviewCount: Int
@@ -196,10 +210,30 @@ Hinweise:
 - Die Beziehung `Card ↔ Tag` ist many-to-many. Löschregel: Beim Löschen einer
   Karte werden Tags **nicht** gelöscht; beim Löschen eines Tags werden Karten
   **nicht** gelöscht (nur die Zuordnung verschwindet).
-- Ob SwiftData die Enums direkt speichert oder ein `String`/`Int`-RawValue
-  nötig ist, wird in Phase 1 verifiziert. Falls nötig: privates
-  `...Raw`-Feld plus berechnete Property — die öffentliche API des Modells
-  bleibt gleich.
+- **In Phase 1 gemessen (Task 1.4): Enums brauchen ein RawValue-Backing.**
+  SwiftData *speichert* Codable-Enums korrekt — in Phase 1 als Zwischenstand
+  gemessen, bevor auf RawValue-Backing umgestellt wurde; im Repository deckt
+  seither kein Test diesen Pfad mehr ab. Aber es kann sie **nicht in einem
+  `#Predicate` vergleichen**: Ein Filter gegen den Enum-Typ scheitert zur
+  Laufzeit mit `SwiftDataError.unsupportedPredicate`, Klartext
+  „Captured/constant values of type 'CardType' are not supported".
+  Weil die Kartenübersicht in Phase 2 genau davon lebt (Wörter/Sätze
+  umschalten, nach Lernstatus filtern), liegt der RawValue im Store:
+  `typeRaw: String` und `statusRaw: Int`, dazu `type` und `status` als
+  berechnete Properties darüber.
+- Die beiden Raw-Properties sind `private(set)`: Geschrieben wird
+  ausschließlich über `type` und `status`, gelesen werden sie auch von außen
+  — sonst könnten Prädikate und `@Query` sie nicht verwenden. Die öffentliche
+  Schreib-API des Modells bleibt damit wie ursprünglich entworfen.
+- **Regel für Phase 2 und später:** In `#Predicate`, `@Query` **und
+  `SortDescriptor`/`sortBy`** immer `typeRaw` bzw. `statusRaw` verwenden, nie
+  `type` oder `status`. Ein Verstoß ist besonders unangenehm, weil er
+  **compiliert** — `LearningStatus` ist `Comparable`, `SortDescriptor(\.status)`
+  ist also gültiger Swift-Code — und erst beim Fetch zuschlägt, und zwar als
+  **`fatalError`, nicht als `throw`**: `Couldn't find \Card.status on Card with
+  fields [PropertyMetadata(name: statusRaw, …)]`. Fehlerbehandlung hilft
+  dagegen nicht; eine nach Lernstatus sortierte Kartenliste stürzt ab. Deshalb
+  nagelt ein Test die im Store liegenden Attribute fest.
 
 ### Persistiert vs. abgeleitet
 
@@ -392,6 +426,12 @@ Kein Crash-Reporting, kein Logging-Framework. `os.Logger` reicht.
 
 Es wird nicht versucht, System-Frameworks zu mocken. Der Aufwand steht in
 keinem Verhältnis zum Nutzen bei einer App dieser Größe.
+
+**Namenskollision im Testziel:** Unser Modell `Tag` heißt genauso wie
+`Testing.Tag` aus dem Swift-Testing-Framework. In Testdateien, die beides
+importieren, ist `Tag` deshalb mehrdeutig. Gelöst über eine einmalige
+modulweite `typealias Tag = CApp.Tag` in `CAppTests/TestSupport.swift`. Der
+Produktivcode ist nicht betroffen — er importiert `Testing` nicht.
 
 ---
 
