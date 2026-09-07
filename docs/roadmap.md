@@ -12,6 +12,15 @@ Verbindliche Regel: **Kein Feature einer späteren Phase vorziehen.** Wenn
 während einer Phase eine gute Idee für später auftaucht, wandert sie in den
 Backlog (§ Backlog), nicht in den Code.
 
+**Einmalige, ausdrücklich genehmigte Ausnahme:** Die Phasen **3 und 4** wurden
+als ein gekoppelter Meilenstein umgesetzt — eine Implementierung, ein
+Gerätetest, ein Commit. Grund: Phase 4 baut unmittelbar auf Phase 3 auf, und
+der erste sinnvoll prüfbare Produktzustand ist die vollständige Kette
+`Deutsch → Hanzi → Pinyin`. Die Akzeptanzkriterien beider Phasen blieben
+getrennt und wurden getrennt abgehakt. **Die Regel „eine Phase auf einmal"
+gilt für alle weiteren Phasen unverändert weiter** — diese Ausnahme ist kein
+Präzedenzfall.
+
 ---
 
 ## Reihenfolge und ihre Begründung
@@ -286,6 +295,15 @@ Lernmodus, Sortieroptionen, Import/Export, Massenbearbeitung,
 
 ## Phase 3 — Pinyin-Generierung
 
+**Status: abgeschlossen.** Zwei Gerätetests auf dem physischen iPhone
+(iOS 26), beide am 2026-09-07. Der erste belegte die fachlichen Kriterien und
+fand drei echte Fehler: ein beim Speichern veraltetes Pinyin, ins Pinyin
+durchgereichter Nicht-Hanzi-Text und der Fokuswechsel als einziger Auslöser.
+Nach den Korrekturen (Tasks 3.9, 4.12, 4.13) hat der zweite Gerätetest die
+geänderten Pfade vollständig bestätigt — beide Save-/Race-Wege, Return ohne
+Doppeltrigger, die ↻-Bedienelemente, den Nicht-Hanzi-Schutz, das geleerte
+Pinyin und den Flugmodus.
+
 ### Ziel
 Aus Hanzi automatisch Pinyin mit Tonzeichen erzeugen — lokal, offline und
 jederzeit überschreibbar.
@@ -304,22 +322,38 @@ jederzeit überschreibbar.
 - **3.4** Unit-Tests mit festen Paaren aus Wörtern und Sätzen; die erwarteten
   Werte einmalig auf dem Gerät verifizieren und im Test festschreiben
   (offene Frage Q6).
-- **3.5** Einbindung in den Editor: Beim Verlassen des Hanzi-Feldes wird
-  Pinyin vorgeschlagen — **nur**, wenn das Pinyin-Feld leer ist oder
-  `pinyinWasEditedManually == false`.
+- **3.5** Einbindung in den Editor: Beim Verlassen des Hanzi-Feldes wird das
+  Pinyin automatisch abgeleitet — **nur**, wenn das Pinyin nicht von Hand
+  korrigiert wurde. Die Herkunft wird dafür live im Editor-State geführt und
+  nicht beim Speichern aus dem gespeicherten Wert erschlossen (Q9).
 - **3.6** Sichtbarer Button „Pinyin neu erzeugen“, mit dem der Nutzer die
   Automatik bewusst erneut anstoßen kann.
 - **3.7** Bekannte Grenzen (polyphone Zeichen) als kurzen Hinweis im Editor
   erwähnen, ohne aufdringlich zu sein.
+- **3.8** Hanzi ist die fachliche Quelle für automatisch erzeugtes Pinyin:
+  Ändert der Nutzer das Hanzi, wird das Pinyin danach aus dem **aktuellen**
+  Hanzi neu abgeleitet — sofern es nicht von Hand korrigiert wurde.
+- **3.9** *Nach dem ersten Gerätetest ergänzt:* Automatisches Pinyin nur aus
+  echtem Hanzi. ICU reicht Nicht-Chinesisches durch — am Gerät wurde aus
+  `asdf` im Hanzi-Feld das Pinyin `asdf`. Unicode-basierte Han-Erkennung plus
+  Plausibilitätsprüfung des Ergebnisses; lässt sich nichts ableiten, wird ein
+  **automatisches** Pinyin geleert statt veraltet stehen gelassen, ein
+  **manuelles** nie gelöscht. Begründung in
+  [architecture.md A20](architecture.md#10-zusammenfassung-der-architekturentscheidungen).
 
 ### Akzeptanzkriterien
-- [ ] `苹果` ergibt `píngguǒ` (mit Tonzeichen).
-- [ ] Ein Satz ergibt sinnvoll segmentiertes Pinyin mit Tonzeichen.
-- [ ] Manuell geändertes Pinyin wird von der Automatik nie überschrieben.
-- [ ] „Pinyin neu erzeugen“ überschreibt auch manuelle Werte — nach
-      bewusster Nutzeraktion.
-- [ ] Die Unit-Tests laufen grün.
-- [ ] Funktioniert im Flugmodus.
+- [x] `苹果` ergibt `píngguǒ` (mit Tonzeichen).
+- [x] Ein Satz ergibt sinnvoll segmentiertes Pinyin mit Tonzeichen.
+- [x] Manuell geändertes Pinyin wird von der Automatik nie überschrieben.
+- [x] „Pinyin neu erzeugen“ (seit Task 4.13 das ↻ im Pinyin-Feld) überschreibt
+      auch manuelle Werte — nach bewusster Nutzeraktion. **Bewusste Verengung:**
+      Wenn sich aus dem Hanzi nichts ableiten lässt, löscht auch diese Aktion
+      einen manuellen Wert nicht; sie hätte nichts, was sie an seine Stelle
+      setzen könnte. Festgenagelt in `invalidHanziKeepsManualPinyin`.
+- [x] Die Unit-Tests laufen grün.
+- [x] Funktioniert im Flugmodus. *(Beide Gerätetests am 2026-09-07: Hanzi →
+      Pinyin im Flugmodus erfolgreich, der zweite mit der geänderten Kette aus
+      Han-Prüfung und Plausibilitätsprüfung.)*
 
 ### Abhängigkeiten
 Phase 2.
@@ -331,6 +365,15 @@ Tonzeichen, Zhuyin, Audio.
 ---
 
 ## Phase 4 — Übersetzung Deutsch → Chinesisch
+
+**Status: abgeschlossen.** Zwei Gerätetests auf dem physischen iPhone
+(iOS 26), beide am 2026-09-07. Der erste belegte die fachlichen Kriterien und
+fand drei echte Fehler: ein beim Speichern veraltetes Pinyin, ins Pinyin
+durchgereichter Nicht-Hanzi-Text und der Fokuswechsel als einziger Auslöser.
+Nach den Korrekturen (Tasks 3.9, 4.12, 4.13) hat der zweite Gerätetest die
+geänderten Pfade vollständig bestätigt — beide Save-/Race-Wege, Return ohne
+Doppeltrigger, die ↻-Bedienelemente, den Nicht-Hanzi-Schutz, das geleerte
+Pinyin und den Flugmodus.
 
 ### Ziel
 Deutschen Text eingeben und automatisch Hanzi erzeugen lassen; Pinyin folgt
@@ -345,16 +388,22 @@ Editor.
   to: .chineseSimplified)` auf dem Zielgerät ausführen und das Ergebnis in
   [apple-frameworks.md](apple-frameworks.md#10-offene-technische-fragen-zu-klären-vor-der-jeweiligen-phase)
   unter Q1 eintragen. Erst danach weiterbauen.
-- **4.2** `TranslationService` mit `TranslationSession(installedSource:target:)`
-  für den Normalfall (Sprachen installiert).
-- **4.3** `TranslationHostView` (unsichtbar) mit `.translationTask()` für den
-  Download-Pfad; das System übernimmt Zustimmung und Fortschrittsanzeige.
+- **4.2** ~~`TranslationService` mit `TranslationSession(installedSource:target:)`~~
+  **Überholt in Phase 4:** Der direkte Initializer wird nicht gebraucht.
+  `TranslationService` beantwortet nur, *ob* und *womit* übersetzt werden kann;
+  die Übersetzung läuft auf der Session aus `.translationTask`.
+- **4.3** ~~`TranslationHostView` (unsichtbar)~~ **Überholt in Phase 4:** Es
+  gibt keine Host-View. Der Editor trägt `.translationTask` selbst; derselbe
+  Modifier liefert die Session **und** holt die Download-Zustimmung — ein
+  Codepfad statt zwei. Begründung in
+  [architecture.md §5](architecture.md#translationservice).
 - **4.4** Zustandsbehandlung im Editor: `installed` → übersetzen;
   `supported` → Download anbieten; `unsupported` → Automatik dauerhaft
   ausblenden, manuelle Eingabe bleibt unverändert möglich.
-- **4.5** Editor-Ablauf: Kartentyp wählen → deutschen Text eingeben →
-  „Übersetzen“ → Hanzi wird gefüllt → Pinyin wird daraus erzeugt → beides
-  prüfbar und korrigierbar.
+- **4.5** Editor-Ablauf **ohne Button-Zwang**: Kartentyp wählen → deutschen
+  Text eingeben → Feld verlassen → Hanzi wird automatisch gefüllt → Pinyin
+  wird daraus abgeleitet → beides prüfbar und korrigierbar. Ausgelöst wird
+  beim Verlassen des Feldes, nicht bei jedem Tastendruck.
 - **4.6** Übersetzung ist ein **Vorschlag**: Wird Hanzi manuell geändert,
   setzt das `hanziWasEditedManually` und schützt den Wert vor
   Überschreiben.
@@ -363,14 +412,51 @@ Editor.
 - **4.8** Falls Q1 negativ ausfällt: Pivot über Englisch als dokumentierten
   Notfallpfad evaluieren — **nicht** implementieren, ohne die
   Qualitätseinbuße vorher an echten Beispielen zu prüfen.
+- **4.9** „Neu übersetzen“ als sichtbarer Button: die einzige Freigabe, ein
+  von Hand geändertes Hanzi zu überschreiben. Danach gilt Hanzi wieder als
+  automatisch, und das Pinyin wird zur neuen Vorlage passend neu abgeleitet —
+  auch, wenn es zuvor von Hand korrigiert war.
+- **4.10** Keine veralteten Ergebnisse: Ändert der Nutzer den deutschen Text
+  mehrfach schnell, darf ein älteres Übersetzungsergebnis den neueren Text
+  niemals überschreiben.
+- **4.11** Übersetzungsstrategie und Verfügbarkeitsprüfung gegen die
+  **aktuelle** Apple-Dokumentation entscheiden und begründen, nicht gegen die
+  Planungsannahme aus Phase 0.
+- **4.12** *Nach dem ersten Gerätetest ergänzt:* Der Editor synchronisiert
+  seinen Zustand **vor** dem Speichern, und zwar gegen die **Quelle** des
+  aktuellen automatischen Pinyins, nicht gegen „hat sich das Hanzi geändert".
+  Am Gerät wurde `水` mit dem Pinyin `miànbāo` gespeichert, weil direkt aus dem
+  Hanzi-Feld gespeichert wurde und kein Fokusereignis kam; ein zweiter Weg zum
+  selben Fehler führte über eine Übersetzung, die eintrifft, während der Nutzer
+  ein eigenes Hanzi tippt. Korrektheit darf nicht von SwiftUI-Fokusereignissen
+  abhängen; die Regel ist ohne View testbar. Begründung in
+  [architecture.md A19](architecture.md#10-zusammenfassung-der-architekturentscheidungen).
+- **4.13** *Nach dem ersten Gerätetest ergänzt:* Return/„Fertig“ schließt die
+  Eingabe ab — Tastatur zu, Fokus weg, dieselbe Automatik wie beim
+  Fokusverlust, und **kein** zweiter Übersetzungslauf durch beides zusammen.
+  Die beiden separaten Buttons entfallen; „Neu übersetzen“ und „Pinyin neu
+  erzeugen“ sitzen als natives ↻ direkt im jeweiligen Feld, mit unveränderter
+  Semantik und Accessibility-Label. Begründung in
+  [architecture.md A21](architecture.md#10-zusammenfassung-der-architekturentscheidungen).
 
 ### Akzeptanzkriterien
-- [ ] Q1 ist mit einem konkreten Messergebnis beantwortet und dokumentiert.
-- [ ] Aus „Apfel“ entsteht eine plausible Hanzi-Ausgabe mit passendem Pinyin.
-- [ ] Aus einem deutschen Satz entsteht eine plausible chinesische Übersetzung.
-- [ ] Eine manuell korrigierte chinesische Formulierung bleibt erhalten.
-- [ ] Bei nicht installierten Sprachen erscheint der System-Download-Dialog.
-- [ ] Bei fehlgeschlagener Übersetzung lässt sich die Karte trotzdem speichern.
+- [x] Q1 ist mit einem konkreten Messergebnis beantwortet und dokumentiert.
+      *(Gerätetest 2026-09-07: `installed`, siehe
+      [apple-frameworks.md §10](apple-frameworks.md#10-offene-technische-fragen-zu-klären-vor-der-jeweiligen-phase).)*
+- [x] Aus „Apfel“ entsteht eine plausible Hanzi-Ausgabe mit passendem Pinyin.
+      *(Gerätetest: `苹果` / `píngguǒ`.)*
+- [x] Aus einem deutschen Satz entsteht eine plausible chinesische Übersetzung.
+      *(Gerätetest: „Ich möchte etwas essen.“ → `我想吃点东西`.)*
+- [x] Eine manuell korrigierte chinesische Formulierung bleibt erhalten.
+- [~] Bei nicht installierten Sprachen erscheint der System-Download-Dialog.
+      **Bedingtes Kriterium, Bedingung nicht eingetreten:** Auf dem Testgerät
+      sind die Modelle installiert (Q1 = `installed`, Übersetzung läuft im
+      Flugmodus), also kann der Dialog nicht erscheinen. Ausbleiben ist hier
+      korrektes Verhalten und blockiert die Phase nicht. Die App baut keine
+      eigene Download-Infrastruktur: den Dialog löst allein Apples
+      `.translationTask` aus. Ungeprüft bleibt damit nur der Pfad auf einem
+      Gerät ohne Modelle.
+- [x] Bei fehlgeschlagener Übersetzung lässt sich die Karte trotzdem speichern.
 
 ### Abhängigkeiten
 Phasen 2 und 3.

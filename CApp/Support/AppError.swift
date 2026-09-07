@@ -27,7 +27,7 @@ enum AppError: Error {
     var message: String {
         switch self {
         case .cardIncomplete:
-            "Deutsch und Hanzi müssen ausgefüllt sein."
+            "Deutsch muss ausgefüllt sein, und das Hanzi-Feld braucht mindestens ein chinesisches Zeichen."
         case .cardSaveFailed:
             "Die Karte konnte nicht gespeichert werden. Es wurde nichts geändert."
         case .cardDeleteFailed:

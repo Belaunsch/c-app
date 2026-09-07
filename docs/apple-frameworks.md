@@ -44,6 +44,8 @@ Xcode-26-Toolchain bleiben und iOS 27 später neu bewerten.
 | `Translation.TranslationSession` | iOS 18.0 | Deutsch → Chinesisch | nur Modell-Download | keine (System-Dialog beim Download) |
 | `TranslationSession(installedSource:target:)` | **iOS 26.0** | Übersetzen ohne View-Bindung | nein | keine |
 | `Translation.LanguageAvailability` | iOS 18.0 | Prüfen, ob Sprachpaar unterstützt/installiert ist | nein | keine |
+| `TranslationSession.Strategy` (`.highFidelity`, `.lowLatency`) | **iOS 26.4** | Modellwahl: Apple Intelligence oder traditionell | nein | keine |
+| `LanguageAvailability(preferredStrategy:)` | **iOS 26.4** | Verfügbarkeit für eine bestimmte Modellart prüfen | nein | keine |
 | `Speech.SpeechAnalyzer` | **iOS 26.0** | Session-Verwaltung für Audioanalyse | nein | Mikrofon (+ ggf. Spracherkennung, s. u.) |
 | `Speech.SpeechTranscriber` | **iOS 26.0** | Mandarin-Spracherkennung | nur Modell-Download | wie oben |
 | `Speech.DictationTranscriber` | **iOS 26.0** | Fallback auf älterer/schwächerer Hardware | ggf. | wie oben |
@@ -109,14 +111,34 @@ Praktische Hinweise für die Umsetzung:
   Sprachressourcen installiert und einsatzbereit sind.
 - Das Framework unterstützt **nicht**, von einer Sprache in dieselbe Sprache
   zu übersetzen.
+- Ab **iOS 26.4** gibt es `TranslationSession.Strategy` mit `.highFidelity`
+  („more fluent translations using Apple Intelligence") und `.lowLatency`
+  („fast translations using traditional models"). Apple dokumentiert dazu: Das
+  Framework nutzt die Strategie „when available, or automatically selects an
+  appropriate alternative based on device capabilities and language
+  availability" — es fällt also selbst zurück.
+- Wörtlich zu `LanguageAvailability.init()`: „This initializer uses the default
+  translation strategy based on the SDK version your app was built with. Apps
+  built with iOS 26.4 or macOS 26.4 SDKs and later default to checking for
+  Apple Intelligence models when available. Apps built with earlier SDKs
+  default to traditional models." Weil dieses Projekt mit dem 26.5-SDK baut,
+  ist der Standardcheck der Apple-Intelligence-Check — Grundlage für
+  Entscheidung A16.
+- Quellen: [Strategy](https://developer.apple.com/documentation/translation/translationsession/strategy) ·
+  [LanguageAvailability.init()](https://developer.apple.com/documentation/translation/languageavailability/init()) ·
+  [Response](https://developer.apple.com/documentation/translation/translationsession/response)
 
 ### Konsequenz für die Architektur
 
-Weil der Download-Flow nur über `.translationTask()` läuft, braucht der
-Karten-Editor eine kleine, unsichtbare Host-View, die eine
-`TranslationSession.Configuration` hält. Der reguläre Übersetzungsaufruf nutzt
-danach den direkten Initializer. Details in
-[architecture.md](architecture.md#translationservice).
+Weil der Download-Flow über `.translationTask()` läuft, hält der Karten-Editor
+selbst die `TranslationSession.Configuration` in `@State` und trägt den
+Modifier. **In Phase 4 zeigte sich, dass damit auch der Normalfall abgedeckt
+ist:** Derselbe Modifier liefert die Session *und* holt bei Bedarf die
+Systemzustimmung. Der direkte Initializer
+`TranslationSession(installedSource:target:)` wird nicht gebraucht, und die
+ursprünglich geplante unsichtbare Host-View entfällt — ein Codepfad statt
+zwei. Erneut übersetzt wird über `configuration.invalidate()`. Details in
+[architecture.md §5](architecture.md#translationservice).
 
 ### Offene Punkte
 
@@ -155,16 +177,38 @@ ICU-basierte Transliteration von CoreFoundation:
 
 Beides läuft vollständig offline, ohne Berechtigung und ohne Netzwerkzugriff.
 
+**Keiner der beiden Pfade erkennt „das ist kein Chinesisch".** Beide
+transliterieren, was sie können, und geben den Rest unverändert zurück — im
+Gerätetest der Phase 4 landete deshalb ein ins Hanzi-Feld getipptes `asdf`
+als Pinyin `asdf` im Pinyin-Feld. `PinyinService` prüft die Eingabe daher
+zweifach, bevor ein Ergebnis akzeptiert wird:
+
+1. **Quelle:** Sie muss mindestens ein Han-Zeichen enthalten. Erkannt über die
+   Unicode-Eigenschaft `Ideographic` (`Unicode.Scalar.Properties.isIdeographic`)
+   statt über eigene Zeichenbereiche. Gemessen: erfasst die CJK-Ideogramme
+   samt aller Erweiterungen (U+3400, U+20000, U+3007) und schließt Latein,
+   Ziffern, Satzzeichen, Emoji, Kana, Hangul und Kyrillisch aus. Kanji werden
+   erfasst — korrekt, sie *sind* Han-Zeichen mit Mandarin-Lesung.
+2. **Ergebnis:** Es muss sich von der Eingabe unterscheiden und einen
+   Buchstaben mit Groß-/Kleinschreibung enthalten. Han-Zeichen sind Buchstaben
+   **ohne** Kasus, eine bloß durchgereichte Eingabe fällt hier also durch.
+
+Gemischte Eingabe mit mindestens einem Han-Zeichen wird bewusst zugelassen und
+ganz transliteriert; was ICU nicht kennt, bleibt stehen (`苹果 asdf` →
+`píngguǒ asdf`). Beide Prüfungen sind getestet.
+
 ### Bekannte Grenzen (dokumentierte Unsicherheit)
 
 - **Polyphone Zeichen (多音字)** werden nicht immer korrekt aufgelöst, z. B.
   `行` (xíng/háng), `长` (cháng/zhǎng), `得` (dé/de/děi), `了` (le/liǎo).
   Die Wortsegmentierung über `CFStringTokenizer` verbessert das, garantiert
   aber keine Korrektheit.
-- **Tonsandhi** (z. B. bei `不` und `一`) wird in Pinyin üblicherweise
-  ohnehin nicht geschrieben — hier also kein Problem, aber erwähnt, damit
-  es nicht als Fehler interpretiert wird.
-- Der neutrale Ton wird nicht immer erwartungskonform gesetzt.
+- **Kein Tonsandhi, und die Lesung von `不`/`一` ist unzuverlässig.** ICU wendet
+  kein Sandhi an, wählt die Lesung aber inkonsistent — Messwerte in §10, Q6.
+- **Der neutrale Ton wird als Vollton geschrieben.** Am Gerät belegt: `东西`
+  („Ding") → `dōngxī` statt `dōngxi`. Für beide Pfade getrennt gemessen, und
+  Apple-nativ **nicht** lösbar, weil `东西南北` („Osten und Westen") denselben
+  Vollton korrekt trägt und ICU keine Wortbedeutung kennt. Details in §10, Q6.
 - ICU-Transliterationstabellen können sich zwischen iOS-Versionen ändern. Die
   Ausgabe ist damit **nicht über Versionen hinweg garantiert stabil**.
 
@@ -310,15 +354,15 @@ nicht, und ein unnötiger Berechtigungsdialog wäre ein Rückschritt.
 
 | # | Frage | Klären in | Risiko falls negativ |
 | --- | --- | --- | --- |
-| Q1 | Unterstützt das Translation Framework das Paar `de` → `zh-Hans` direkt? | Phase 4, Task 4.1 | mittel — Pivot über Englisch oder manuelle Eingabe als Standard |
+| Q1 | Unterstützt das Translation Framework das Paar `de` → `zh-Hans` direkt? **Auf echter Hardware geklärt (Gerätetest Phase 3+4, 2026-09-07): ja.** Die App meldete im Editor `installed`. Belegkette, in dieser Reihenfolge belastbar: Die Kette lief **im Flugmodus** vollständig durch — ohne lokal installierte Modelle ist das nicht möglich. Dazu `Apfel` → `苹果`, und der Satz `Ich möchte etwas essen.` → `我想吃点东西`. Im Editor stand **kein** Verfügbarkeitshinweis, was mit `installed` übereinstimmt — allein trägt das aber nicht, weil dieselbe leere Meldung auch gilt, solange die Prüfung noch läuft; entscheidend ist der Flugmodus-Beleg. (Der beim Gerätetest zitierte Fußtext „Nach dem Verlassen des Feldes …" lautet nach der Nacharbeit „Mit Return oder beim Verlassen des Feldes …".) Der System-Download-Dialog trat nicht auf; die Bedingung „nicht installierte Sprachmodelle" ist auf diesem Gerät nicht eingetreten und konnte nicht geprüft werden. Kein Pivot über Englisch nötig (Task 4.8 entfällt). **Zum Simulator, weiterhin gültig:** `LanguageAvailability().supportedLanguages` listet 38 Sprachen inklusive `de-Latn-DE` und `zh-Hans-CN`, aber `status(from:to:)` liefert dort `unsupported` für *jedes* Paar, auch `de → en`. Deshalb bleibt der Katalog-Fallback im Code: meldet `status` nichts Brauchbares, gilt das Paar als `downloadable` statt als unmöglich — sonst wäre die Funktion auf einem Gerät ohne heruntergeladene Modelle dauerhaft abgeschaltet. | **Beantwortet** | entfällt |
 | Q2 | Enthält `SpeechTranscriber.supportedLocales` auf dem Zielgerät `zh_CN`? | Phase 9, Task 9.1 | mittel — Fallback `DictationTranscriber`, sonst Feature entfällt |
 | Q3 | Erfüllt das Zielgerät die Hardware-Anforderungen von `SpeechTranscriber`? | Phase 9, Task 9.1 | mittel — wie Q2 |
 | Q4 | Braucht `SpeechAnalyzer` `NSSpeechRecognitionUsageDescription`? | Phase 9, Task 9.2 | gering — beide Schlüssel werden gesetzt |
 | Q5 | Welche `zh-CN`-Stimmen und welche Qualität liegen auf dem Gerät vor? | Phase 7, Task 7.1 | gering — Hinweis auf manuellen Stimmen-Download |
-| Q6 | Ist die ICU-Pinyin-Qualität für den echten Kartenbestand ausreichend? | Phase 3, Task 3.4 | gering — Feld ist editierbar |
+| Q6 | Ist die ICU-Pinyin-Qualität für den echten Kartenbestand ausreichend? **In Phase 3 gemessen, im Gerätetest Phase 3+4 bestätigt und ergänzt.** Wortsegmentierung funktioniert (`苹果`→`píngguǒ`, `火车站`→`huǒchēzhàn`), und polyphone Zeichen lösen sich im Wortkontext korrekt auf (`银行`→`yínháng`, `长城`→`chángchéng`, `校长`→`xiàozhǎng`) — besser als geplant angenommen. Vier belegte Abweichungen von konventionellem Pinyin, jede mit eigenem Test: (1) Der neutrale Ton wird als Volltonzeichen geschrieben — `谢谢`→`xièxiè` statt `xièxie`, `早上`→`zǎoshàng` statt `zǎoshang`. (2) **Am Gerät aufgefallen** (Satz `Ich möchte etwas essen.` → `我想吃点东西` → `wǒ xiǎng chī diǎn dōngxī`): `东西` in der Bedeutung „Ding/etwas" erwartet `dōngxi`, ICU liefert `dōngxī`. Beide Pfade wurden dafür **getrennt gemessen** — Tokenizer: `东西`→`dōngxī`, Fallback: `东西`→`dōng xī` (Vollton *und* getrennte Silben, also schlechter). **Apple-nativ ist `dōngxi` nicht erreichbar**, weil die Lesung von der Wortbedeutung abhängt: in `东西南北` („Osten und Westen") ist der Vollton richtig, und ICU rendert beide Fälle gleich (`dōngxī nánběi`). Eine Korrektur bräuchte ein eigenes Wörterbuch — in diesem Schritt ausdrücklich nicht gebaut, keine externe Library. Der Testwert `dōngxī` ist als *ICU-Verhalten* festgeschrieben, nicht als korrektes Pinyin; der Kommentar im Test sagt das explizit. (3) Die Lesung von `不` und `一` ist **unzuverlässig**; ICU wendet **kein** Tonsandhi an, sondern wählt inkonsistent: `不是`→`bú shì` (hier zufällig korrekt), `不明白`→`bú míngbái` (falsch, 明 ist 2. Ton), `不对`→`bùduì` (falsch, Sandhi wäre `búduì`), `一点`→`yīdiǎn` (falsch, wäre `yìdiǎn`). (4) Einzelne Silben verlieren das Tonzeichen: `钱`→`qian` statt `qián`. Alle vier sind der Grund, warum das Feld editierbar bleibt und automatisch erzeugtes Pinyin nirgends als garantiert korrekt dargestellt wird. | **Beantwortet**, Gegenprobe am wachsenden Bestand bleibt laufend | gering — Feld ist editierbar |
 | Q7 | Reicht die automatische SwiftData-Migration über die Projektlaufzeit? **Strategie in Phase 1 festgelegt** (kein `VersionedSchema`, Begründung als Kommentar an `CAppApp.makeModelContainer()`); die Frage selbst beantwortet erst die erste nicht-additive Schemaänderung. | Phase 10, Task 10.10 (Rückblick) | gering — `SchemaMigrationPlan` nachrüstbar |
 | Q8 | Muss `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` für `Learning/` abgeschaltet werden? Das Xcode-26-Template setzt es im App-Target, wodurch auch unannotierter Code der Learning-Schicht auf dem Main-Actor landet. | Phase 5, Task 5.1 | gering — alternativ die betroffenen Typen einzeln `nonisolated` markieren; Analyse in [architecture.md §4](architecture.md#4-learning-engine). **In Phase 1 gemessen: es gibt einen Effekt.** Ein `nonisolated` Konsument — genau das, was `Learning/` sein muss — erzeugt bei einem `status < .good`-Vergleich die Warnung `call to main actor-isolated operator function '<' in a synchronous nonisolated context`, im Swift-6-Sprachmodus ein Fehler. Deshalb sind `CardType` und `LearningStatus` jetzt `nonisolated` deklariert, wie `AppTab` seit Phase 0. Der konkrete Bedarf ist damit gedeckt; die Grundsatzfrage, ob das Setting fürs Target abgeschaltet wird, bleibt offen. |
-| Q9 | Wie unterscheidet der Karten-Editor ab Phase 3 einen **von der Automatik** erzeugten Wert von einem getippten? `CardEditorModel.manualEditFlag` vergleicht gegen den gespeicherten Wert; bei einer **neuen** Karte ist der leer, also gilt jeder Wert als manuell. Füllt in Phase 3 die Pinyin-Erzeugung das Feld einer neuen Karte, wird der Merker fälschlich `true` gesetzt, und Task 3.5 („nur vorschlagen, wenn Feld leer oder Merker false") greift danach nie mehr. | Phase 3, vor Task 3.5 | mittel — sonst schlägt die Pinyin-Automatik bei neuen Karten genau einmal an und danach nie wieder. Lösungsrichtung: den zuletzt von der Automatik erzeugten Wert im Editor mitführen und dagegen vergleichen, statt gegen den gespeicherten. |
+| Q9 | **In Phase 3 gelöst.** Wie unterscheidet der Karten-Editor einen **von der Automatik** erzeugten Wert von einem getippten? `CardEditorModel.manualEditFlag` vergleicht gegen den gespeicherten Wert; bei einer **neuen** Karte ist der leer, also gilt jeder Wert als manuell. Füllt in Phase 3 die Pinyin-Erzeugung das Feld einer neuen Karte, wird der Merker fälschlich `true` gesetzt, und Task 3.5 („nur vorschlagen, wenn Feld leer oder Merker false") greift danach nie mehr. | erledigt in Phase 3 | **Umgesetzt:** `CardEditorModel` führt `hanziBaseline` und `pinyinBaseline` mit — den letzten **abgeglichenen** Wert, also was die App selbst ins Feld geschrieben hat (beim Laden oder aus der Automatik) oder was der Nutzer beim letzten Editier-Ende darin stehen hatte. Daraus ergeben sich die Merker `hanziIsManual`/`pinyinIsManual`, live geführt statt beim Speichern aus dem gespeicherten Wert abgeleitet. Ein generierter Wert gilt damit nie als manuell, auch nicht auf einer neuen Karte. Ergänzt in Phase 4: Zusätzlich wird mit `pinyinSourceHanzi` mitgeführt, **aus welchem Hanzi** das automatische Pinyin erzeugt wurde. Das beantwortet zwei Fälle, die der Manuell-Merker nicht beantworten kann — ein vom Nutzer geleertes Pinyin (ein leerer Wert setzt den Merker naturgemäß auf `false`) und ein Pinyin, das nach einer abgebrochenen Übersetzung zum alten Wort gehört. Begründung in [architecture.md A19](architecture.md#10-zusammenfassung-der-architekturentscheidungen). |
 
 ---
 

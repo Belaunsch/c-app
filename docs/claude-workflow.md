@@ -142,6 +142,22 @@ eine Anweisung und keine erzwungene Sperre. Für echte Erzwingung wäre ein
 
 ---
 
+## 4a. Eine Phase auf einmal — und die eine Ausnahme
+
+Der Normalfall ist eine Phase pro Durchlauf, wie in `CLAUDE.md` Regel 1
+festgelegt. **Einmal** wurde davon abgewichen: Die Phasen 3 (Pinyin) und 4
+(Übersetzung) liefen als ein gekoppelter Meilenstein, weil Phase 4 direkt auf
+Phase 3 aufbaut und der erste sinnvoll prüfbare Produktzustand die vollständige
+Kette `Deutsch → Hanzi → Pinyin` ist. Ein Gerätetest, ein Commit, aber
+**getrennte Akzeptanzkriterien**, die getrennt abgehakt wurden.
+
+Die Bedingungen, unter denen so etwas wieder zulässig ist: Der Nutzer
+genehmigt es ausdrücklich, die zweite Phase baut technisch unmittelbar auf der
+ersten auf, und ein Test der ersten allein hätte keinen aussagekräftigen
+Produktzustand ergeben. Ohne alle drei gilt Regel 1.
+
+---
+
 ## 5. Phase-Gate
 
 Eine Phase ist abgeschlossen, wenn **alle** Punkte zutreffen:

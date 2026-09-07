@@ -87,8 +87,8 @@ c-app/
 │   │   └── SelfAssessment.swift    enum: again | hard | good | secure
 │   │
 │   ├── Services/
-│   │   ├── PinyinService.swift             CoreFoundation, pur
-│   │   ├── TranslationService.swift        Translation Framework
+│   │   ├── PinyinService.swift             CoreFoundation, pur (Phase 3)
+│   │   ├── TranslationService.swift        Verfügbarkeit + Konfiguration (Phase 4)
 │   │   ├── SpeechSynthesisService.swift    AVSpeechSynthesizer
 │   │   └── SpeechRecognitionService.swift  SpeechAnalyzer/SpeechTranscriber
 │   │
@@ -110,7 +110,7 @@ c-app/
 │   │   │   ├── TagListView.swift           Kategorien umbenennen und löschen
 │   │   │   ├── TagManagement.swift          Umbenennen und Löschen, testbar
 │   │   │   ├── CardDisplay.swift           deutsche Anzeigenamen der Enums
-│   │   │   └── TranslationHostView.swift   Phase 4, hält translationTask
+│   │   │   └── (kein TranslationHostView — siehe §5)
 │   │   └── Settings/
 │   │       └── SettingsView.swift
 │   │
@@ -130,6 +130,8 @@ c-app/
 │   ├── TagNormalizationTests.swift     Phase 2
 │   ├── CardDisplayTests.swift          Phase 2
 │   ├── TagManagementTests.swift        Phase 2
+│   ├── PinyinServiceTests.swift        Phase 3
+│   ├── TranslationServiceTests.swift   Phase 4
 │   ├── BatchSelectorTests.swift        Phase 5
 │   ├── SessionQueueTests.swift         Phase 5
 │   ├── StatusTransitionTests.swift     Phase 5
@@ -341,18 +343,32 @@ Framework:
 - Das **Übersetzen bei bereits installierten Sprachen** geht ab iOS 26 auch
   ohne View über `TranslationSession(installedSource:target:)`.
 
-Lösung: `TranslationHostView` ist eine leere View (`Color.clear.frame(width: 0,
-height: 0)`) im Karten-Editor, die eine `TranslationSession.Configuration` hält
-und ausschließlich für den Download-Pfad zuständig ist. Der Normalfall läuft
-über den direkten Initializer im `TranslationService`.
+**In Phase 4 einfacher gelöst als geplant:** Es gibt **keine**
+`TranslationHostView`. Der Karten-Editor selbst hält die
+`TranslationSession.Configuration` in `@State` und trägt
+`.translationTask(configuration)`. Dieser Modifier liefert die Session *und*
+holt bei Bedarf die Systemzustimmung zum Modell-Download — beides über einen
+Weg. Der direkte Initializer `TranslationSession(installedSource:target:)`
+wird dadurch nicht gebraucht, und die zwei geplanten Codepfade fallen auf
+einen zusammen. Eine erneute Übersetzung wird über `configuration.invalidate()`
+ausgelöst.
 
-Ablauf beim Übersetzen:
+`TranslationService` bleibt zuständig für die Frage, *ob* und *womit*
+übersetzt werden kann (Entscheidung A16); die Übersetzung selbst läuft auf der
+vom Modifier gelieferten Session.
 
-1. `LanguageAvailability.status(from: .german, to: .chineseSimplified)` prüfen.
-2. `.installed` → direkt übersetzen.
-3. `.supported` (noch nicht installiert) → Download über die Host-View
-   anstoßen, Hinweis in der UI anzeigen.
-4. `.unsupported` → Automatik dauerhaft ausblenden, manuelle Eingabe bleibt.
+Ablauf beim Übersetzen (Stand Phase 4):
+
+1. `TranslationService.support()` prüfen — dreistufig, siehe A16.
+2. Solange das Ergebnis noch nicht da ist, wird **nicht** automatisch
+   übersetzt: sonst würde eine Konfiguration ohne die eventuell nötige
+   Strategie festgeschrieben.
+3. `.installed` oder `.downloadable` → beim Verlassen des deutschen Feldes
+   `configuration` setzen bzw. `invalidate()`; `.translationTask` liefert die
+   Session und holt nötigenfalls die Download-Zustimmung.
+4. `.unsupported` → Automatik aus, Hinweis in der UI, manuelle Eingabe bleibt.
+5. War die Verfügbarkeit nur aus dem Sprachkatalog geraten
+   (`Support.isConfirmed == false`), verspricht die Meldung weniger.
 
 Der Service gibt Vorschläge zurück. Er schreibt nie direkt in die Karte.
 
@@ -512,4 +528,10 @@ Konvention beim Schreiben des Modells.
 | A12 | Mehrere gewählte Tags werden mit **UND** verknüpft | Jeder Filter in der Kartenübersicht verengt das Ergebnis — Typ, Suche und Status ebenso. OR nur für Tags wäre inkonsistent und überraschend. |
 | A14 | Neue Tags entstehen erst beim Speichern der Karte | Der Editor merkt getippte Namen nur vor. Würde er sie sofort einfügen, hinterließe ein abgebrochener Editor den Tag dauerhaft — der `mainContext` speichert automatisch, und die App hat **keine** Funktion zum Löschen eines Tags. Ein Vertipper wäre damit unumkehrbar. |
 | A13 | Tag-Deduplizierung über einen berechneten Schlüssel, ohne Schemafeld | „Essen", „essen" und „ESSEN" vergleichen sich über `TagNormalization.key`; die zuerst eingegebene Schreibweise bleibt sichtbar. Ein gespeichertes `normalizedName` wäre eine Schemaänderung samt Migration für eine Handvoll Tags. **Diakritika werden bewusst nicht gefaltet** (Produktentscheidung): „Café" und „Cafe" bleiben getrennt, weil „Grün" und „Grun" verschiedene Wörter sind und ein Zusammenführen die Daten stillschweigend umbenennen würde. Die **Suche** ist dagegen diakritikainsensitiv, damit Pinyin ohne Tonzeichen findbar bleibt — zwei verschiedene Zwecke, zwei verschiedene Regeln. |
+| A16 | Übersetzungsstrategie: keine explizite Vorgabe, dafür ein dreistufiger Verfügbarkeitscheck | Ohne `preferredStrategy` wählt das Framework selbst und fällt laut Apple-Doku automatisch auf eine passende Alternative zurück — Qualität zuerst, ohne eigene Logik. Der Check läuft dreistufig: Standard, dann (ab iOS 26.4) `.lowLatency`, dann der Sprachkatalog. Grund für Stufe 2: Apps, die gegen das 26.4-SDK gebaut werden, prüfen standardmäßig auf Apple-Intelligence-Modelle, was auf Geräten ohne Apple Intelligence ein falsches „unsupported" ergeben kann. Grund für Stufe 3: Im Simulator meldet `status(from:to:)` **jedes** Paar als `unsupported`, auch `de → en` — würde die App das als Gerätegrenze deuten, wäre die Funktion dauerhaft aus. `TranslationSession.Strategy` gibt es erst ab iOS 26.4, das Target bleibt 26.0, deshalb `if #available`. |
+| A17 | Die drei Textfelder sind eine Kette, die Herkunft jedes Werts wird live geführt | Deutsch → Hanzi → Pinyin. Ausgelöst wird beim Verlassen des Feldes, nicht pro Tastendruck. `hanziBaseline`/`pinyinBaseline` halten den letzten **abgeglichenen** Wert — was die App beim Laden oder Generieren hineingeschrieben hat, oder was der Nutzer beim letzten Editier-Ende darin stehen hatte. Alles, was davon abweicht, kam vom Nutzer. Wichtig: Der Abgleich läuft nicht nur beim Fokusverlust, sondern auch **bevor** die Automatik schreibt und **beim Speichern** — sonst hätte ein während der laufenden Übersetzung getippter Wert überschrieben werden können, und genau das ist der Normalablauf, weil der Sprung ins Hanzi-Feld die Übersetzung auslöst. Damit gilt ein generierter Wert nie als manuell (Q9), und ein manueller Wert wird nie still überschrieben. Zwei sichtbare Bedienelemente sind die einzige Freigabe zum Überschreiben — seit A21 je ein ↻ direkt im Feld, die Texte „Neu übersetzen" und „Pinyin neu erzeugen" leben als Accessibility-Labels weiter: Das ↻ am Hanzi-Feld erneuert Hanzi **und** das daraus abgeleitete Pinyin, das ↻ am Pinyin-Feld nur das Pinyin. Danach gilt der Wert wieder als automatisch. Bewusst **keine** generische Change-Tracking-Schicht: zwei Bools und zwei Strings. |
+| A18 | Stale-Ergebnisse werden verworfen, nicht abgebrochen | Jeder Übersetzungslauf bekommt eine Nummer; ein Ergebnis wird nur angewandt, wenn seine Nummer noch aktuell ist **und** der deutsche Text sich nicht verändert hat. „Latest input wins" ohne Task-Verwaltung. |
+| A19 | Der Editor synchronisiert seinen Zustand **vor** dem Speichern, nicht erst beim Fokusverlust | `reconcileForSave()` tut, was das Verlassen des Feldes getan hätte: normalisieren, Herkunft abgleichen, und das Pinyin neu ableiten, wenn es nicht zum Hanzi im Feld gehört — ein manuell korrigiertes Pinyin ausgenommen. Die Frage lautet ausdrücklich **„aus welchem Hanzi wurde dieses Pinyin erzeugt?"** (`pinyinSourceHanzi`) und nicht „hat sich das Hanzi seit dem letzten Abgleich geändert?". Die beiden fallen auseinander, sobald eine Übersetzung eintrifft, während der Nutzer ein eigenes Hanzi tippt: `completeTranslation` gleicht die Herkunft ab — schiebt also die Hanzi-Baseline vor — und bricht dann ab, ohne das Pinyin anzufassen. Die änderungsbasierte Regel sah danach „nichts geändert" und speicherte das Pinyin des alten Worts; im Test `decliningTranslationDoesNotLeaveAStalePinyin` festgenagelt und gegen die alte Regel als rot gemessen. Nebeneffekt derselben Frage: Ein vom Nutzer **geleertes** Pinyin hat das aktuelle Hanzi als Quelle und wird deshalb nicht hinter seinem Rücken nachgefüllt — „Pinyin kann leer bleiben" stimmt damit wieder. Grund ist ein echter Fehler aus dem Gerätetest der Phase 4: „Brot" ergab `面包`/`miànbāo`, das Hanzi wurde von Hand auf `水` korrigiert, und direkt aus dem Hanzi-Feld gespeichert stand `水` mit `miànbāo` in der Karte — die Lesung eines Worts, das nicht mehr auf der Karte war. Ein Tap auf die Toolbar verschiebt den Fokus nicht zuverlässig, also darf die Korrektheit nicht davon abhängen, dass SwiftUI vorher ein Fokusereignis liefert. Die Regel ist ohne View testbar. |
+| A20 | Automatisches Pinyin nur aus echtem Hanzi, und veraltetes Pinyin wird geleert | `PinyinService` verlangt mindestens ein Han-Zeichen in der Quelle und ein plausibles Ergebnis (Details in [apple-frameworks.md §5](apple-frameworks.md#5-hanzi--pinyin-mit-tonzeichen)) — ICU reichte sonst Nicht-Chinesisch durch, im Gerätetest wurde aus `asdf` das Pinyin `asdf`. Lässt sich nichts ableiten, wird ein **automatisches** Pinyin geleert statt stehen gelassen: es gehörte zu einem anderen Hanzi. Ein **manuelles** Pinyin wird nie gelöscht, auch nicht vom Refresh. Dieselbe Prüfung gilt beim Speichern: Das Hanzi-Feld braucht mindestens ein Han-Zeichen, gemischter Text mit Han-Anteil bleibt erlaubt. |
+| A21 | Return/„Fertig" gibt nur den Fokus frei, gearbeitet wird an einer Stelle | Die drei Felder sind einzeilig, damit Return überhaupt ein Submit auslöst; `onSubmit` setzt lediglich `focusedField = nil`, was die Tastatur schließt. Die eigentliche Arbeit hängt an der Fokusänderung (`endEditing(of:)`). Damit kann ein Tastendruck strukturell keine zwei Übersetzungen starten, ohne Merker im View. Zusätzlich merkt sich das Modell den zuletzt angefragten deutschen Text, sodass ein doppelter Aufruf auch dort nichts auslöst. Leerzeichen bleiben erlaubt — Sätze brauchen sie, Satz-Pinyin auch —, nur Zeilenumbrüche werden beim Abschluss zu Leerzeichen normalisiert. **Preis der Einzeiligkeit:** Ein langer Satz ist nur scrollend im Feld zu lesen. Wenn sich das im Gerätetest als störend erweist, ist der dokumentierte Ausweg `axis: .vertical` plus ein „Fertig" in einer `ToolbarItemGroup(placement: .keyboard)` — dann bleibt es bei genau einem Abschlussweg (`focusedField = nil`), nur ausgelöst über die Tastatur-Toolbar statt über die Return-Taste. |
 | A15 | Kategorien werden in place umbenannt, nie zusammengeführt | `TagManagement.rename` ändert die bestehende `Tag`-Entität. Ein neuer Tag plus Neuzuordnung würde dasselbe Ergebnis anstreben, aber jede Beziehung anfassen und dabei Fehler ermöglichen. Zielt der neue Name auf einen anderen bestehenden Tag, wird abgelehnt statt gemergt: Merging würde zwei Kategorien unumkehrbar verschmelzen, und der Nutzer hat kein Undo. |

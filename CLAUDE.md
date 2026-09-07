@@ -6,12 +6,21 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phase 2 (Kartenverwaltung) ist abgeschlossen** — der Tab
-„Karten" ist voll nutzbar: Karten anlegen, bearbeiten, löschen, suchen, nach
-Kategorie und Lernstatus filtern, Kategorien umbenennen und löschen. Build und
-Tests grün, Gerätetest bestanden. Der Tab „Lernen" ist noch ein Platzhalter,
-und es gibt keinerlei Automatik (keine Übersetzung, kein Pinyin, kein Audio)
-und keine Lernlogik. **Nächster Schritt ist Phase 3 (Pinyin-Generierung).**
+**Aktueller Stand: Phasen 0–4 abgeschlossen.** Die Kette
+`Deutsch → Hanzi → Pinyin` läuft mit Return oder beim Verlassen des Feldes
+automatisch, beide Werte bleiben editierbar, und ein von Hand gesetzter Wert
+wird nur nach ausdrücklicher Nutzeraktion überschrieben — über das ↻ im
+jeweiligen Feld. Q1 ist auf echter Hardware positiv beantwortet
+(`de → zh-Hans` = `installed`), die ganze Kette funktioniert offline. Kein
+Audio, keine Spracherkennung, keine Lernlogik; der Tab „Lernen" ist ein
+Platzhalter.
+
+**Nächster Schritt ist die beauftragte Zwischenphase 4.5 — Pinyin Accuracy
+und Karten-/Editor-Politur —, danach Phase 5 (Learning Engine).** Phase 4.5
+ist noch nicht in der Roadmap ausgearbeitet; das ist ihre erste Aufgabe. Der
+Research-Spike dazu ist gelaufen: CC-CEDICT (CC BY-SA 4.0) führt neutrale Töne
+und mehrere Lesungen je Wort, kennt `东西` als `dōngxi` *und* `dōngxī` und ist
+damit die Grundlage, um ICU vom Primärpfad zum markierten Fallback zu machen.
 
 ## Vor jeder Änderung lesen
 

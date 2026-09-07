@@ -6,7 +6,7 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 2 abgeschlossen.**
+**Phasen 0 bis 4 abgeschlossen.**
 
 Vorhanden sind die Architektur- und Planungsdokumentation, die
 Claude-Code-Entwicklungsinfrastruktur (`.claude/agents/`, `.claude/skills/`,
@@ -17,12 +17,25 @@ löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
 Lernstatus, Kategorien umbenennen und löschen.
 
 Build und Unit-Tests laufen grün (iPhone-17-Simulator, iOS 26.5), und alle
-drei Phasen sind auf dem echten iPhone bestätigt.
+fünf Phasen sind auf dem echten iPhone bestätigt.
 
-Noch nicht vorhanden: jede Form von **Automatik** (Übersetzung, Pinyin, Audio,
-Spracherkennung) und der **Lernmodus** — der Tab „Lernen" ist ein Platzhalter.
+Neu aus den Phasen 3 und 4: Beim Anlegen einer Karte genügt der deutsche Text
+— mit Return oder beim Verlassen des Feldes erzeugt die App Hanzi über Apples
+Translation-Framework und daraus das Pinyin mit Tonzeichen. Beides bleibt
+jederzeit editierbar, und ein von Hand korrigierter Wert wird nur nach
+ausdrücklicher Nutzeraktion überschrieben — über das ↻ im jeweiligen Feld. Die
+Pinyin-Erzeugung läuft komplett offline; auf dem Testgerät liegen auch die
+Übersetzungsmodelle lokal, sodass die ganze Kette im Flugmodus funktioniert.
 
-Nächster Schritt: **Phase 3 — Pinyin-Generierung**.
+Noch nicht vorhanden: **Audio** (Sprachausgabe, Spracherkennung) und der
+**Lernmodus** — der Tab „Lernen" ist ein Platzhalter.
+
+Nächster Schritt: **Zwischenphase 4.5 — Pinyin Accuracy und Karten-/Editor-
+Politur**, danach **Phase 5 — Learning Engine**. Hintergrund: Die reine
+ICU-Transliteration erzeugt bei gültigem Chinesisch sprachlich falsche
+Lesungen — `东西` im Sinn „Ding/etwas" ergibt `dōngxī` statt `dōngxi` —, und
+das ist Apple-nativ nicht lösbar. Phase 4.5 stellt eine lokale lexikalische
+Auflösung davor und kennzeichnet den verbleibenden ICU-Fallback sichtbar.
 
 Die Umsetzung erfolgt Phase für Phase gemäß
 [docs/roadmap.md](docs/roadmap.md), mit einem Test nach jeder Phase.
