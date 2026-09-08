@@ -288,40 +288,62 @@ das ist additiv und bricht nichts.
 
 ## 4. Learning Engine
 
-Ausführliche Spezifikation: [learning-engine.md](learning-engine.md).
+Ausführliche Spezifikation: [learning-engine.md](learning-engine.md). In
+Phase 5 gebaut, Code in `CApp/Learning/`.
 
-Architektonisch relevant ist nur die Schnittstelle:
+Architektonisch relevant ist die Schnittstelle:
 
 ```swift
-struct CardSnapshot: Identifiable, Equatable {
+nonisolated struct CardSnapshot: Equatable, Hashable, Sendable {
     let id: UUID
     let status: LearningStatus
-    let lastReviewedAt: Date?
 }
 ```
 
-- `LearnSessionModel` (Feature-Schicht) lädt Karten über den `ModelContext`,
-  bildet sie auf `CardSnapshot` ab und übergibt sie der Engine.
-- Die Engine liefert die Reihenfolge zurück und entscheidet über
-  Wiedereinstreuung — sie schreibt selbst **nichts** in die Datenbank.
+**Zwei Felder, nicht drei.** Die Planung hatte hier zusätzlich
+`lastReviewedAt: Date?` vorgesehen. Keine Zeile der Engine braucht es: die
+Gewichtung liest nur den Status, und alles nach der Auswahl arbeitet auf der
+ID. Ein Feld, das niemand liest, ist ein Versprechen ohne Deckung — es kommt
+dazu, wenn §11 (echtes Spaced Repetition) es tatsächlich braucht. Ebenso kein
+`Identifiable`: die Konformität wird nirgends verwendet.
+
+Bewusst **ohne** den Kartentext. Die Queue arbeitet mit IDs, deshalb zeigt
+eine während der Session bearbeitete Karte beim nächsten Erscheinen ihren
+neuen Inhalt, ohne dass die Engine davon etwas wissen muss
+([learning-engine.md §9](learning-engine.md#9-randfälle)).
+
+- Die Feature-Schicht (Phase 6) lädt Karten über den `ModelContext`, bildet
+  sie auf `CardSnapshot` ab und übergibt sie der Engine.
+- Die Engine liefert Auswahl und Reihenfolge zurück und entscheidet über
+  Wiedereinstreuung — sie schreibt selbst **nichts** in die Datenbank und
+  liest nie daraus.
+- `AssessmentOutcome` ist die Antwort auf eine Selbsteinschätzung und trägt
+  genau das, was die Feature-Schicht laut
+  [§7](learning-engine.md#7-persistierte-änderungen-pro-antwort) schreiben
+  muss: welche Karte, welche Antwort, ob es die **erste** Einschätzung im
+  Batch war, der daraus folgende Status (`nil`, wenn er unverändert bleibt),
+  ob die Karte wieder eingereiht wurde und ob der Batch beendet ist. Kein
+  Event-System, kein Command-Bus.
 - `StatusTransition` ist eine reine Funktion
   `(LearningStatus, SelfAssessment) -> LearningStatus`. Das Persistieren
-  übernimmt das `LearnSessionModel`.
-- Der Zufall wird über `inout some RandomNumberGenerator` hereingereicht, damit
-  Tests mit einem festen Seed deterministisch laufen.
+  übernimmt die Feature-Schicht.
+- `lastReviewedAt` setzt ebenfalls die Feature-Schicht. Die Engine hat keine
+  Uhr — `Date()` im Berechnungspfad wäre genau die Nebenwirkung, die die
+  Testfälle unprüfbar macht.
+- Der Zufall wird über `inout some RandomNumberGenerator` hereingereicht,
+  damit Tests mit einem festen Seed deterministisch laufen. Die Engine
+  erzeugt nie selbst einen Generator.
 
 Damit ist die gesamte Lernlogik ohne `ModelContainer`, ohne Simulator und
-ohne Netzwerk testbar.
+ohne Netzwerk testbar — gemessen: 27 Tests, jeder unter 25 ms.
 
-**Offener Punkt für Phase 5:** Das Xcode-26-Template setzt im App-Target
-`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` (bei `SWIFT_VERSION = 5.0`).
-Damit landet auch unannotierter Code unter `Learning/` standardmäßig auf dem
-Main-Actor. Das verhindert die Tests nicht, steht aber quer zur Absicht von
-A2, diese Schicht als reine, actor-freie Logik zu halten. In Phase 0 bewusst
-unverändert gelassen, weil dort noch kein Code unter `Learning/` existiert und
-eine Änderung ohne Anlass nur Risiko wäre. Vor der Umsetzung von Phase 5
-bewusst entscheiden: Isolation für das Target abschalten, oder die betroffenen
-Typen einzeln als `nonisolated` markieren.
+**Actor-Isolation, in Phase 5 entschieden (Q8 geschlossen):** Das App-Target
+behält `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; alle neun Dateien unter
+`Learning/` sind einzeln `nonisolated`. Gemessen wurden beide Varianten mit
+`SWIFT_STRICT_CONCURRENCY=complete`, weil erst das die Swift-6-Tauglichkeit
+zeigt. Begründung und Zahlen in
+[apple-frameworks.md §10, Q8](apple-frameworks.md#10-offene-technische-fragen-zu-klären-vor-der-jeweiligen-phase).
+`project.pbxproj` blieb unverändert.
 
 ---
 

@@ -611,6 +611,13 @@ Phase-5-Funktionalität.
 
 ## Phase 5 — Learning Engine (ohne UI)
 
+**Status: abgeschlossen.** Reine Foundation-Logik, deshalb **ohne
+Gerätetest** — kein Akzeptanzkriterium dieser Phase ist geräteabhängig, es
+gibt keine UI und keinen Persistenzpfad. Das Gate stützt sich auf Debug- und
+Release-Build, die vollständige Testsuite, den Import-/Scope-Audit,
+Determinismus, Terminierung, Laufzeit und die beiden Reviews. Q8 ist mit
+dieser Phase geschlossen.
+
 ### Ziel
 Die vollständige Lernlogik als reiner, getesteter Swift-Code.
 
@@ -639,13 +646,37 @@ Alles unter `Learning/` gemäß [learning-engine.md](learning-engine.md).
   [§10](learning-engine.md#10-testfälle-für-phase-5) implementieren.
 - **5.8** Alle Parameter als benannte Konstanten an einer Stelle
   ([§8](learning-engine.md#8-parameter)).
+- **5.9** *Q8 abgeschlossen:* Actor-Isolation mit zwei Compile-Spikes
+  gemessen, Variante A gewählt (Target behält den MainActor-Default,
+  `Learning/` ist einzeln `nonisolated`). `project.pbxproj` unverändert.
+  Messwerte in
+  [apple-frameworks.md §10, Q8](apple-frameworks.md#10-offene-technische-fragen-zu-klären-vor-der-jeweiligen-phase).
+
+**Bewusst nicht gebaut:** `batchSize` ist **kein** Parameter von
+`BatchSelector.selectBatch`. Die in §8 vorgesehene Verstellbarkeit (5–10)
+muss zwei Stellen erreichen — die Auswahl **und** die Recency-Schwelle von
+zwei Batches. Eine Größe nur an der Auswahl vorbeizuführen hätte die Schwelle
+still auf dem alten Wert gelassen; im Review als solches gefunden und die
+ungenutzte Stellschraube deshalb entfernt.
 
 ### Akzeptanzkriterien
-- [ ] Alle 19 spezifizierten Tests laufen grün.
-- [ ] Der Ordner `Learning/` importiert nichts außer `Foundation`.
-- [ ] Gleicher RNG-Seed liefert reproduzierbar dieselbe Auswahl.
-- [ ] Ein Batch der Größe 1 mit dauerhaftem „Nochmal“ terminiert.
-- [ ] Die Testsuite läuft in unter einer Sekunde.
+- [x] Alle 19 spezifizierten Tests laufen grün. *(Einzeln vorhanden und mit
+      `§10, test N` zugeordnet; die Zuordnung wurde im Audit inhaltlich
+      geprüft, nicht nur die Kommentare.)*
+- [x] Der Ordner `Learning/` importiert nichts außer `Foundation`. *(Neun
+      Dateien, neun `import Foundation`, null Treffer für SwiftUI, SwiftData,
+      `@Model`, `ModelContext`, `@Query`, `@Observable`, `Date()` oder Zufall
+      ohne injizierten Generator.)*
+- [x] Gleicher RNG-Seed liefert reproduzierbar dieselbe Auswahl.
+      *(Gegenprobe: globaler Zufall statt injiziertem Generator macht
+      `sameSeedSameResult` rot.)*
+- [x] Ein Batch der Größe 1 mit dauerhaftem „Nochmal“ terminiert.
+      *(Als Invariante geprüft, mit Schranke; Gegenprobe: entfernte
+      `maxReinserts`-Guard und Off-by-one werden beide erkannt.)*
+- [x] Die Testsuite läuft in unter einer Sekunde. *(Die 32 Phase-5-Tests:
+      langsamster Einzeltest 0,052 s. Die **gesamte** Suite mit 250 Tests
+      liegt darüber, weil die SwiftData- und Lexikon-Suiten aus früheren
+      Phasen dazugehören — das ist nicht Gegenstand dieses Kriteriums.)*
 
 ### Abhängigkeiten
 Phase 1 (nur für die Enums `LearningStatus` und `CardType`).

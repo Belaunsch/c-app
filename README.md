@@ -6,7 +6,7 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 4.5 abgeschlossen.**
+**Phasen 0 bis 5 abgeschlossen.**
 
 Vorhanden sind die Architektur- und Planungsdokumentation, die
 Claude-Code-Entwicklungsinfrastruktur (`.claude/agents/`, `.claude/skills/`,
@@ -27,8 +27,13 @@ ausdrücklicher Nutzeraktion überschrieben — über das ↻ im jeweiligen Feld
 Pinyin-Erzeugung läuft komplett offline; auf dem Testgerät liegen auch die
 Übersetzungsmodelle lokal, sodass die ganze Kette im Flugmodus funktioniert.
 
-Noch nicht vorhanden: **Audio** (Sprachausgabe, Spracherkennung) und der
-**Lernmodus** — der Tab „Lernen" ist ein Platzhalter.
+Neu aus Phase 5: Die Lernlogik selbst — Gewichtung nach Lernstand, Auswahl
+von Mini-Batches, Wiedereinstreuung nicht gewusster Karten, Statusübergänge —
+liegt als reine, deterministisch getestete Swift-Schicht in `CApp/Learning/`.
+Sie hat noch keine Oberfläche: der Tab „Lernen" ist weiterhin ein Platzhalter.
+
+Noch nicht vorhanden: der **Lernmodus** selbst und **Audio** (Sprachausgabe,
+Spracherkennung).
 
 Neu aus Phase 4.5: Das Pinyin kommt nicht mehr aus reiner Transliteration,
 sondern aus einem gebündelten Lexikon — daher die neutralen Töne (`xièxie`,
@@ -37,7 +42,7 @@ kann, wird als prüfbedürftig gekennzeichnet statt geraten. Dazu eine ruhigere
 Kartenansicht: kompakter Navigationstitel, Filter hinter einem Knopf,
 mehrzeilige Felder für Satzkarten und keine Dauer-Erklärtexte mehr.
 
-Nächster Schritt: **Phase 5 — Learning Engine**.
+Nächster Schritt: **Phase 6 — Lernmodus A (Deutsch → Chinesisch)**.
 
 ## Drittanbieter-Daten
 

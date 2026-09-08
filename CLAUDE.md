@@ -15,12 +15,21 @@ jeweiligen Feld. Q1 ist auf echter Hardware positiv beantwortet
 Audio, keine Spracherkennung, keine Lernlogik; der Tab „Lernen" ist ein
 Platzhalter.
 
-**Phase 4.5 (Pinyin Accuracy + UI-Politur) ist abgeschlossen.** Pinyin kommt
-primär aus gebündelten CC-CEDICT-Daten (`ChineseLexicon`, `PinyinTone`), ICU
-liefert nur noch die Wortgrenzen und den gekennzeichneten Fallback. Ein nicht
-eindeutig auflösbares Pinyin wird **nicht geraten**, sondern als prüfbedürftig
-markiert und im Editor benannt. **Nächster Schritt ist Phase 5 (Learning
-Engine)** — reine Foundation-Logik, kein SwiftUI.
+Pinyin kommt primär aus gebündelten CC-CEDICT-Daten (`ChineseLexicon`,
+`PinyinTone`), ICU liefert nur noch die Wortgrenzen und den gekennzeichneten
+Fallback. Ein nicht eindeutig auflösbares Pinyin wird **nicht geraten**,
+sondern als prüfbedürftig markiert und im Editor benannt.
+
+**Phase 5 ist abgeschlossen: die Lernlogik liegt als reine, getestete
+Foundation-Schicht in `CApp/Learning/`** — Gewichtung, gewichtete Auswahl ohne
+Zurücklegen, Queue mit Wiedereinstreuung, Statusübergänge. Sie kennt keine
+`Card`, keinen `ModelContext` und keine Uhr; Zufall wird hereingereicht. Q8
+ist geschlossen (Target behält `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`,
+reine Typen sind einzeln `nonisolated`).
+
+**Nächster Schritt ist Phase 6 — Lernmodus A (Deutsch → Chinesisch):** die
+Feature-Schicht, die `Card` auf `CardSnapshot` abbildet, die Engine antreibt
+und deren Ergebnisse nach SwiftData zurückschreibt.
 
 Drittanbieter-Daten liegen ausschließlich in
 `CApp/Resources/ThirdParty/CC-CEDICT/` und stehen unter CC BY-SA 4.0; die
