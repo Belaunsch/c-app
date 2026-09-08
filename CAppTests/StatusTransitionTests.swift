@@ -76,21 +76,18 @@ struct StatusTransitionTests {
         #expect(first?.wasFirstAssessmentInBatch == true)
         #expect(first?.newStatus == .weak, "the first attempt is the indicator")
 
-        // Still "Nochmal", so the card stays in the batch for a third try.
-        let second = queue.assess(.again, currentStatus: .weak)
+        // The case the rule exists for: knowing it later in the same batch
+        // must not lift the card above what the first attempt showed. With
+        // `maxReinserts` at 1 since phase 6, this repetition is the last one
+        // the batch grants.
+        let second = queue.assess(.good, currentStatus: .weak)
         #expect(second?.wasFirstAssessmentInBatch == false)
-        #expect(second?.newStatus == nil, "no status change from a repetition")
-
-        // And now the case the rule exists for: knowing it later in the same
-        // batch must not lift the card above what the first attempt showed.
-        let third = queue.assess(.good, currentStatus: .weak)
-        #expect(third?.wasFirstAssessmentInBatch == false)
-        #expect(third?.newStatus == nil, "a later Gut must not improve the status")
-        #expect(third?.isResolved == true)
+        #expect(second?.newStatus == nil, "a later Gut must not improve the status")
+        #expect(second?.isResolved == true)
 
         // The counters do keep going, though (§7) — that is the difference
         // between "no status change" and "did not happen".
-        #expect(second?.countsAsCorrect == false, "Nochmal is not correct")
-        #expect(third?.countsAsCorrect == true, "the later Gut still counts as a review hit")
+        #expect(first?.countsAsCorrect == false, "Nochmal is not correct")
+        #expect(second?.countsAsCorrect == true, "the later Gut still counts as a review hit")
     }
 }

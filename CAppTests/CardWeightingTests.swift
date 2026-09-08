@@ -47,7 +47,9 @@ struct CardWeightingTests {
         // becomes a conscious decision including the document.
         #expect(LearningParameters.batchSize == 7)
         #expect(LearningParameters.reinsertGap == 3)
-        #expect(LearningParameters.maxReinserts == 3)
+        // One since the phase-6 device test — it was 3. This test is why
+        // that change could not happen quietly.
+        #expect(LearningParameters.maxReinserts == 1)
         #expect(LearningParameters.recencyFactor == 0.2)
 
         #expect(LearningParameters.weightNew == 5.0)

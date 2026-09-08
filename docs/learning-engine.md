@@ -32,6 +32,29 @@ bewusst leicht änderbar (siehe [§8](#8-parameter)).
 
 ## 2. Begriffe
 
+**Zwei Begriffe, die nicht dasselbe sind** — der Gerätetest der Phase 6 hat
+gezeigt, dass sie für den Nutzer gleich aussahen:
+
+| Typ | Bedeutung |
+| --- | --- |
+| `SelfAssessment` | Die Bewertung **eines einzelnen Versuchs**: Nochmal, Schwer, Gut, Sicher. Eine Momentaufnahme. |
+| `LearningStatus` | Der **längerfristige Kenntnisstand** einer Karte: Neu, Schwach, Mittel, Gut, Sicher. Persistiert. |
+
+„Schwer" bei einem Versuch heißt „ich wusste es mit Mühe" — nicht, dass die
+Karte dauerhaft auf einer bestimmten Stufe steht. Die beiden dürfen fachlich
+**nicht** zusammengelegt werden, auch wenn zwei ihrer Bezeichnungen
+gleich lauten.
+
+Seit Phase 6 verlangt der Karteneditor den `LearningStatus` **nicht mehr**
+manuell: Beim Anlegen einer Karte kann niemand ihn sinnvoll beantworten. Neue
+Karten starten auf `new`, bestehende behalten ihren Wert, und die Engine
+schreibt ihn aus den Selbsteinschätzungen fort (§6). Langfristig soll er
+stärker automatisch abgeleitet werden — Produktidee in
+[architecture.md §9.1](architecture.md#91-automatische-mastery-einschätzung-produktidee-nicht-gebaut),
+noch nicht gebaut. Die fünfstufige Skala bleibt vorerst unverändert; sie ist
+ein Engine-Zustand, kein Pflichtfeld für den Nutzer.
+
+
 | Begriff | Bedeutung |
 | --- | --- |
 | **Pool** | Alle Karten, die zur Session-Konfiguration passen (Kartentyp, optional Tag-Filter). Wird einmal beim Sessionstart gebildet. |
@@ -146,40 +169,48 @@ anschließend wieder eingefügt:
 queue.remove(at: i)                       // aktuelle Karte entfernen
 
 falls antwort == "Nochmal" und reinserts[karte] < maxReinserts:
-    neuePosition = i + reinsertGap        // reinsertGap = 3
-    falls neuePosition >= queue.count:
-        queue.append(karte)               // ans Ende
-    sonst:
-        queue.insert(karte, at: neuePosition)
+    hinterUngesehenen = index(letzte noch nie bewertete Karte) + 1
+    neuePosition = max(reinsertGap, hinterUngesehenen)
+    queue.insert(karte, at: min(neuePosition, queue.count))
     reinserts[karte] += 1
 ```
 
+**Ungesehene Karten zuerst.** Eine Wiederholung liegt hinter *jeder* Karte, die
+ihren ersten Versuch noch nicht hatte, und mindestens `reinsertGap` Positionen
+entfernt. Beide Hälften sind nötig: die untere Schranke verhindert
+„A falsch → A erneut“, die Ungesehenen-Grenze verhindert den Zyklus.
+
+**Diese Regel ist eine Korrektur aus dem Gerätetest der Phase 6.** Vorher stand
+dort die feste Position `i + reinsertGap`. Physisch reproduziert: Bei
+`A B C D E F G` und „Nochmal“ auf den ersten vier Karten lief der Batch als
+`A B C D A B C D`, während E, F und G nie gezeigt wurden. Wegen `maxReinserts`
+technisch endlich, für den Nutzer aber eine Schleife — und fachlich falsch, weil
+vier Karten gedrillt werden, statt die anderen drei einzuführen. Die alte
+Formulierung „genau `reinsertGap` andere Karten“ gilt damit **nicht mehr**; sie
+gilt nur noch, wenn keine ungesehene Karte übrig ist.
+
 Beispiel mit `queue = [A, C, F, B, D]` und `i = 0`, A wird mit „Nochmal“
-bewertet:
+bewertet — C, F, B und D sind noch ungesehen:
 
 ```
 entfernen  → [C, F, B, D]
-einfügen an Position 0 + 3 → [C, F, B, A, D]
+einfügen hinter den Ungesehenen → [C, F, B, D, A]
 ```
 
-Damit liegen genau `reinsertGap` andere Karten (C, F, B) vor der Wiederholung:
+Sind weniger Karten übrig als die Position verlangt, wird angehängt — die Karte
+kommt dann so spät wie im Batch noch möglich.
 
-```
-A falsch → C → F → B → A erneut
-```
-
-und nicht:
-
-```
-A falsch → A erneut
-```
-
-Sind nach dem Entfernen weniger als `reinsertGap` Karten übrig, wird ans Ende
-angehängt — die Karte kommt dann so spät wie im Batch noch möglich.
-
-**Obergrenze:** Eine Karte darf pro Mini-Batch höchstens `maxReinserts` (= 3)
+**Obergrenze:** Eine Karte darf pro Mini-Batch höchstens `maxReinserts` (= 1)
 mal wieder eingereiht werden. Danach gilt sie als aufgelöst und verlässt den
 Batch. Ohne diese Grenze könnte ein Batch nie enden.
+
+**Auch dieser Wert ist eine Korrektur aus dem Gerätetest der Phase 6**, vorher
+3. Zusammen mit mehreren Fehlkarten wurde aus einem Fenster von sieben Karten
+ein Drill über zehn bis fünfzehn Fragen zu denselben wenigen Karten. Eine
+einmalige kurzfristige Wiederholung bleibt erhalten; alles darüber übernimmt die
+Gewichtung, die eine Karte mit niedrigem Status ohnehin mit hoher
+Wahrscheinlichkeit in einen späteren Batch holt (§3.1). Die Session ist endlos,
+der einzelne Batch muss es nicht sein.
 
 Bei **„Schwer“, „Gut“, „Sicher“** wird die Karte aus der Queue entfernt und
 gilt als aufgelöst.
@@ -272,8 +303,8 @@ Alle an einer Stelle, als benannte Konstanten:
 | Konstante | Wert | Bedeutung |
 | --- | --- | --- |
 | `batchSize` | 7 | Karten pro Mini-Batch |
-| `reinsertGap` | 3 | Mindestanzahl anderer Karten vor der Wiederholung |
-| `maxReinserts` | 3 | Wiedereinreihungen pro Karte und Batch |
+| `reinsertGap` | 3 | **Mindest**anzahl anderer Karten vor der Wiederholung; ungesehene Karten gehen immer vor (§5) |
+| `maxReinserts` | 1 | Wiedereinreihungen pro Karte und Batch (bis zum Gerätetest der Phase 6: 3, siehe §5) |
 | `recencyFactor` | 0.2 | Gewichtsfaktor für Karten aus dem vorherigen Batch |
 | `weightNew` | 5.0 | Basisgewicht *Neu* |
 | `weightWeak` | 5.0 | Basisgewicht *Schwach* |
@@ -319,8 +350,12 @@ Pflicht-Unit-Tests, alle ohne Simulator und ohne `ModelContainer` lauffähig:
 8. Pool mit einer einzigen Karte liefert einen Batch der Größe 1.
 
 **Queue**
-9. Nach „Nochmal“ liegen genau `reinsertGap` andere Karten vor der Wiederholung.
-10. Sind weniger als `reinsertGap` Karten übrig, landet die Karte am Ende.
+9. Nach „Nochmal“ liegt die Wiederholung hinter jeder noch ungesehenen Karte
+   und mindestens `reinsertGap` Positionen entfernt. Dazu: mehrere Fehlkarten
+   hintereinander lassen keine ungesehene Karte verhungern, und das gilt für
+   jede Batchgröße, nicht nur für den beobachteten Vierer-Fall.
+10. Sind weniger Karten übrig als die Einfügeposition verlangt, landet die
+    Karte am Ende.
 11. Nach `maxReinserts` Wiederholungen verlässt die Karte den Batch.
 12. „Gut“ entfernt die Karte sofort aus der Queue.
 13. Ein Batch endet erst, wenn alle Karten aufgelöst sind.

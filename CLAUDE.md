@@ -6,30 +6,40 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phasen 0–4 abgeschlossen.** Die Kette
-`Deutsch → Hanzi → Pinyin` läuft mit Return oder beim Verlassen des Feldes
-automatisch, beide Werte bleiben editierbar, und ein von Hand gesetzter Wert
-wird nur nach ausdrücklicher Nutzeraktion überschrieben — über das ↻ im
-jeweiligen Feld. Q1 ist auf echter Hardware positiv beantwortet
-(`de → zh-Hans` = `installed`), die ganze Kette funktioniert offline. Kein
-Audio, keine Spracherkennung, keine Lernlogik; der Tab „Lernen" ist ein
-Platzhalter.
+**Aktueller Stand: Phasen 0–6 abgeschlossen.** Gerätetest der Phase 6 am
+**2026-09-08** vollständig bestanden. Stand des Gates: **296 Tests grün**, 0
+fehlgeschlagen, 0 Compilerwarnungen auf einem Debug-Build von null,
+Release-Build von null ebenso.
+
+Die Kette `Deutsch → Hanzi → Pinyin` läuft mit Return oder beim Verlassen des
+Feldes automatisch, beide Werte bleiben editierbar, und ein von Hand gesetzter
+Wert wird nur nach ausdrücklicher Nutzeraktion überschrieben — über das ↻ im
+jeweiligen Feld. Die ganze Kette funktioniert offline.
 
 Pinyin kommt primär aus gebündelten CC-CEDICT-Daten (`ChineseLexicon`,
 `PinyinTone`), ICU liefert nur noch die Wortgrenzen und den gekennzeichneten
 Fallback. Ein nicht eindeutig auflösbares Pinyin wird **nicht geraten**,
 sondern als prüfbedürftig markiert und im Editor benannt.
 
-**Phase 5 ist abgeschlossen: die Lernlogik liegt als reine, getestete
-Foundation-Schicht in `CApp/Learning/`** — Gewichtung, gewichtete Auswahl ohne
-Zurücklegen, Queue mit Wiedereinstreuung, Statusübergänge. Sie kennt keine
-`Card`, keinen `ModelContext` und keine Uhr; Zufall wird hereingereicht. Q8
-ist geschlossen (Target behält `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`,
-reine Typen sind einzeln `nonisolated`).
+Die Lernlogik liegt als reine, getestete Foundation-Schicht in
+`CApp/Learning/` — Gewichtung, gewichtete Auswahl ohne Zurücklegen, Queue mit
+Wiedereinstreuung, Statusübergänge. Sie kennt keine `Card`, keinen
+`ModelContext` und keine Uhr; Zufall wird hereingereicht. Q8 ist geschlossen
+(Target behält `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, reine Typen sind
+einzeln `nonisolated`).
 
-**Nächster Schritt ist Phase 6 — Lernmodus A (Deutsch → Chinesisch):** die
-Feature-Schicht, die `Card` auf `CardSnapshot` abbildet, die Engine antreibt
-und deren Ergebnisse nach SwiftData zurückschreibt.
+Darüber liegt seit Phase 6 der Lernmodus A in `CApp/Features/Learn/`:
+Session-Setup, Abfrage, Selbsteinschätzung, Rückschreiben nach SwiftData nach
+**jeder** Antwort. Der Kategorienfilter im Lernen verknüpft mit **ODER**, die
+Kartenliste mit **UND** (A26 gegen A12) — zwei Bildschirme, zwei Fragen. Kein
+Audio, keine Spracherkennung.
+
+**Nächster Schritt ist Phase 6.5 — Pinyin & Pronunciation Accuracy
+Hardening:** lexikalische Lesung und Lernaussprache trennen, Tonsandhi als
+eigene reine Schicht (dritter Ton, `一`, `不`). Vor dem Beginn sind zwei
+Entscheidungen zu klären, sie stehen in der Roadmap: Sandhi über Wortgrenzen
+hinweg oder nur innerhalb eines Wortes, und `一下`/`一点` aus dem Lexikon
+oder über die Regel.
 
 Drittanbieter-Daten liegen ausschließlich in
 `CApp/Resources/ThirdParty/CC-CEDICT/` und stehen unter CC BY-SA 4.0; die

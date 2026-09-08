@@ -43,28 +43,13 @@ struct RootView: View {
                 Tab(tab.title, systemImage: tab.systemImage) {
                     switch tab {
                     case .learn:
-                        // Stays a placeholder until phase 6.
-                        PlaceholderView(tab: tab)
+                        SessionSetupView()
                     case .cards:
                         CardListView()
                     }
                 }
             }
         }
-    }
-}
-
-/// Placeholder for the "Lernen" tab. Replaced by the real session views in
-/// phase 6. The "Karten" tab got its real content in phase 2.
-private struct PlaceholderView: View {
-    let tab: AppTab
-
-    var body: some View {
-        ContentUnavailableView(
-            tab.title,
-            systemImage: tab.systemImage,
-            description: Text("Inhalt folgt in einer späteren Phase.")
-        )
     }
 }
 

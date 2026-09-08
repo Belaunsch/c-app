@@ -6,7 +6,7 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 5 abgeschlossen.**
+**Phasen 0 bis 6 abgeschlossen.**
 
 Vorhanden sind die Architektur- und Planungsdokumentation, die
 Claude-Code-Entwicklungsinfrastruktur (`.claude/agents/`, `.claude/skills/`,
@@ -16,8 +16,10 @@ Kartenverwaltung: Wörter und Sätze getrennt, Karten anlegen, bearbeiten und
 löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
 Lernstatus, Kategorien umbenennen und löschen.
 
-Build und Unit-Tests laufen grün (iPhone-17-Simulator, iOS 26.5), und alle
-sechs Phasen sind auf dem echten iPhone bestätigt.
+Build und Unit-Tests laufen grün: **296 Tests, 0 Fehlschläge, 0
+Compilerwarnungen** auf einem Debug-Build von null (iPhone-17-Simulator, iOS
+26.5), Release-Build von null ebenso. Jede Phase ist auf einem echten iPhone
+bestätigt, die letzte am **2026-09-08**.
 
 Neu aus den Phasen 3 und 4: Beim Anlegen einer Karte genügt der deutsche Text
 — mit Return oder beim Verlassen des Feldes erzeugt die App Hanzi über Apples
@@ -30,10 +32,20 @@ Pinyin-Erzeugung läuft komplett offline; auf dem Testgerät liegen auch die
 Neu aus Phase 5: Die Lernlogik selbst — Gewichtung nach Lernstand, Auswahl
 von Mini-Batches, Wiedereinstreuung nicht gewusster Karten, Statusübergänge —
 liegt als reine, deterministisch getestete Swift-Schicht in `CApp/Learning/`.
-Sie hat noch keine Oberfläche: der Tab „Lernen" ist weiterhin ein Platzhalter.
+Sie kennt weder SwiftUI noch SwiftData, keine Uhr und keinen eigenen Zufall.
 
-Noch nicht vorhanden: der **Lernmodus** selbst und **Audio** (Sprachausgabe,
-Spracherkennung).
+Neu aus Phase 6: Der Tab „Lernen" ist kein Platzhalter mehr. Eine Session
+fragt Karten von Deutsch nach Chinesisch ab: Wort oder Satz wählen,
+optional Kategorien einschränken, Karte lesen, Lösung aufdecken, selbst
+einschätzen. Jede Antwort wird sofort gespeichert, der Lernstatus folgt der
+Übergangsmatrix, und nicht gewusste Karten kommen innerhalb derselben Session
+wieder — hinter allen Karten, die noch keinen ersten Versuch hatten. Der
+Kategorienfilter im Lernen verknüpft mit **ODER** („üb beides"), die
+Kartenliste mit **UND** („zeig mir genau die") — zwei Bildschirme, zwei
+Fragen. Keine Streaks, keine Punkte, keine Timer.
+
+Noch nicht vorhanden: **Audio** (Sprachausgabe, Spracherkennung) und der
+Lernmodus in umgekehrter Richtung.
 
 Neu aus Phase 4.5: Das Pinyin kommt nicht mehr aus reiner Transliteration,
 sondern aus einem gebündelten Lexikon — daher die neutralen Töne (`xièxie`,
@@ -42,7 +54,10 @@ kann, wird als prüfbedürftig gekennzeichnet statt geraten. Dazu eine ruhigere
 Kartenansicht: kompakter Navigationstitel, Filter hinter einem Knopf,
 mehrzeilige Felder für Satzkarten und keine Dauer-Erklärtexte mehr.
 
-Nächster Schritt: **Phase 6 — Lernmodus A (Deutsch → Chinesisch)**.
+Nächster Schritt: **Phase 6.5 — Pinyin & Pronunciation Accuracy Hardening**.
+Die Karte soll die Aussprache zeigen, die man tatsächlich sagt, nicht nur die
+Wörterbuchlesung: `你好` steht im Lexikon als `ni3 hao3`, gesprochen wird
+`níhǎo`.
 
 ## Drittanbieter-Daten
 

@@ -581,6 +581,8 @@ nicht gebaut**. Die Architektur hält aber die passenden Nahtstellen offen:
 | Echtes Spaced Repetition | `Card` um `dueDate`/`intervalDays` erweitern; `CardWeighting` multipliziert das Basisgewicht mit einem Überfälligkeitsfaktor. Die Engine-Schnittstelle bleibt gleich. | mittel |
 | Statistiken über Zeit | additives `ReviewLog`-Modell | mittel |
 | Import/Export | `Card` hat bereits eine stabile `UUID`; ein `Codable`-DTO plus `fileExporter`/`fileImporter` genügt | klein |
+| Automatische Mastery-Einschätzung | siehe §9.1 | mittel bis groß |
+| Rolling Weighted Scheduler | siehe §9.2 | mittel |
 | Beispielsätze zu einem Wort | Selbstbeziehung auf `Card` oder eigenes Modell | mittel |
 | Echte Aussprachebewertung | eigener Service; die textuelle Vergleichsfunktion wird ersetzt, nicht erweitert | groß |
 | iCloud-Sync | `ModelContainer` mit CloudKit-Konfiguration; erfordert, dass alle Properties optional oder mit Default sind | mittel |
@@ -590,6 +592,53 @@ kostet**: Beim Modellentwurf in Phase 1 werden Properties mit sinnvollen
 Defaults versehen. Falls iCloud-Sync später doch gewünscht ist, entfällt eine
 schmerzhafte Migration. Das ist keine vorzeitige Optimierung, sondern eine
 Konvention beim Schreiben des Modells.
+
+### 9.1 Automatische Mastery-Einschätzung (Produktidee, nicht gebaut)
+
+Aus dem Gerätetest der Phase 6: Zwei Konzepte wirkten für den Nutzer wie
+dasselbe, und der manuelle Lernstatus im Karteneditor war deshalb eine Frage,
+die niemand beim Anlegen einer Karte beantworten kann. Der Picker ist entfernt
+(Task 6.10), der interne Status bleibt.
+
+Langfristig soll die App den Kenntnisstand **selbst einschätzen**, statt ihn
+abzufragen. Getrennt zu betrachtende Signale:
+
+- die `SelfAssessment`s des Nutzers, **erster Versuch getrennt** von
+  Wiederholungen — der erste Versuch ist der ehrliche Indikator
+  ([learning-engine.md §6.1](learning-engine.md#61-statusänderung-nur-einmal-pro-mini-batch))
+- zeitliche Stabilität: dieselbe Karte über mehrere Sessions und Tage
+- die letzten *n* Reviews, nicht der Gesamtdurchschnitt
+- ab Phase 9 zusätzlich der Recognition-Match als **weiteres** Signal
+
+**Wichtig und nicht verhandelbar:** Die Spracherkennung in Phase 9 vergleicht
+Text. Aus einem Match folgt **nicht** „korrekt ausgesprochen" — diese Aussage
+darf die App nie treffen (CLAUDE.md, harte Regel 7).
+
+Mögliche UX, noch nicht festgelegt: Bei ausreichender Evidenz schlägt die App
+eine Stufe vor und hebt sie hervor, statt sie zu setzen — der Nutzer bestätigt
+oder widerspricht. Kein Zwang, keine Wertung, kein automatisches Umschreiben
+hinter dem Rücken des Nutzers.
+
+**Was dafür fehlt:** `reviewCount` und `correctCount` sind Aggregate. Aussagen
+wie „die letzten zehn Versuche waren richtig" lassen sich daraus **nicht**
+ableiten. Dafür braucht es eine kleine Review-Historie — ein additives
+`ReviewLog` oder eine Rolling History auf `Card`. Bewusst **jetzt nicht**
+vorgezogen: Ohne den Konsumenten wäre es ein Schema mit unklarer Form.
+
+### 9.2 Rolling Weighted Scheduler (Alternative, nicht gebaut)
+
+Statt Mini-Batches könnte nach jeder Antwort probabilistisch die nächste Karte
+aus dem **gesamten** Pool gezogen werden. Das würde das Arbeitsfenster ganz
+auflösen und die Wiedereinstreuung als eigenes Konzept überflüssig machen.
+
+Nicht in der Korrekturrunde der Phase 6 umgesetzt: Das dort beobachtete
+Problem war ein Zyklus innerhalb des Fensters, und der ist mit zwei kleinen
+Regeländerungen behoben (ungesehene Karten zuerst, `maxReinserts` = 1). Ein
+neuer Scheduler hätte eine bewiesene, getestete Engine gegen eine unbewiesene
+getauscht. Sollte sich das Batchmodell nach dem nächsten Gerätetest weiterhin
+unnatürlich anfühlen, ist das die nächste zu evaluierende Architekturidee —
+`BatchSelector` und `CardWeighting` bleiben dabei verwendbar, `SessionQueue`
+würde entfallen.
 
 ---
 
@@ -609,7 +658,7 @@ Konvention beim Schreiben des Modells.
 | A10 | Kein Mocking von System-Frameworks | Aufwand/Nutzen bei dieser App-Größe |
 | A11 | Kartenliste filtert in reinem Swift, nicht per dynamischem `#Predicate` | Ein `@Query` ohne Prädikat lädt sortiert, `CardFilter` verengt danach. Vermeidet die `fatalError`-Falle aus §3 vollständig, ist ohne View testbar, und bei einigen hundert Karten kostet es nichts. Neu bewerten, falls der Bestand vierstellig wird. |
 | A12 | Mehrere gewählte Tags werden mit **UND** verknüpft | Jeder Filter in der Kartenübersicht verengt das Ergebnis — Typ, Suche und Status ebenso. OR nur für Tags wäre inkonsistent und überraschend. |
-| A14 | Neue Tags entstehen erst beim Speichern der Karte | Der Editor merkt getippte Namen nur vor. Würde er sie sofort einfügen, hinterließe ein abgebrochener Editor den Tag dauerhaft — der `mainContext` speichert automatisch, und die App hat **keine** Funktion zum Löschen eines Tags. Ein Vertipper wäre damit unumkehrbar. |
+| A14 | ~~Neue Tags entstehen erst beim Speichern der Karte~~ **Neue Regel: `Hinzufügen` legt die Kategorie unmittelbar an** | **Überholt durch den Gerätetest der Phase 6.** Die alte Regel: Der Editor merkte getippte Namen nur vor, weil ein abgebrochener Editor sonst eine Kategorie hinterlassen hätte, die es in Phase 2 nicht löschen konnte. **Neue Regel:** `Hinzufügen` legt die Kategorie unmittelbar an und persistiert sie; sie bleibt bestehen, wenn die Karte abgebrochen wird, und ist für andere Karten verwendbar. Grund aus dem Gerätetest: Eine vorgemerkte Kategorie musste anders aussehen als eine echte — „neu"-Badge und rotes Minus —, und ein Tap darauf löschte statt auszuwählen. Damit gab es zwei Sorten Kategorie auf einem Bildschirm, von denen eine an einer Stelle löschbar war, an der Kategorien sonst gar nicht gelöscht werden können. Löschen und Umbenennen bleiben ausschließlich in `TagListView` mit Bestätigung (A15). Die Normalisierung aus A13 ist unverändert. |
 | A13 | Tag-Deduplizierung über einen berechneten Schlüssel, ohne Schemafeld | „Essen", „essen" und „ESSEN" vergleichen sich über `TagNormalization.key`; die zuerst eingegebene Schreibweise bleibt sichtbar. Ein gespeichertes `normalizedName` wäre eine Schemaänderung samt Migration für eine Handvoll Tags. **Diakritika werden bewusst nicht gefaltet** (Produktentscheidung): „Café" und „Cafe" bleiben getrennt, weil „Grün" und „Grun" verschiedene Wörter sind und ein Zusammenführen die Daten stillschweigend umbenennen würde. Die **Suche** ist dagegen diakritikainsensitiv, damit Pinyin ohne Tonzeichen findbar bleibt — zwei verschiedene Zwecke, zwei verschiedene Regeln. |
 | A16 | Übersetzungsstrategie: keine explizite Vorgabe, dafür ein dreistufiger Verfügbarkeitscheck | Ohne `preferredStrategy` wählt das Framework selbst und fällt laut Apple-Doku automatisch auf eine passende Alternative zurück — Qualität zuerst, ohne eigene Logik. Der Check läuft dreistufig: Standard, dann (ab iOS 26.4) `.lowLatency`, dann der Sprachkatalog. Grund für Stufe 2: Apps, die gegen das 26.4-SDK gebaut werden, prüfen standardmäßig auf Apple-Intelligence-Modelle, was auf Geräten ohne Apple Intelligence ein falsches „unsupported" ergeben kann. Grund für Stufe 3: Im Simulator meldet `status(from:to:)` **jedes** Paar als `unsupported`, auch `de → en` — würde die App das als Gerätegrenze deuten, wäre die Funktion dauerhaft aus. `TranslationSession.Strategy` gibt es erst ab iOS 26.4, das Target bleibt 26.0, deshalb `if #available`. |
 | A17 | Die drei Textfelder sind eine Kette, die Herkunft jedes Werts wird live geführt | Deutsch → Hanzi → Pinyin. Ausgelöst wird beim Verlassen des Feldes, nicht pro Tastendruck. `hanziBaseline`/`pinyinBaseline` halten den letzten **abgeglichenen** Wert — was die App beim Laden oder Generieren hineingeschrieben hat, oder was der Nutzer beim letzten Editier-Ende darin stehen hatte. Alles, was davon abweicht, kam vom Nutzer. Wichtig: Der Abgleich läuft nicht nur beim Fokusverlust, sondern auch **bevor** die Automatik schreibt und **beim Speichern** — sonst hätte ein während der laufenden Übersetzung getippter Wert überschrieben werden können, und genau das ist der Normalablauf, weil der Sprung ins Hanzi-Feld die Übersetzung auslöst. Damit gilt ein generierter Wert nie als manuell (Q9), und ein manueller Wert wird nie still überschrieben. Zwei sichtbare Bedienelemente sind die einzige Freigabe zum Überschreiben — seit A21 je ein ↻ direkt im Feld, die Texte „Neu übersetzen" und „Pinyin neu erzeugen" leben als Accessibility-Labels weiter: Das ↻ am Hanzi-Feld erneuert Hanzi **und** das daraus abgeleitete Pinyin, das ↻ am Pinyin-Feld nur das Pinyin. Danach gilt der Wert wieder als automatisch. Bewusst **keine** generische Change-Tracking-Schicht: zwei Bools und zwei Strings. |
@@ -622,3 +671,5 @@ Konvention beim Schreiben des Modells.
 | A24 | Keine deutsche Bedeutungsauflösung in dieser Iteration | Das deutsche Feld wäre der natürliche Tiebreaker für die verbleibenden Mehrdeutigkeiten — `etwas` gegen `Osten und Westen` —, aber CC-CEDICTs Glossen sind **englisch**. Geprüfte Wege und warum keiner trägt: Apples Translation-Framework für Deutsch → Englisch macht die Pinyin-Erzeugung von einem zusätzlichen Sprachmodell abhängig, das nichts garantiert (und `TranslationSession` ist ohnehin nur über den View-Modifier zu bekommen); `NLEmbedding` ist einsprachig und kennt keine deutsch-englische Ausrichtung; eine eigene Wortliste wäre genau die verbotene Hardcode-Sammlung. Also **nicht geraten**: Was der chinesische Kontext nicht löst, wird ICU-Fallback mit `needsReview` und einem sichtbaren Hinweis. Der offene Weg ist eine deutschsprachige Lexikonquelle (HanDeDict, CH-DE-Dict) — erst nach Messung des Restbedarfs, siehe Roadmap Phase 4.5. |
 | A25 | Filter hinter einem Knopf, Kategorienverwaltung daneben | Die Liste ist der Zweck des Bildschirms, die Filter werden gelegentlich benutzt — also bekommt die Liste den Platz. Lernstatus und Kategorien liegen zusammen auf einem Sheet hinter einem Symbol, das **gefüllt** ist, solange etwas filtert; `CardFilterSelection` beantwortet als Wertetyp „filtert etwas" und „wie viele Gruppen" und ist ohne View testbar. Die Filtersemantik selbst (ein Status, Kategorien mit UND) ist unverändert und bleibt in `CardFilter`. Die Kategorienverwaltung bleibt ein eigener Knopf: Sie **ändert** Daten, während der Filter nur die Ansicht einschränkt — beides in ein Menü zu legen würde zwei verschiedene Dinge gleich aussehen lassen. |
 | A15 | Kategorien werden in place umbenannt, nie zusammengeführt | `TagManagement.rename` ändert die bestehende `Tag`-Entität. Ein neuer Tag plus Neuzuordnung würde dasselbe Ergebnis anstreben, aber jede Beziehung anfassen und dabei Fehler ermöglichen. Zielt der neue Name auf einen anderen bestehenden Tag, wird abgelehnt statt gemergt: Merging würde zwei Kategorien unumkehrbar verschmelzen, und der Nutzer hat kein Undo. |
+| A26 | Kategorien im Lernen mit **ODER**, in der Kartenliste mit **UND** | Die beiden Bildschirme stellen verschiedene Fragen. Die Kartenliste fragt „welche Karte suche ich?" — dort verengt jeder Filter, und Kategorien mit ODER wären inkonsistent zu Typ, Suche und Status (A12, unverändert). Der Lernbildschirm fragt „was soll ich jetzt üben?" — „Essen" und „Reisen" auszuwählen heißt „beides üben". Aus dem Gerätetest der Phase 6: Mit UND leerte die Auswahl einer zweiten Kategorie die Session, weil kaum eine Karte in zwei Kategorien liegt; wer den Stoff erweitern wollte, bekam das Gegenteil. Umgesetzt in `LearnSessionModel.matchesAnyCategory` (`tagKeys.isDisjoint(with:) == false`), keine Auswahl heißt weiterhin keine Einschränkung. Der **Kartentyp bleibt außerhalb dieser Regel** und läuft weiter über `CardFilter.apply(to:type:)` — Wörter und Sätze mischen sich nie, ODER gilt ausschließlich für Kategorien. Der Filter benennt den Unterschied im Fußtext, statt ihn erklären zu müssen: „Geübt wird alles aus **einer** der ausgewählten Kategorien." Beide Regeln stehen in `categoryRulesDifferBetweenContexts` direkt nebeneinander, weil ein späterer Leser sie sonst für einen Fehler hält. |
+| A27 | Eine Container-Gesture ist nie der tragende Weg für eine fachliche Aktion | Aus einer Regression im Gerätetest der Phase 6: Am Karteneditor hing ein Tastatur-Dismiss als `simultaneousGesture` an der `Form`. Simultane Erkennung **verschluckt** einen Tap nicht — aber sie **entzieht sich der Arbitrierung**: `simultaneousGesture` bedeutet ausdrücklich „zusätzlich zu den Gesten der Kinder erkennen", und sobald die Vorfahren-Gesture erkennt, wird der Touch im darunterliegenden UIKit-Control storniert (`cancelsTouchesInView`, Standard `true`). Der Druck des Buttons bricht ab, und zwar unabhängig vom Tastaturzustand — deshalb war der naheliegende Verdacht auf den Guard falsch, und deshalb blieb auch der zweite Tap wirkungslos. `.gesture` ohne Zusatz ist dagegen laut Doku „with a lower precedence than gestures defined by the view": erkennt das Kind, erkennt der Container gar nicht und kann nichts stornieren. Folge: Ein Tap auf `Hinzufügen` schloss nur die Tastatur, die Kategorie wurde nie angelegt, und weitere Taps blieben ebenso wirkungslos — unabhängig vom Tastaturzustand, weshalb der naheliegende Verdacht auf den Guard falsch war. Die zwischenzeitliche räumliche Eingrenzung (`SpatialTapGesture` gegen eine per `onGeometryChange` gemeldete Feldfläche) war doppelt falsch: Sie löste ein Problem, das bei Standardpriorität gar nicht existiert, und behielt die Ursache. **Regel:** Jeder fachliche Effekt liegt in der Aktion des Controls (`addCategory`, der Kategorie-Toggle). **Am Karteneditor gibt es deshalb gar keine Tap-Gesture mehr.** Die Annahme, dass die Standardpriorität von `.gesture` auch über die UIKit-Zellgrenze einer `Form`-Zeile trägt, hat der Gerätetest **widerlegt**: Die Kategorienzeilen ließen sich anschließend überhaupt nicht mehr an- oder abwählen — ausgewählt wurde eine Kategorie nur noch dadurch, dass man sie neu anlegte. Damit ist der in dieser Entscheidung vorgesehene Rückweg eingetreten und ausgeführt. Drei Varianten sind auf diesem Screen gemessen gescheitert: `simultaneousGesture` mit einem einfachen `TapGesture`, dieselbe räumlich eingegrenzt über `SpatialTapGesture` plus `onGeometryChange`, und `.gesture` mit Standardpriorität. **Keine weiteren Versuche** — auch nicht `highPriorityGesture`, Geometrie-Hit-Testing oder eine Delay-Konstruktion. Der Preis ist bewusst bezahlt: Ein Tap auf völlig freie Fläche schließt die Tastatur nicht mehr. Funktionierende Controls haben Vorrang. Der plattformeigene Weg aus einer Tastatur ist `scrollDismissesKeyboard(.interactively)`; er hängt an keiner Arbitrierung. **Rückweg, falls am Gerät doch ein Control eine Aktion verliert:** die Container-Gesture **entfernen** — dann kostet die freie Fläche eine Wischbewegung statt eines Taps. Nicht auf `simultaneousGesture` und nicht auf eine räumliche Eingrenzung ausweichen; beides ist gemessen gescheitert. Ein Button in einer `Form`-Zeile braucht außerdem `.buttonStyle(.borderless)`, sonst wirkt die ganze Zeile als Button und die Konkurrenzfläche wird unnötig groß. |

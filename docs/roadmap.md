@@ -244,7 +244,9 @@ Löschen, Tag-Verwaltung, manuelle Statusänderung. Keinerlei Automatik.
 - **2.4** Filter nach Tag (Mehrfachauswahl) und nach Lernstatus.
 - **2.5** „+“-Button prominent in der Toolbar; öffnet den Editor als Sheet.
 - **2.6** `CardEditorView` mit Feldern: Kartentyp, Deutsch, Hanzi, Pinyin,
-  Tags, Lernstatus. Alle Felder frei editierbar.
+  Tags, ~~Lernstatus~~. Alle Felder frei editierbar. **Der Lernstatus-Picker
+  ist seit dem Gerätetest der Phase 6 entfernt** — Begründung in Task 6.10;
+  der Editor schreibt den Status auch nicht mehr.
 - **2.7** Tag-Auswahl mit Anlegen neuer Tags direkt im Editor; bestehende
   Tags werden vorgeschlagen, Duplikate (Groß-/Kleinschreibung, Leerzeichen)
   werden zusammengeführt.
@@ -274,7 +276,11 @@ Löschen, Tag-Verwaltung, manuelle Statusänderung. Keinerlei Automatik.
 - [x] Wörter und Sätze sind getrennt sichtbar; ein Umschalten ändert die Liste.
 - [x] Suche findet Karten über alle drei Textfelder.
 - [x] Filter nach Tag und Lernstatus lassen sich kombinieren.
-- [x] Der Lernstatus lässt sich manuell setzen.
+- [x] ~~Der Lernstatus lässt sich manuell setzen.~~ **Überholt durch den
+      Gerätetest der Phase 6** (Task 6.10): Nutzer verwechselten die
+      Bewertung eines Versuchs mit dem längerfristigen Kenntnisstand. Der
+      Picker ist entfernt; der Status entsteht aus den Selbsteinschätzungen.
+      In der Kartenübersicht bleibt er als dezenter Punkt sichtbar.
 - [x] Alle Änderungen überleben einen App-Neustart.
 - [x] Eine Kategorie lässt sich umbenennen; alle zugeordneten Karten zeigen
       danach den neuen Namen.
@@ -689,6 +695,23 @@ Spracherkennung.
 
 ## Phase 6 — Lernmodus A: Deutsch → Chinesisch
 
+**Status: abgeschlossen.** Physischer Gerätetest am **2026-09-08** vollständig
+bestanden, nach drei Korrekturrunden: die erste am Lernbildschirm und am
+Karteneditor (Tasks 6.10 bis 6.14), die zweite am Kategorienfilter und an der
+Tastatur (6.15, 6.16), die dritte an zwei Regressionen derselben
+Container-Gesture — erst legte `Hinzufügen` keine Kategorie mehr an, dann ließ
+sich keine Kategorie mehr an- oder abwählen. Beide sind über den in
+[A27](architecture.md#anhang-entscheidungen-und-begründungen) hinterlegten
+Rückweg erledigt: Die Gesture ist entfernt, jeder Weg aus der Tastatur liegt in
+der Aktion des angetippten Controls.
+
+Stand des Gates: **296 Tests grün**, 0 fehlgeschlagen, 0 übersprungen, 0
+Compilerwarnungen auf einem Debug-Build von null; Release-Build von null
+ebenfalls grün und warnungsfrei. Dazu drei Runden `code-reviewer` und
+`test-auditor` sowie Gegenproben durch Mutation für die ODER-Semantik des
+Lernfilters, die Poolbildung, die Store-Deduplizierung und den Selection-State
+der Kategorien.
+
 ### Ziel
 Der erste vollständige Lernablauf: Sessionauswahl, Karten abfragen,
 Selbsteinschätzung, Lernstatus aktualisieren — noch ohne Ton.
@@ -715,15 +738,81 @@ Session-Setup, Abfrage-UI, Anbindung der Engine an SwiftData.
 - **6.9** Leerzustand, wenn der Pool leer ist, mit direktem Weg zum Anlegen
   einer Karte.
 
+*Nach dem ersten physischen Gerätetest ergänzt:*
+
+- **6.10** Kein manueller `Lernstatus` mehr im Karteneditor. Der Gerätetest
+  hat gezeigt, dass Nutzer die Bewertung **eines Versuchs** und den
+  **längerfristigen Kenntnisstand** für dasselbe halten — begriffliche
+  Trennung jetzt in
+  [learning-engine.md §2](learning-engine.md#2-begriffe). Neue Karten starten
+  intern auf `new`, bestehende behalten ihren Wert. **Keine** Migration der
+  fünfstufigen Skala, keine Änderung der Gewichtung.
+- **6.11** `Hinzufügen` im Karteneditor legt die Kategorie unmittelbar an und
+  persistiert sie; sie überlebt das Abbrechen der Karte. Kein „neu"-Badge,
+  kein Löschsymbol im Editor — ein Tap wählt nur zu oder ab. Überholt A14,
+  Begründung dort.
+- **6.12** Tastatur-`Fertig` nur bei Deutsch, Hanzi und Pinyin, nicht beim
+  Kategoriennamen. Getrennter Fokuszustand, Race- und Submit-Logik aus
+  Phase 3/4 unverändert.
+- **6.13** Lernen-Screen wie die Kartenansicht: kompakter zentrierter Titel,
+  Kategorienfilter als Toolbar-Knopf mit gefülltem Symbol bei aktiver
+  Auswahl, keine Dauer-Kategoriensektion, keine „Inhalt"-Überschrift, keine
+  Richtungs-Control (es gibt nur eine Richtung), kein „Auswahl aufheben".
+- **6.14** **Queue-Korrektur aus dem Gerätetest:** Eine Wiederholung liegt
+  hinter jeder noch ungesehenen Karte, und `maxReinserts` ist 1. Physisch
+  reproduziert war ein Zyklus `A B C D A B C D`, während E, F und G nie
+  gezeigt wurden. Details und Begründung in
+  [learning-engine.md §5](learning-engine.md#5-queue-und-wiedereinstreuung);
+  die alte Regel ist dort als überholt gekennzeichnet.
+- **6.15** **Kategorienfilter im Lernen verknüpft mit ODER.** Zwei gewählte
+  Kategorien üben die Vereinigung beider Mengen, nicht den Schnitt. Im
+  Gerätetest leerte die Wahl einer zweiten Kategorie die Session, weil kaum
+  eine Karte in zwei Kategorien liegt. Die **Kartenliste behält UND**; die
+  beiden Bildschirme stellen verschiedene Fragen, Begründung in
+  [architecture.md A26](architecture.md#anhang-entscheidungen-und-begründungen).
+  Der Kartentyp bleibt außerhalb dieser Regel — Wörter und Sätze mischen sich
+  nie.
+- **6.16** **Die Tastatur der Kategorieneingabe lässt sich wieder schließen.**
+  Jeder Weg aus der Tastatur liegt **in der Aktion des Controls**, das der
+  Nutzer angefasst hat: `Hinzufügen` legt die Kategorie an und gibt danach —
+  und nur bei Erfolg — den Fokus frei; ein Tap auf eine Kategorie schaltet
+  **zuerst** die Auswahl um und gibt den Fokus danach frei; Wischen schließt
+  über `scrollDismissesKeyboard(.interactively)`. **Am Formular hängt keine
+  Tap-Gesture**, siehe unten. Damit schließt ein Tap auf völlig freie Fläche
+  die Tastatur nicht mehr — bewusst aufgegeben. Die Regel aus 6.12 gilt
+  unverändert weiter.
+
+  **Zwei Regressionen aus dem Gerätetest, beide von derselben
+  Container-Gesture:** Die erste Fassung benutzte `simultaneousGesture` —
+  später zusätzlich räumlich begrenzt über `SpatialTapGesture` plus
+  `onGeometryChange`. Simultane Erkennung verschluckt einen Tap nicht,
+  **konkurriert aber mit der Aktivierung eines Buttons**: Ein Tap auf
+  `Hinzufügen` schloss nur die Tastatur, die Kategorie wurde nie angelegt,
+  und weitere Taps blieben ebenso wirkungslos. Der räumliche Ausweg war damit
+  doppelt falsch — er löste ein Problem, das die Standardpriorität gar nicht
+  hat, und behielt die Ursache. Die zweite Fassung nahm deshalb `.gesture`
+  mit Standardpriorität, bei der laut Doku jedes Control den Tap gewinnt.
+  Auch das ist am Gerät gescheitert: Danach ließ sich **keine Kategorie mehr
+  an- oder abwählen**, Auswahl entstand nur noch beim Anlegen. Drei Varianten
+  gemessen, drei gescheitert — die Gesture ist jetzt vollständig entfernt und
+  wird nicht durch eine fünfte ersetzt. Die Lehre daraus steht als Entscheidung
+  [A27](architecture.md#anhang-entscheidungen-und-begründungen), weil sie über
+  diese Phase hinaus gilt — samt dem festgelegten Rückweg: Verliert am Gerät
+  doch ein Control seine Aktion, wird die Container-Gesture **entfernt** und
+  die freie Fläche kostet eine Wischbewegung. Kein Ausweichen auf
+  `simultaneousGesture` und keine räumliche Eingrenzung; beides ist gemessen
+  gescheitert. Ein Button in einer `Form`-Zeile braucht zudem
+  `.buttonStyle(.borderless)`, sonst wirkt die ganze Zeile als Button.
+
 ### Akzeptanzkriterien
-- [ ] Eine Session mit Wörtern lässt sich starten und durchlaufen.
-- [ ] Eine Session mit Sätzen ebenso; die Typen werden nie gemischt.
-- [ ] Nach „Nochmal“ erscheint die Karte erst nach mehreren anderen wieder.
-- [ ] Nach der siebten aufgelösten Karte folgen automatisch weitere Karten.
-- [ ] Der Lernstatus ändert sich gemäß Übergangsmatrix und ist in der
+- [x] Eine Session mit Wörtern lässt sich starten und durchlaufen.
+- [x] Eine Session mit Sätzen ebenso; die Typen werden nie gemischt.
+- [x] Nach „Nochmal“ erscheint die Karte erst nach mehreren anderen wieder.
+- [x] Nach der siebten aufgelösten Karte folgen automatisch weitere Karten.
+- [x] Der Lernstatus ändert sich gemäß Übergangsmatrix und ist in der
       Kartenübersicht sichtbar.
-- [ ] Die Änderungen überleben einen App-Neustart.
-- [ ] Nirgends erscheinen Herzen, Streaks, Timer oder Limits.
+- [x] Die Änderungen überleben einen App-Neustart.
+- [x] Nirgends erscheinen Herzen, Streaks, Timer oder Limits.
 
 ### Abhängigkeiten
 Phasen 2 und 5.
@@ -731,6 +820,50 @@ Phasen 2 und 5.
 ### Ausdrücklich nicht in dieser Phase
 Audio-Wiedergabe, Spracherkennung, Modus B, Statistiken, Session-Verlauf,
 Wiederaufnahme einer unterbrochenen Session.
+
+---
+
+## Phase 6.5 — Pinyin & Pronunciation Accuracy Hardening
+
+**Status: geplant, noch nicht begonnen.** Zwischenphase, vom Nutzer nach dem
+Gerätetest der Phase 6 angeordnet und vor Phase 7 einzuschieben. Dieser
+Abschnitt hält nur den vereinbarten Umfang fest; er ist noch keine
+Implementierungsvorgabe im Detail.
+
+### Ziel
+Die Karte soll die Aussprache zeigen, die ein Lernender tatsächlich sagen
+soll — nicht nur die Wörterbuchlesung. Beides ist heute dasselbe Feld, und
+genau das ist die Ungenauigkeit: `你好` steht im Lexikon als `ni3 hao3`,
+gesprochen wird `níhǎo`.
+
+### Scope
+- **Lexikalische und oberflächliche Lesung trennen.** Die kanonische Lesung
+  bleibt, was CC-CEDICT sagt; die Lernaussprache wird daraus abgeleitet.
+- **`ToneSandhiEngine`** als reine, getestete Schicht: dritter Ton vor
+  drittem Ton, die Regeln für `一` und für `不`. Die Regeln werden vorher
+  recherchiert und dokumentiert, nicht geschätzt.
+- **Neutraler Ton bleibt lexikalisch.** Ton 5 wird gelesen, nie geraten.
+- **Polyphone bleiben eine eigene Stufe.** Sandhi löst keine Mehrdeutigkeit,
+  und Mehrdeutigkeit löst kein Sandhi.
+- **Erweiterter Auflösungszustand**, damit sichtbar bleibt, woher eine Lesung
+  kommt und was geprüft werden sollte.
+- **Golden Corpus** mit begründeten Erwartungen als Messlatte, plus
+  Gegenproben durch Mutation.
+- **Keine weitere Datenquelle ohne gemessenen Bedarf**, kein Backend.
+- Die manuelle Korrektur bleibt geschützt wie bisher (A17, A19, A20).
+
+### Zwei offene Entscheidungen, vor dem Beginn zu klären
+1. Soll Sandhi über Wortgrenzen hinweg angewandt werden oder nur innerhalb
+   eines Wortes? Über Grenzen hinweg ist es prosodisch, nicht lexikalisch —
+   also nicht immer entscheidbar.
+2. `一下` und `一点`: aus dem Lexikon lesen oder über die `一`-Regel
+   ableiten? Die beiden Wege ergeben nicht überall dasselbe.
+
+### Ausdrücklich nicht in dieser Phase
+Audio, Spracherkennung, Aussprachebewertung. **Für Phase 9 wird festgehalten:**
+Ein Treffer der Spracherkennung heißt „der erkannte Text stimmt wahrscheinlich
+mit dem Zieltext überein" — nie „richtig ausgesprochen". Kein Score, keine
+Prozentangabe, kein Ton-Feedback (harte Regel 7 in `CLAUDE.md`).
 
 ---
 

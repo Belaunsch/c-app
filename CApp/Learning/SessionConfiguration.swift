@@ -10,9 +10,11 @@ import Foundation
 /// The engine does not build the pool — it cannot, since that means querying
 /// the store. This type is what the feature layer filters by before handing
 /// the resulting snapshots in: one card type, never mixed (`CardType`), and
-/// optionally a set of category keys that a card must **all** belong to, the
-/// same AND semantics the card list already uses (`docs/architecture.md`
-/// A12).
+/// optionally a set of category keys of which a card needs **at least one**.
+///
+/// That is OR, deliberately unlike the card list's AND: choosing two topics
+/// for a session should widen it, not reduce it to the cards that carry both
+/// (`docs/architecture.md` A26 versus A12).
 nonisolated struct SessionConfiguration: Equatable, Sendable {
     let cardType: CardType
 

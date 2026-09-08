@@ -51,10 +51,17 @@ nonisolated struct AssessmentOutcome: Equatable, Sendable {
 /// (`docs/learning-engine.md` §9).
 ///
 /// The rule from §5, in one sentence: **every** assessment removes the
-/// current card from the queue, and "Nochmal" then puts it back
-/// `reinsertGap` positions later. Because removal makes the next card slide
-/// into the current position, the index never advances — the current card is
-/// always the first one.
+/// current card from the queue, and "Nochmal" then puts it back later.
+/// Because removal makes the next card slide into the current position, the
+/// index never advances — the current card is always the first one.
+///
+/// How much later is the part the device test corrected. A repetition goes
+/// **after every card that has not had its first attempt yet**, and at least
+/// `reinsertGap` positions away. The fixed gap alone produced a cycle: with
+/// `A B C D E F G` and the first four answered "Nochmal", each repetition
+/// landed three places on and the batch ran `A B C D A B C D` while E, F and
+/// G had never been shown. Technically finite, but it feels like a loop, and
+/// it drills four cards instead of introducing the other three.
 ///
 /// Termination is a property of this type, not of the UI driving it: a card
 /// may be reinserted at most `maxReinserts` times, after which it counts as
@@ -155,19 +162,32 @@ nonisolated struct SessionQueue: Equatable, Sendable {
         guard assessment.keepsCardInBatch else { return false }
         guard reinsertCount(for: cardID) < LearningParameters.maxReinserts else {
             // The limit is reached: the card counts as resolved and leaves the
-            // batch. Without this a batch could never end.
+            // batch. Without this a batch could never end. Its low status
+            // gives it a high weight, so the next batches will bring it back
+            // — repetition over time is the weighting's job, not this
+            // batch's.
             return false
         }
 
-        let position = LearningParameters.reinsertGap
-        if position >= pending.count {
-            // Fewer than `reinsertGap` cards left, so the repetition goes as
-            // late as this batch still allows.
-            pending.append(cardID)
-        } else {
-            pending.insert(cardID, at: position)
-        }
+        // `insert(at: count)` is an append, so no separate case is needed for
+        // "fewer cards left than the position asks for".
+        pending.insert(cardID, at: min(reinsertPosition(), pending.count))
         reinsertCounts[cardID, default: 0] += 1
         return true
+    }
+
+    /// Where a repetition goes: behind every card still awaiting its first
+    /// attempt, and never closer than `reinsertGap`.
+    ///
+    /// Both halves matter. Without the unseen boundary a run of "Nochmal"
+    /// answers cycles the same few cards while others are never shown — the
+    /// device test found exactly that. Without the minimum gap a repetition
+    /// in a batch whose cards have all been seen once would come straight
+    /// back, which is what §5 rules out.
+    private func reinsertPosition() -> Int {
+        let behindUnseen = pending
+            .lastIndex { assessedCardIDs.contains($0) == false }
+            .map { $0 + 1 } ?? 0
+        return max(LearningParameters.reinsertGap, behindUnseen)
     }
 }

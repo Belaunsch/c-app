@@ -68,7 +68,6 @@ struct CardEditorModelTests {
         model.german = "  Guten Morgen!  "
         model.hanzi = " 早上好！ "
         model.pinyin = "  zǎoshang hǎo  "
-        model.status = .medium
         try model.save(into: context)
 
         let cards = try context.fetch(FetchDescriptor<Card>())
@@ -78,7 +77,7 @@ struct CardEditorModelTests {
         #expect(card.german == "Guten Morgen!")
         #expect(card.hanzi == "早上好！")
         #expect(card.pinyin == "zǎoshang hǎo")
-        #expect(card.status == .medium)
+        #expect(card.status == .new, "a new card starts on new; the editor has no status picker")
     }
 
     @Test("A new card keeps the tags picked in the editor")
@@ -115,7 +114,9 @@ struct CardEditorModelTests {
     func editingUpdatesTheCard() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
-        let card = Card(type: .word, german: "Apfel", hanzi: "苹果", pinyin: "píngguǒ")
+        // A status other than the default, so the assertion below actually
+        // says something: the editor must leave it alone.
+        let card = Card(type: .word, german: "Apfel", hanzi: "苹果", pinyin: "píngguǒ", status: .medium)
         context.insert(card)
         try context.save()
 
@@ -126,15 +127,20 @@ struct CardEditorModelTests {
         model.german = "Birne"
         model.hanzi = "梨"
         model.pinyin = "lí"
-        model.status = .good
         model.type = .sentence
+
+        // Changed *after* the editor opened, so the assertion below can only
+        // pass if the editor leaves the status alone — the audit found that
+        // the earlier version stayed green even when the editor wrote back
+        // the value it had read.
+        card.status = .secure
         try model.save(into: context)
 
         #expect(try context.fetch(FetchDescriptor<Card>()).count == 1, "Editing must not create a second card")
         #expect(card.german == "Birne")
         #expect(card.hanzi == "梨")
         #expect(card.pinyin == "lí")
-        #expect(card.status == .good)
+        #expect(card.status == .secure, "the editor must not write the status it read at open")
         #expect(card.type == .sentence)
     }
 
@@ -1177,38 +1183,159 @@ struct CardEditorModelTests {
     }
 
     // MARK: - Adding tags from the editor
+    //
+    // Rewritten in the phase-6 correction round. Until then a typed name was
+    // only queued and became a `Tag` when the card was saved, so cancelling
+    // left nothing behind — the rule from phase 2 (A14). The device test
+    // showed the price: a queued name had to look different from a real
+    // category, carried a delete control, and a tap on it deleted instead of
+    // selecting. "Hinzufügen" is now taken at its word.
 
-    @Test("A new tag name is queued and the input field is cleared")
-    func addingNewTagQueuesIt() {
+    @Test("Adding a category creates it right away and selects it")
+    func addingNewTagCreatesItImmediately() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
         let model = CardEditorModel()
         model.newTagName = "  Hotel  "
-        model.addNewTag(existingTags: [])
+        model.addNewTag(existingTags: [], in: context)
 
-        #expect(model.pendingTagNames == ["Hotel"], "Tidied up, casing preserved")
-        #expect(model.newTagName.isEmpty, "The input field is cleared after adding")
-        #expect(model.selectedTags.isEmpty, "Nothing is selected yet — the tag does not exist")
+        let tags = try context.fetch(FetchDescriptor<Tag>())
+        #expect(tags.map(\.name) == ["Hotel"], "tidied up, casing preserved")
+        #expect(model.selectedTags.map(\.name) == ["Hotel"], "and selected for this card")
+        #expect(model.newTagName.isEmpty, "the input field is cleared")
+        #expect(context.hasChanges == false, "and it is persisted, not just inserted")
+        // The view releases the keyboard on exactly this condition
+        // (`if model.tagFailure == nil`), so it belongs in a test rather
+        // than only in the view's head. From the audit.
+        #expect(model.tagFailure == nil, "success is what the keyboard release depends on")
     }
 
+    @Test("Adding a category is decided by the name alone, not by any focus state")
+    func addingDoesNotDependOnFocusState() throws {
+        // The device test found the opposite failure: a keyboard dismissal
+        // took the place of the action, and tapping "Hinzufügen" created
+        // nothing. The model is what makes that impossible to happen *here* —
+        // it has no notion of focus, of a keyboard, or of a view at all, so
+        // `addNewTag` is one call with one input. Pinned so a later
+        // "convenience" cannot couple the two.
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let model = CardEditorModel()
+
+        #expect(model.canAddNewTag == false, "an unusable name is the only reason to refuse")
+        model.newTagName = "Hotel"
+        #expect(model.canAddNewTag, "and a usable one is the only condition")
+
+        // One call, one category. No second call, no ordering trick.
+        model.addNewTag(existingTags: [], in: context)
+
+        #expect(try context.fetch(FetchDescriptor<Tag>()).count == 1)
+        #expect(model.tagFailure == nil)
+        #expect(model.selectedTags.map(\.name) == ["Hotel"])
+        #expect(model.newTagName.isEmpty)
+        #expect(model.canAddNewTag == false, "and the button is disabled again afterwards")
+    }
+
+    @Test("The duplicate check reads the store, not just the list it was handed")
+    func addingChecksTheStoreForDuplicates() throws {
+        // The claim in `addNewTag` is that a stale `@Query` snapshot cannot
+        // produce a second category with the same key. The audit found it
+        // unmeasured: every other test hands the match in via `existingTags`
+        // or already has it in `selectedTags`, so removing the store fetch
+        // broke nothing. Here the second editor knows nothing at all — an
+        // empty list and no selection — which is exactly the stale case.
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let first = CardEditorModel()
+        first.newTagName = "Hotel"
+        first.addNewTag(existingTags: [], in: context)
+
+        let second = CardEditorModel()
+        second.newTagName = "hotel"
+        second.addNewTag(existingTags: [], in: context)
+
+        let tags = try context.fetch(FetchDescriptor<Tag>())
+        #expect(tags.count == 1, "one category, whatever the second editor happened to know")
+        #expect(tags.map(\.name) == ["Hotel"], "and the first spelling stays (A13)")
+        #expect(second.selectedTags.map(\.name) == ["Hotel"], "the existing one is selected instead")
+    }
+
+    @Test("A category created in the editor survives cancelling the card")
+    func newTagSurvivesCancellingTheCard() throws {
+        // The deliberate opposite of the phase-2 rule. Cancelling the card
+        // must not take the category with it: the user asked for it, other
+        // cards can use it, and deleting it belongs in the category
+        // management screen.
+        let store = TemporaryStore()
+        defer { store.remove() }
+
+        do {
+            let container = try store.openContainer()
+            let model = CardEditorModel()
+            model.newTagName = "Hotel"
+            model.addNewTag(existingTags: [], in: container.mainContext)
+            // No `save(into:)` — the card is abandoned.
+        }
+
+        let reopened = try store.openContainer()
+        let tags = try reopened.mainContext.fetch(FetchDescriptor<Tag>())
+        #expect(tags.map(\.name) == ["Hotel"], "the category is still there")
+        #expect(try reopened.mainContext.fetch(FetchDescriptor<Card>()).isEmpty, "the card is not")
+    }
+
+    // Deliberately not tested: the failing-save path of `addNewTag`.
+    //
+    // It was written (read-only store via `ModelConfiguration(allowsSave:
+    // false)`, assert `tagFailure`, rollback, name kept) and behaves
+    // correctly — the test **passes on its own**. Inside the full suite it
+    // fails, reproducibly, on the very first assertion: `save()` does not
+    // throw at all.
+    //
+    // The mechanism that fits both observations: SwiftData appears to reuse a
+    // coordinator per store for the process, and with other containers of the
+    // same schema alive — the suite always has some — the `allowsSave: false`
+    // flag of a newly opened container is not honoured. Alone in the process
+    // it is. The same signature appeared for `LearnSessionModel.submit`'s
+    // save path, which is documented there.
+    //
+    // So the read-only trick is not a usable way to provoke a save failure in
+    // this suite, and the alternative would be an injectable save closure in
+    // production code that exists purely so a test can throw. The visible
+    // half — the alert appears, the name stays, no category is created — is
+    // on the device checklist instead.
+
     @Test("A name that is too long is rejected")
-    func overlongTagNameIsRejected() {
+    func overlongTagNameIsRejected() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
         let model = CardEditorModel()
         model.newTagName = String(repeating: "a", count: TagNormalization.maximumLength + 1)
         #expect(model.canAddNewTag == false)
-        model.addNewTag(existingTags: [])
-        #expect(model.pendingTagNames.isEmpty)
+        model.addNewTag(existingTags: [], in: context)
+
+        #expect(try context.fetch(FetchDescriptor<Tag>()).isEmpty)
     }
 
     @Test("A name made only of invisible characters is rejected")
-    func invisibleTagNameIsRejected() {
+    func invisibleTagNameIsRejected() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
         let model = CardEditorModel()
         model.newTagName = "\u{200B}\u{FEFF} "
         #expect(model.canAddNewTag == false)
-        model.addNewTag(existingTags: [])
-        #expect(model.pendingTagNames.isEmpty)
+        model.addNewTag(existingTags: [], in: context)
+
+        #expect(try context.fetch(FetchDescriptor<Tag>()).isEmpty)
     }
 
-    @Test("A name differing only in casing reuses the existing tag")
+    @Test("A name differing only in casing reuses the existing category")
     func addingCasingVariantReusesExistingTag() throws {
+        // The phase-2 normalisation is unchanged: `Essen`, `essen` and
+        // `ESSEN` are one category, and the first spelling wins.
         let container = try makeInMemoryContainer()
         let context = container.mainContext
         let food = Tag(name: "Essen")
@@ -1217,31 +1344,33 @@ struct CardEditorModelTests {
 
         let model = CardEditorModel()
         model.newTagName = "  eSSEn "
-        model.addNewTag(existingTags: [food])
+        model.addNewTag(existingTags: [food], in: context)
 
         let tags = try context.fetch(FetchDescriptor<Tag>())
-        #expect(tags.count == 1, "No second tag may appear")
-        #expect(tags.first?.name == "Essen", "The original spelling is kept")
+        #expect(tags.count == 1, "no second category may appear")
+        #expect(tags.first?.name == "Essen", "the original spelling is kept")
         #expect(model.selectedTags.first === food)
     }
 
-    @Test("A new tag reaches the store only when the card is saved")
-    func newTagIsNotStoredBeforeSaving() throws {
-        // The bug this guards against: a cancelled editor used to leave the
-        // tag behind, and the app has no way to delete a tag again.
+    @Test("Adding the same name twice yields one category")
+    func addingTheSameNameTwiceYieldsOneTag() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
 
         let model = CardEditorModel()
-        model.newTagName = "Hotel"
-        model.addNewTag(existingTags: [])
+        model.newTagName = "Essen"
+        model.addNewTag(existingTags: [], in: context)
+        let created = try context.fetch(FetchDescriptor<Tag>())
 
-        #expect(model.pendingTagNames == ["Hotel"])
-        #expect(try context.fetch(FetchDescriptor<Tag>()).isEmpty, "Nothing may be stored yet")
+        model.newTagName = "ESSEN"
+        model.addNewTag(existingTags: created, in: context)
+
+        #expect(try context.fetch(FetchDescriptor<Tag>()).count == 1)
+        #expect(model.selectedTags.count == 1, "and it is selected once")
     }
 
-    @Test("Saving turns the queued name into a real tag on the card")
-    func savingCreatesThePendingTag() throws {
+    @Test("Saving the card keeps the categories that were selected")
+    func savingKeepsTheSelectedTags() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
 
@@ -1249,48 +1378,13 @@ struct CardEditorModelTests {
         model.german = "Zimmer"
         model.hanzi = "房间"
         model.newTagName = "Hotel"
-        model.addNewTag(existingTags: [])
+        model.addNewTag(existingTags: [], in: context)
         try model.save(into: context)
 
         let tags = try context.fetch(FetchDescriptor<Tag>())
         #expect(tags.count == 1)
-        #expect(tags.first?.name == "Hotel")
         let card = try #require(try context.fetch(FetchDescriptor<Card>()).first)
         #expect(card.tags.map(\.name) == ["Hotel"])
-    }
-
-    @Test("A queued name can be taken back before saving")
-    func pendingTagCanBeRemoved() throws {
-        let container = try makeInMemoryContainer()
-        let context = container.mainContext
-
-        let model = CardEditorModel()
-        model.german = "Zimmer"
-        model.hanzi = "房间"
-        model.newTagName = "Essne"
-        model.addNewTag(existingTags: [])
-        model.removePendingTag("Essne")
-        try model.save(into: context)
-
-        #expect(try context.fetch(FetchDescriptor<Tag>()).isEmpty)
-    }
-
-    @Test("Two queued names differing only in casing produce one tag")
-    func queuedCasingVariantsCollapseIntoOneTag() throws {
-        let container = try makeInMemoryContainer()
-        let context = container.mainContext
-
-        let model = CardEditorModel()
-        model.german = "Wasser"
-        model.hanzi = "水"
-        model.newTagName = "Essen"
-        model.addNewTag(existingTags: [])
-        model.newTagName = "ESSEN"
-        model.addNewTag(existingTags: [])
-
-        #expect(model.pendingTagNames == ["Essen"])
-        try model.save(into: context)
-        #expect(try context.fetch(FetchDescriptor<Tag>()).count == 1)
     }
 
     @Test("Saving an incomplete card throws instead of silently doing nothing")
@@ -1315,7 +1409,7 @@ struct CardEditorModelTests {
         let model = CardEditorModel()
         model.newTagName = "   "
         #expect(model.canAddNewTag == false)
-        model.addNewTag(existingTags: [])
+        model.addNewTag(existingTags: [], in: context)
 
         #expect(try context.fetch(FetchDescriptor<Tag>()).isEmpty)
         #expect(model.selectedTags.isEmpty)
@@ -1332,7 +1426,7 @@ struct CardEditorModelTests {
         let model = CardEditorModel()
         model.toggle(food)
         model.newTagName = "essen"
-        model.addNewTag(existingTags: [food])
+        model.addNewTag(existingTags: [food], in: context)
 
         #expect(model.selectedTags.count == 1)
     }
@@ -1353,6 +1447,110 @@ struct CardEditorModelTests {
         #expect(model.isSelected(food) == false)
     }
 
+    @Test("A newly created category toggles like any other, and toggling deletes nothing")
+    func newCategoryTogglesAndIsNeverDeleted() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let model = CardEditorModel()
+        model.newTagName = "Hotel"
+        model.addNewTag(existingTags: [], in: context)
+
+        let tag = try #require(try context.fetch(FetchDescriptor<Tag>()).first)
+        #expect(model.isSelected(tag), "created and selected in one step")
+
+        model.toggle(tag)
+        #expect(model.isSelected(tag) == false, "the first tap deselects")
+        model.toggle(tag)
+        #expect(model.isSelected(tag), "the second selects again")
+
+        // Two opposite failures have to stay impossible here. The device test
+        // found a tap that did nothing at all; the old phase-2 design had a
+        // tap on a pending category that *deleted* it. Toggling is selection,
+        // and deleting lives in `TagListView` alone (A14, A15).
+        #expect(try context.fetch(FetchDescriptor<Tag>()).count == 1)
+        #expect(context.hasChanges == false, "selection is card state, not a store write")
+    }
+
+    @Test("Selecting a category does not depend on the name field")
+    func togglingIsIndependentOfTheNameField() throws {
+        // As close as a model test gets to "selection is independent of the
+        // keyboard": the field's text is the only input state the model has,
+        // and toggling neither reads nor disturbs it. That a real tap reaches
+        // the button at all is a device question — no test here claims it.
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let food = Tag(name: "Essen")
+        context.insert(food)
+        try context.save()
+
+        let model = CardEditorModel()
+        model.newTagName = "halb getippt"
+
+        model.toggle(food)
+        #expect(model.isSelected(food))
+        #expect(model.newTagName == "halb getippt", "a half-typed name is left alone")
+
+        model.toggle(food)
+        #expect(model.isSelected(food) == false)
+        #expect(model.newTagName == "halb getippt")
+    }
+
+    @Test("A category added and then deselected still exists after saving the card")
+    func deselectedNewCategorySurvivesTheSave() throws {
+        // The real path the audit named: add a category, then decide this
+        // card should not carry it after all. Since 6.11 the category exists
+        // in its own right, so it has to stay — while the card gets none.
+        // Deleting is `Kategorien verwalten` alone (A14, A15).
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let model = CardEditorModel()
+        model.german = "Apfel"
+        model.hanzi = "苹果"
+        model.pinyin = "píngguǒ"
+        model.newTagName = "Hotel"
+        model.addNewTag(existingTags: [], in: context)
+
+        let tag = try #require(try context.fetch(FetchDescriptor<Tag>()).first)
+        model.toggle(tag)
+        #expect(model.isSelected(tag) == false)
+
+        try model.save(into: context)
+
+        let card = try #require(try context.fetch(FetchDescriptor<Card>()).first)
+        #expect(card.tags.isEmpty, "the card carries none")
+        #expect(try context.fetch(FetchDescriptor<Tag>()).count == 1, "the category stays")
+    }
+
+    @Test("Selection follows the identity of a category, not its name")
+    func selectionFollowsIdentityNotName() throws {
+        // Two categories that happen to read the same are still two rows:
+        // selecting one must not tick the other. Which is what this measures
+        // — and no more than that. It does **not** distinguish `===` from
+        // `==` in `toggle`/`isSelected`: `Tag` is a `@Model`, so `==`
+        // compares the `persistentModelID`, and two separately inserted
+        // categories differ under both. That distinction only appears with
+        // two instances of the *same* row from two contexts, which this app
+        // never produces (everything runs on the one `mainContext`), and
+        // there neither operator is obviously the right one. Measured as
+        // green under `==`, so the comment does not claim otherwise.
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let one = Tag(name: "Essen")
+        let other = Tag(name: "Essen")
+        context.insert(one)
+        context.insert(other)
+        try context.save()
+
+        let model = CardEditorModel()
+        model.toggle(one)
+
+        #expect(model.isSelected(one))
+        #expect(model.isSelected(other) == false, "the same name is not the same category")
+        #expect(model.selectedTags.count == 1)
+    }
+
     // MARK: - Persistence
 
     @Test("A card created in the editor survives reopening the store")
@@ -1370,7 +1568,6 @@ struct CardEditorModelTests {
             model.german = "Apfel"
             model.hanzi = "苹果"
             model.pinyin = "píngguǒ"
-            model.status = .medium
             model.toggle(food)
             try model.save(into: context)
         }
@@ -1380,9 +1577,39 @@ struct CardEditorModelTests {
         #expect(card.german == "Apfel")
         #expect(card.hanzi == "苹果")
         #expect(card.pinyin == "píngguǒ")
-        #expect(card.status == .medium)
+        #expect(card.status == .new, "the editor writes no status")
         #expect(card.tags.map(\.name) == ["Essen"])
         #expect(card.hanziWasEditedManually)
+    }
+
+    @Test("Saving an untouched editor does not undo a status earned elsewhere")
+    func savingDoesNotRevertAStatusChangedElsewhere() throws {
+        // The case the review found and proved. The card editor is pushed, so
+        // it stays alive when the user switches tabs. Rate the same card in a
+        // session, come back, hit Speichern without changing anything — and
+        // the editor used to write back the status it had read when it
+        // opened, resetting freshly earned progress while the counters stayed.
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let card = Card(type: .word, german: "Apfel", hanzi: "苹果", pinyin: "píngguǒ", status: .new)
+        context.insert(card)
+        try context.save()
+
+        // The editor opens and reads the card as it is now.
+        let model = CardEditorModel(card: card)
+
+        // Meanwhile the session rates the card.
+        card.status = .secure
+        card.reviewCount = 1
+        card.correctCount = 1
+        try context.save()
+
+        // The user saves the untouched editor.
+        try model.save(into: context)
+
+        #expect(card.status == .secure, "the session's result stands")
+        #expect(card.reviewCount == 1)
+        #expect(card.correctCount == 1)
     }
 
     @Test("An edit survives reopening the store")
@@ -1393,19 +1620,20 @@ struct CardEditorModelTests {
         do {
             let container = try store.openContainer()
             let context = container.mainContext
-            let card = Card(type: .word, german: "Apfel", hanzi: "苹果")
+            // Again a status other than the default, so "unchanged" is a
+            // real statement.
+            let card = Card(type: .word, german: "Apfel", hanzi: "苹果", status: .weak)
             context.insert(card)
             try context.save()
 
             let model = CardEditorModel(card: card)
-            model.status = .secure
             model.pinyin = "píngguǒ"
             try model.save(into: context)
         }
 
         let reopened = try store.openContainer()
         let card = try #require(try reopened.mainContext.fetch(FetchDescriptor<Card>()).first)
-        #expect(card.status == .secure)
+        #expect(card.status == .weak, "unchanged by the edit — it was weak before")
         #expect(card.pinyin == "píngguǒ")
         #expect(card.pinyinWasEditedManually)
     }

@@ -30,6 +30,11 @@ struct CardEditorView: View {
     @State private var configuredForLowLatency: Bool?
     @FocusState private var focusedField: Field?
 
+    /// Separate from `focusedField` on purpose. The category name is not card
+    /// content: it must not put "Fertig" into the keyboard toolbar and must
+    /// not run any of the German/Hanzi/Pinyin automation.
+    @FocusState private var isNamingCategory: Bool
+
     private enum Field {
         case german, hanzi, pinyin
     }
@@ -52,14 +57,6 @@ struct CardEditorView: View {
             germanSection
             chineseSection
 
-            Section("Lernstatus") {
-                Picker("Lernstatus", selection: $model.status) {
-                    ForEach(LearningStatus.allCases, id: \.self) { candidate in
-                        Text(candidate.title).tag(candidate)
-                    }
-                }
-            }
-
             tagSection
         }
         .navigationTitle(model.isEditingExistingCard ? "Karte bearbeiten" : "Neue Karte")
@@ -77,15 +74,34 @@ struct CardEditorView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                // The only way to finish a multi-line field, and a second one
-                // for single-line fields. It drops the focus and nothing
-                // else, exactly like Return does, so there is still one path
-                // into `endEditing(of:)` and no way to trigger it twice.
-                Button("Fertig", action: finishEditing)
-                    .disabled(focusedField == nil)
+                // Only for the three card-content fields. It used to appear
+                // for every keyboard, including the category name, where it
+                // has no meaning — an empty group shows nothing.
+                if focusedField != nil {
+                    Spacer()
+                    // The only way to finish a multi-line field, and a second
+                    // one for single-line fields. It drops the focus and
+                    // nothing else, exactly like Return does, so there is
+                    // still one path into `endEditing(of:)` and no way to
+                    // trigger it twice.
+                    Button("Fertig", action: finishEditing)
+                }
             }
         }
+        // **There is deliberately no tap gesture on this form.** Three
+        // variants were tried and all three cost a control its action on the
+        // device: `simultaneousGesture` (a tap on "Hinzufügen" only closed
+        // the keyboard and created nothing), the same thing narrowed
+        // spatially, and finally plain `.gesture`, whose documented low
+        // precedence still swallowed the taps on the category rows — no
+        // category could be selected or deselected any more.
+        //
+        // So the fallback written into A27 applies: the gesture is gone, and
+        // with it the convenience of closing the keyboard by tapping empty
+        // space. Every dismissal now sits in the action of the control the
+        // user actually touched, plus the platform's own drag. A working
+        // control beats a convenience.
+        .scrollDismissesKeyboard(.interactively)
         .task {
             model.prepareResolver()
             await model.refreshTranslationSupport()
@@ -97,6 +113,18 @@ struct CardEditorView: View {
         }
         .translationTask(translationConfiguration) { session in
             await model.translate(using: session)
+        }
+        .alert(
+            "Kategorie fehlgeschlagen",
+            isPresented: Binding(
+                get: { model.tagFailure != nil },
+                set: { if $0 == false { model.dismissTagFailure() } }
+            ),
+            presenting: model.tagFailure
+        ) { _ in
+            Button("OK", role: .cancel) { model.dismissTagFailure() }
+        } message: { failure in
+            Text(failure.userText)
         }
         .alert(
             "Speichern fehlgeschlagen",
@@ -234,7 +262,19 @@ struct CardEditorView: View {
         Section {
             ForEach(allTags) { tag in
                 Button {
+                    // Order matters and is the whole point after the device
+                    // test: the selection is toggled **first** and
+                    // unconditionally — this is the button's own, primary
+                    // action, and nothing about the keyboard may stand
+                    // between the tap and it. Releasing the focus is what
+                    // happens afterwards.
                     model.toggle(tag)
+                    isNamingCategory = false
+                    // Whatever card field was being typed in is left behind
+                    // too, through the one path every other way out uses
+                    // (Return, "Fertig") — so leaving the German field still
+                    // means exactly one translation, never two (A17, A21).
+                    finishEditing()
                 } label: {
                     HStack {
                         Text(tag.name)
@@ -248,39 +288,29 @@ struct CardEditorView: View {
                 }
             }
 
-            // Queued names are not tags yet — they are created when the card
-            // is saved, so a cancelled editor leaves nothing behind.
-            ForEach(model.pendingTagNames, id: \.self) { name in
-                HStack {
-                    Text(name)
-                    Text("neu")
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                        .foregroundStyle(Color.accentColor)
-                    Spacer()
-                    Button {
-                        model.removePendingTag(name)
-                    } label: {
-                        Image(systemName: "minus.circle")
-                            .foregroundStyle(.red)
-                    }
-                    .accessibilityLabel("Kategorie \(name) entfernen")
-                }
-            }
-
             HStack {
                 TextField("Neue Kategorie", text: $model.newTagName)
-                Button("Hinzufügen") {
-                    model.addNewTag(existingTags: allTags)
-                }
-                .disabled(model.canAddNewTag == false)
+                    // Deliberately not part of `focusedField`: this is not
+                    // card content, so it gets no "Fertig" in the keyboard
+                    // toolbar and triggers none of the field automation.
+                    .focused($isNamingCategory)
+                Button("Hinzufügen", action: addCategory)
+                    // Same reason as the two refresh controls above: without
+                    // it the whole row acts as the button, so a tap on the
+                    // empty part of the row would add a category instead of
+                    // just closing the keyboard — and it would widen the
+                    // area where a container gesture and a button compete
+                    // for the same tap, which is what broke on the device.
+                    .buttonStyle(.borderless)
+                    .disabled(model.canAddNewTag == false)
             }
         } header: {
             Text("Kategorien")
         } footer: {
-            Text("Eine Karte kann mehreren Kategorien angehören. Groß- und Kleinschreibung erzeugt keine doppelten Kategorien. Neue Kategorien entstehen erst beim Speichern.")
+            // A new category exists as soon as it is added — the list above
+            // shows it like any other. Deleting and renaming happen in the
+            // category management screen, never here.
+            Text("Eine Karte kann mehreren Kategorien angehören. Groß- und Kleinschreibung erzeugt keine doppelten Kategorien.")
         }
     }
 
@@ -291,6 +321,26 @@ struct CardEditorView: View {
     /// path for both gestures, so a keypress cannot start two translations.
     private func finishEditing() {
         focusedField = nil
+    }
+
+    /// Adds the typed category, then lets the keyboard go.
+    ///
+    /// The order is the point, and it is what the device test broke on: the
+    /// category is created **first**, and the focus is released afterwards
+    /// and only on success. Nothing about adding depends on the keyboard —
+    /// `CardEditorModel` does not know that focus exists — so a dismissal can
+    /// never take the place of the action.
+    ///
+    /// On failure the focus stays with the field: the typed name is still
+    /// there, and taking the keyboard away would make correcting it
+    /// needlessly awkward. To be precise, the system hides the keyboard while
+    /// the alert is up and brings it back afterwards, because
+    /// `isNamingCategory` was never released — that is expected, not a bug.
+    private func addCategory() {
+        model.addNewTag(existingTags: allTags, in: context)
+        if model.tagFailure == nil {
+            isNamingCategory = false
+        }
     }
 
     private func endEditing(of field: Field) {

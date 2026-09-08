@@ -20,6 +20,7 @@ enum AppError: Error {
     case cardDeleteFailed(any Error)
     /// A tag rename was refused before it was attempted.
     case tagNameRejected(TagNormalization.RenameProblem)
+    case tagCreateFailed(any Error)
     case tagRenameFailed(any Error)
     case tagDeleteFailed(any Error)
 
@@ -38,6 +39,8 @@ enum AppError: Error {
             "Der Name ist zu lang. Erlaubt sind höchstens \(TagNormalization.maximumLength) Zeichen."
         case .tagNameRejected(.duplicate(let existing)):
             "Es gibt bereits die Kategorie „\(existing)“. Kategorien werden in dieser Version nicht zusammengeführt."
+        case .tagCreateFailed:
+            "Die Kategorie konnte nicht angelegt werden."
         case .tagRenameFailed:
             "Die Kategorie konnte nicht umbenannt werden. Der alte Name bleibt bestehen."
         case .tagDeleteFailed:
@@ -52,6 +55,7 @@ enum AppError: Error {
             nil
         case .cardSaveFailed(let error),
              .cardDeleteFailed(let error),
+             .tagCreateFailed(let error),
              .tagRenameFailed(let error),
              .tagDeleteFailed(let error):
             error.localizedDescription

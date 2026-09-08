@@ -32,9 +32,17 @@ nonisolated enum LearningParameters {
 
     /// How often one card may be put back into the same mini-batch.
     ///
-    /// This is what makes a batch terminate. Without it, answering "Nochmal"
-    /// forever would extend the batch forever.
-    static let maxReinserts = 3
+    /// **One** since the phase-6 device test. It was 3, and together with
+    /// several cards answered "Nochmal" that turned a seven-card window into
+    /// ten to fifteen questions about the same few cards — a drill, not a
+    /// session. One short repetition keeps the value of trying again soon;
+    /// everything beyond that is the weighting's job, which brings a card
+    /// with a low status back in a later batch anyway (§3.1).
+    ///
+    /// It still is what makes a batch terminate: with this limit a batch is
+    /// at most `batchSize × (1 + maxReinserts)` questions long, whatever the
+    /// answers are.
+    static let maxReinserts = 1
 
     /// Weight multiplier for a card that was in the immediately previous
     /// mini-batch, so the same card does not show up twice in a row.

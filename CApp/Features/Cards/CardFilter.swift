@@ -61,13 +61,22 @@ enum CardFilter {
 
     /// A card must carry every selected tag, not just one of them.
     ///
-    /// AND was chosen over OR so that every filter in this screen behaves the
-    /// same way: adding one narrows the result. Mixing OR for tags with AND
-    /// for type, search and status would be surprising.
+    /// AND was chosen over OR so that every filter in **this** screen behaves
+    /// the same way: adding one narrows the result. Type, search and status
+    /// all narrow, so tags do too (A12).
+    ///
+    /// The learning session deliberately does **not** use this: there several
+    /// categories mean "practise any of these", see
+    /// `LearnSessionModel.poolCards` and A26. The two contexts ask different
+    /// questions, so they get different answers rather than one compromise.
     static func matchesTags(_ card: Card, tagKeys: Set<String>) -> Bool {
         guard tagKeys.isEmpty == false else { return true }
-        let own = Set(card.tags.map { TagNormalization.key(for: $0.name) })
-        return tagKeys.isSubset(of: own)
+        return tagKeys.isSubset(of: keys(of: card))
+    }
+
+    /// The card's normalised category keys.
+    static func keys(of card: Card) -> Set<String> {
+        Set(card.tags.map { TagNormalization.key(for: $0.name) })
     }
 
     static func matchesStatus(_ card: Card, status: LearningStatus?) -> Bool {

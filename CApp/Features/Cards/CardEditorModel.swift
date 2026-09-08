@@ -21,14 +21,11 @@ final class CardEditorModel {
     var german: String
     var hanzi: String
     var pinyin: String
-    var status: LearningStatus
     var selectedTags: [Tag]
     var newTagName: String = ""
 
-    /// Names the user typed that do not exist as a tag yet. Deliberately not
-    /// inserted into the context while editing, so a cancelled editor leaves
-    /// nothing behind.
-    private(set) var pendingTagNames: [String] = []
+    /// Reported when creating a category failed. User-facing.
+    private(set) var tagFailure: AppError?
 
     // MARK: - Provenance (the answer to Q9)
     //
@@ -141,7 +138,6 @@ final class CardEditorModel {
         german = card?.german ?? ""
         hanzi = card?.hanzi ?? ""
         pinyin = card?.pinyin ?? ""
-        status = card?.status ?? .new
         selectedTags = card?.tags ?? []
 
         hanziIsManual = card?.hanziWasEditedManually ?? false
@@ -515,50 +511,84 @@ final class CardEditorModel {
 
     var canAddNewTag: Bool { TagNormalization.isValid(newTagName) }
 
-    /// Takes the name from `newTagName`. An existing tag is selected instead
-    /// of queueing a duplicate; a genuinely new name is only remembered and
-    /// becomes a `Tag` when the card is saved.
-    func addNewTag(existingTags: [Tag]) {
+    /// Creates the category from `newTagName` right away and selects it.
+    ///
+    /// **Changed in the phase-6 correction round, and it overrides the phase-2
+    /// rule (A14).** Until then a typed name was only remembered and became a
+    /// `Tag` when the card was saved, so that cancelling the editor left
+    /// nothing behind. The device test showed what that costs: the queued name
+    /// had to look different from a real category — a "neu" badge and a delete
+    /// control — and a tap on it deleted instead of selecting. Two kinds of
+    /// category on one screen, one of them deletable in a place where deleting
+    /// categories is otherwise impossible.
+    ///
+    /// So "Hinzufügen" is now taken at its word: the category exists, is
+    /// persisted, survives cancelling the card, and can be used by other
+    /// cards. Renaming and deleting live where they always did — in the
+    /// category management screen, with its confirmation.
+    ///
+    /// An existing name selects that category instead of creating a second
+    /// one; the normalisation rules from phase 2 are unchanged (`Essen`,
+    /// `essen` and `ESSEN` are one category).
+    func addNewTag(existingTags: [Tag], in context: ModelContext) {
         let name = TagNormalization.displayName(for: newTagName)
         guard TagNormalization.isValid(name) else { return }
 
-        if let match = TagNormalization.existingTag(matching: name, in: existingTags) {
+        // Checked against the store, not only against the list the button's
+        // closure captured. A stale snapshot would let a second category with
+        // the same normalised key appear, and A13 says there is only ever
+        // one — undoable afterwards solely through the management screen.
+        // A failed fetch would fall back to the possibly stale list from the
+        // view, which is exactly how a second category with the same key
+        // could appear (A13). The behaviour stays the same — refusing to add
+        // would be worse than a rare duplicate — but it must not be silent.
+        let stored: [Tag]
+        do {
+            stored = try context.fetch(FetchDescriptor<Tag>())
+        } catch {
+            Self.logger.error(
+                "Tag lookup failed, falling back to the view's list: \(error.localizedDescription, privacy: .public)"
+            )
+            stored = []
+        }
+        let candidates = stored + existingTags + selectedTags
+
+        if let match = TagNormalization.existingTag(matching: name, in: candidates) {
             if isSelected(match) == false {
                 selectedTags.append(match)
             }
-        } else if isPending(name) == false {
-            pendingTagNames.append(name)
+            newTagName = ""
+            return
         }
+
+        let tag = Tag(name: name)
+        context.insert(tag)
+        do {
+            try context.save()
+        } catch {
+            // Nothing half-created: without the rollback the category would
+            // exist in memory, be selectable, and vanish on the next launch.
+            //
+            // Note that `rollback()` discards **every** uncommitted change on
+            // the shared `mainContext`, not just this insert. That is safe
+            // today because every write path in the app mutates and saves
+            // inside one synchronous block, so nothing else is ever pending.
+            // An asynchronous save added later would break that quietly.
+            //
+            // This branch has no automated test; `CardEditorModelTests`
+            // records why, and the device checklist covers what the user
+            // sees.
+            context.rollback()
+            tagFailure = .tagCreateFailed(error)
+            Self.logger.error("Category could not be created: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+        selectedTags.append(tag)
         newTagName = ""
     }
 
-    func isPending(_ name: String) -> Bool {
-        let key = TagNormalization.key(for: name)
-        return pendingTagNames.contains { TagNormalization.key(for: $0) == key }
-    }
-
-    func removePendingTag(_ name: String) {
-        pendingTagNames.removeAll { $0 == name }
-    }
-
-    private func resolveTags(in context: ModelContext) throws -> [Tag] {
-        guard pendingTagNames.isEmpty == false else { return selectedTags }
-
-        let storedTags = try context.fetch(FetchDescriptor<Tag>())
-        var resolved = selectedTags
-
-        for name in pendingTagNames {
-            if let existing = TagNormalization.existingTag(matching: name, in: storedTags + resolved) {
-                if resolved.contains(where: { $0 === existing }) == false {
-                    resolved.append(existing)
-                }
-            } else {
-                let tag = Tag(name: name)
-                context.insert(tag)
-                resolved.append(tag)
-            }
-        }
-        return resolved
+    func dismissTagFailure() {
+        tagFailure = nil
     }
 
     // MARK: - Saving
@@ -597,18 +627,27 @@ final class CardEditorModel {
     ///
     /// Throws `AppError.cardIncomplete` rather than returning silently, so a
     /// mis-wired caller cannot mistake "nothing happened" for success.
+    ///
+    /// **The learning status is deliberately not written here.** The editor
+    /// lost its status picker in the phase-6 correction round (task 6.10), so
+    /// it no longer owns that value — writing it back would mean writing a
+    /// copy taken when the editor opened. The device test made that concrete:
+    /// the card editor stays alive when the tab changes, so rating the same
+    /// card in a session and then saving the untouched editor would have
+    /// reset the freshly earned status while leaving the counters. A new card
+    /// starts on `LearningStatus.new` through `Card`'s own default; from then
+    /// on only the session writes it.
     func save(into context: ModelContext) throws {
         reconcileForSave()
         guard canSave else { throw AppError.cardIncomplete }
 
-        let tags = try resolveTags(in: context)
+        let tags = selectedTags
 
         if let card = existingCard {
             card.type = type
             card.german = trimmedGerman
             card.hanzi = trimmedHanzi
             card.pinyin = trimmedPinyin
-            card.status = status
             card.tags = tags
             card.hanziWasEditedManually = hanziIsManual
             card.pinyinWasEditedManually = pinyinIsManual
@@ -618,7 +657,6 @@ final class CardEditorModel {
                 german: trimmedGerman,
                 hanzi: trimmedHanzi,
                 pinyin: trimmedPinyin,
-                status: status,
                 hanziWasEditedManually: hanziIsManual,
                 pinyinWasEditedManually: pinyinIsManual,
                 tags: tags
@@ -629,7 +667,7 @@ final class CardEditorModel {
         try context.save()
     }
 
-    private static let logger = Logger(subsystem: "de.belaunsch.CApp", category: "translation")
+    private static let logger = Logger(subsystem: "de.belaunsch.CApp", category: "editor")
 
     /// Trimmed at the ends, with every run of whitespace inside collapsed to a
     /// single space.
