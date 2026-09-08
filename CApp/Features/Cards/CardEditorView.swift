@@ -75,7 +75,19 @@ struct CardEditorView: View {
                 }
             }
         }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                // The only way to finish a multi-line field, and a second one
+                // for single-line fields. It drops the focus and nothing
+                // else, exactly like Return does, so there is still one path
+                // into `endEditing(of:)` and no way to trigger it twice.
+                Button("Fertig", action: finishEditing)
+                    .disabled(focusedField == nil)
+            }
+        }
         .task {
+            model.prepareResolver()
             await model.refreshTranslationSupport()
         }
         .onChange(of: focusedField) { previous, _ in
@@ -104,17 +116,16 @@ struct CardEditorView: View {
 
     private var germanSection: some View {
         Section {
-            TextField("Deutscher Text", text: $model.german)
-                .focused($focusedField, equals: .german)
-                .submitLabel(.done)
-                .onSubmit(finishEditing)
+            textField("Deutscher Text", text: $model.german, field: .german)
         } header: {
             Text("Deutsch")
         } footer: {
+            // Only what is true right now. The former permanent sentence
+            // explaining that leaving the field generates Hanzi and Pinyin is
+            // gone: after the first card the user knows, and it pushed the
+            // real messages out of sight.
             if let message = model.translationMessage {
                 Text(message)
-            } else {
-                Text("Mit Return oder beim Verlassen des Feldes werden Hanzi und Pinyin automatisch erzeugt.")
             }
         }
     }
@@ -122,10 +133,7 @@ struct CardEditorView: View {
     private var chineseSection: some View {
         Section {
             HStack(spacing: 12) {
-                TextField("Hanzi", text: $model.hanzi)
-                    .focused($focusedField, equals: .hanzi)
-                    .submitLabel(.done)
-                    .onSubmit(finishEditing)
+                textField("Hanzi", text: $model.hanzi, field: .hanzi)
 
                 // While a translation runs the control is the spinner: the
                 // Hanzi field is where its result lands.
@@ -145,11 +153,8 @@ struct CardEditorView: View {
             }
 
             HStack(spacing: 12) {
-                TextField("Pinyin (optional)", text: $model.pinyin)
-                    .focused($focusedField, equals: .pinyin)
+                textField("Pinyin (optional)", text: $model.pinyin, field: .pinyin)
                     .autocorrectionDisabled()
-                    .submitLabel(.done)
-                    .onSubmit(finishEditing)
 
                 Button {
                     model.regeneratePinyin()
@@ -160,15 +165,59 @@ struct CardEditorView: View {
                 .disabled(model.canGeneratePinyin == false)
                 .accessibilityLabel("Pinyin neu erzeugen")
             }
+
+            // Directly under the Pinyin field, and only when this particular
+            // value rests on a guess. Not a warning about the field in
+            // general — that text was permanent before and told nobody
+            // anything about the card in front of them.
+            if model.pinyinNeedsReview {
+                Label(
+                    "Pinyin konnte nicht eindeutig bestimmt werden. Bitte prüfen.",
+                    systemImage: "exclamationmark.circle"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
         } header: {
             Text("Chinesisch")
         } footer: {
-            Text(chineseFooter)
+            if let footer = chineseFooter {
+                Text(footer)
+            }
         }
     }
 
-    private var chineseFooter: String {
-        var lines = ["Deutsch und Hanzi sind erforderlich. Pinyin kann leer bleiben."]
+    /// One text field, multi-line for sentence cards.
+    ///
+    /// A sentence in a single line can only be read by scrolling, which makes
+    /// checking a translation awkward — so sentence cards get a growing
+    /// field. Word cards stay compact. Multi-line fields turn Return into a
+    /// newline, so both kinds are finished from the keyboard toolbar instead;
+    /// single-line fields keep their Return key as well.
+    private func textField(
+        _ prompt: String,
+        text: Binding<String>,
+        field: Field
+    ) -> some View {
+        let isMultiline = model.type == .sentence
+        return TextField(prompt, text: text, axis: isMultiline ? .vertical : .horizontal)
+            .focused($focusedField, equals: field)
+            // A multi-line field inserts a newline on Return and fires no
+            // submit, so labelling its Return key "Fertig" would promise
+            // something it does not do. Those fields are finished from the
+            // keyboard toolbar.
+            .submitLabel(isMultiline ? .return : .done)
+            .onSubmit(finishEditing)
+    }
+
+    /// Only situational notes, `nil` when there is nothing to say.
+    ///
+    /// What used to stand here permanently — which fields are required, what
+    /// the refresh controls do, that Pinyin is a suggestion — is gone. A text
+    /// that is always there is read once and never again, and it crowded out
+    /// the notes that do concern the card at hand.
+    private var chineseFooter: String? {
+        var lines: [String] = []
         if let hint = model.hanziHint {
             lines.append(hint)
         }
@@ -178,15 +227,7 @@ struct CardEditorView: View {
         if model.pinyinIsManual {
             lines.append("Pinyin wurde von Hand geändert und wird nicht automatisch überschrieben.")
         }
-        // Only promise the control that is actually available: on a device
-        // without translation the Hanzi ↻ is permanently disabled.
-        if model.canTranslate {
-            lines.append("Mit ↻ neben Hanzi wird neu übersetzt, mit ↻ neben Pinyin das Pinyin neu erzeugt — beides überschreibt auch einen selbst eingetragenen Wert.")
-        } else {
-            lines.append("Mit ↻ neben Pinyin wird das Pinyin neu erzeugt — auch über einen selbst eingetragenen Wert.")
-        }
-        lines.append("Bei mehrdeutigen Zeichen kann das Pinyin abweichen — es ist ein Vorschlag.")
-        return lines.joined(separator: " ")
+        return lines.isEmpty ? nil : lines.joined(separator: " ")
     }
 
     private var tagSection: some View {

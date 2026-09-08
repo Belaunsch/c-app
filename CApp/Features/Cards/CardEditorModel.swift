@@ -48,6 +48,15 @@ final class CardEditorModel {
     private var hanziBaseline: String
     private var pinyinBaseline: String
 
+    /// Whether the current **automatic** Pinyin rests on a transliterated
+    /// guess rather than on a lexicon reading.
+    ///
+    /// Not persisted. It is derived: the resolver is pure and offline, so
+    /// running it again on the stored Hanzi answers the question at any time —
+    /// see `refreshPinyinReview()`. A hand-corrected Pinyin is never in
+    /// question, so the flag is cleared then.
+    private(set) var pinyinNeedsReview = false
+
     /// The Hanzi the automatic Pinyin was derived from, `nil` when no Pinyin
     /// has been generated.
     ///
@@ -149,6 +158,37 @@ final class CardEditorModel {
     }
 
     var isEditingExistingCard: Bool { existingCard != nil }
+
+    /// Loads the lexicon and settles whether the Pinyin in the field would
+    /// need a second look.
+    ///
+    /// Called from the editor's `task`, which is why it is not done in
+    /// `init`: the first lexicon access reads and indexes the bundled data
+    /// (measured 46 ms on a Mac for 119.939 entries), and that belongs into
+    /// the sheet's appearance rather than into the middle of typing.
+    func prepareResolver() {
+        ChineseLexicon.shared.prepare()
+        refreshPinyinReview()
+    }
+
+    /// Works out whether the Pinyin currently in the field would need a
+    /// second look.
+    ///
+    /// Derived rather than stored — no schema change for a hint. The resolver
+    /// is pure, offline and deterministic, so the stored Hanzi is enough to
+    /// ask the question again whenever the editor opens.
+    func refreshPinyinReview() {
+        // An empty field is never up for review — there is no reading to
+        // check, and `hanziHint` explains why it is empty. Same rule as in
+        // `generatePinyinFromHanzi`.
+        guard pinyinIsManual == false,
+              trimmedHanzi.isEmpty == false,
+              trimmedPinyin.isEmpty == false else {
+            pinyinNeedsReview = false
+            return
+        }
+        pinyinNeedsReview = PinyinService.resolution(for: trimmedHanzi).needsReview
+    }
 
     // MARK: - Validation
 
@@ -391,9 +431,10 @@ final class CardEditorModel {
     }
 
     private func generatePinyinFromHanzi() {
-        let generated = PinyinService.pinyin(for: trimmedHanzi)
-        guard generated.isEmpty else {
-            applyGeneratedPinyin(generated)
+        let resolution = PinyinService.resolution(for: trimmedHanzi)
+        guard resolution.text.isEmpty else {
+            applyGeneratedPinyin(resolution.text)
+            pinyinNeedsReview = resolution.needsReview
             return
         }
 
@@ -404,6 +445,9 @@ final class CardEditorModel {
         // control: that would delete work the user did.
         guard pinyinIsManual == false else { return }
         applyGeneratedPinyin("")
+        // An empty field is not a doubtful reading. Why it is empty is what
+        // `hanziHint` explains.
+        pinyinNeedsReview = false
     }
 
     // MARK: - Field normalization
@@ -447,8 +491,10 @@ final class CardEditorModel {
         pinyinIsManual = trimmedPinyin.isEmpty == false
         // Whatever the user put here — including nothing — now belongs to the
         // Hanzi in the field, so the automation leaves it alone until that
-        // Hanzi changes.
+        // Hanzi changes. And their own value needs no review from us: the
+        // hint asked them to look, and they did.
         pinyinSourceHanzi = trimmedHanzi
+        pinyinNeedsReview = false
         pinyinBaseline = pinyin
         return true
     }

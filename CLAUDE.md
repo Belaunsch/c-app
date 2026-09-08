@@ -15,12 +15,18 @@ jeweiligen Feld. Q1 ist auf echter Hardware positiv beantwortet
 Audio, keine Spracherkennung, keine Lernlogik; der Tab „Lernen" ist ein
 Platzhalter.
 
-**Nächster Schritt ist die beauftragte Zwischenphase 4.5 — Pinyin Accuracy
-und Karten-/Editor-Politur —, danach Phase 5 (Learning Engine).** Phase 4.5
-ist noch nicht in der Roadmap ausgearbeitet; das ist ihre erste Aufgabe. Der
-Research-Spike dazu ist gelaufen: CC-CEDICT (CC BY-SA 4.0) führt neutrale Töne
-und mehrere Lesungen je Wort, kennt `东西` als `dōngxi` *und* `dōngxī` und ist
-damit die Grundlage, um ICU vom Primärpfad zum markierten Fallback zu machen.
+**Phase 4.5 (Pinyin Accuracy + UI-Politur) ist abgeschlossen.** Pinyin kommt
+primär aus gebündelten CC-CEDICT-Daten (`ChineseLexicon`, `PinyinTone`), ICU
+liefert nur noch die Wortgrenzen und den gekennzeichneten Fallback. Ein nicht
+eindeutig auflösbares Pinyin wird **nicht geraten**, sondern als prüfbedürftig
+markiert und im Editor benannt. **Nächster Schritt ist Phase 5 (Learning
+Engine)** — reine Foundation-Logik, kein SwiftUI.
+
+Drittanbieter-Daten liegen ausschließlich in
+`CApp/Resources/ThirdParty/CC-CEDICT/` und stehen unter CC BY-SA 4.0; die
+Lizenz gilt für die Daten und ihre Ableitungen, **nicht** für den App-Code.
+Herkunft, Version und Änderungen sind dort in `SOURCE.md` dokumentiert. Neue
+Fremddaten gehören in denselben Ordner mit derselben Dokumentation.
 
 ## Vor jeder Änderung lesen
 
@@ -51,7 +57,11 @@ Begründung in [docs/claude-workflow.md](docs/claude-workflow.md).
 1. **Eine Phase auf einmal.** Der Umfang steht in der Roadmap. Nichts aus
    einer späteren Phase vorziehen — auch nicht „weil es gerade schnell geht“.
 2. **Keine externen Dependencies.** Kein Swift Package, kein CocoaPods, kein
-   Carthage. Wenn etwas ohne Paket nicht lösbar erscheint, erst fragen.
+   Carthage, kein Laufzeit-SDK, kein Backend. Ein **lizenzkonformes
+   Daten-Asset** ist dagegen erlaubt — siehe `CApp/Resources/ThirdParty/` —
+   sofern Quelle, Lizenz, Version und alle Änderungen dokumentiert sind und
+   die Datenlizenz vom App-Code getrennt bleibt. Wenn etwas ohne Paket nicht
+   lösbar erscheint, erst fragen.
 3. **Keine Repository-Layer, keine DI-Container, keine Coordinator, kein
    Drittanbieter-State-Management.** Begründung in
    [architecture.md §1](docs/architecture.md#1-schichten).

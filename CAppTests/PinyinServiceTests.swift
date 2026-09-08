@@ -11,6 +11,7 @@ import Testing
 /// checked against what the Pinyin actually should be — not copied from the
 /// implementation's output. Where ICU deviates from conventional Pinyin, that
 /// is called out in its own test rather than quietly pinned as "correct".
+@MainActor
 struct PinyinServiceTests {
 
     // MARK: - Words
@@ -38,7 +39,9 @@ struct PinyinServiceTests {
         // these right, which is exactly why it is the primary path.
         #expect(PinyinService.pinyin(for: "银行") == "yínháng")
         #expect(PinyinService.pinyin(for: "行走") == "xíngzǒu")
-        #expect(PinyinService.pinyin(for: "长城") == "chángchéng")
+        // Proper noun in the lexicon, so it keeps its capital — conventional
+        // Pinyin capitalises the Great Wall.
+        #expect(PinyinService.pinyin(for: "长城") == "Chángchéng")
         #expect(PinyinService.pinyin(for: "校长") == "xiàozhǎng")
     }
 
@@ -173,12 +176,17 @@ struct PinyinServiceTests {
         #expect(PinyinService.pinyin(for: "A苹果1") == "A píngguǒ 1")
         #expect(PinyinService.pinyin(for: "苹果 123") == "píngguǒ 123")
 
+        // Latin and digits come back unchanged, so nothing was guessed.
+        #expect(PinyinService.resolution(for: "苹果 asdf").needsReview == false)
+
         // Other scripts are *not* passed through — ICU romanises them too.
         // Measured, and worth pinning: it is the kind of output that looks
-        // like a bug when you meet it for the first time, and it is exactly
-        // why the field stays editable.
+        // like a bug when you meet it for the first time. Since ICU is
+        // guessing at a script nobody asked it about, the result is flagged.
         #expect(PinyinService.pinyin(for: "хорошо苹果") == "horošo píngguǒ")
+        #expect(PinyinService.resolution(for: "хорошо苹果").needsReview)
         #expect(PinyinService.pinyin(for: "苹果ひらがな") == "píngguǒ hi ra ga na")
+        #expect(PinyinService.resolution(for: "苹果ひらがな").needsReview)
     }
 
     @Test("An ideograph ICU cannot transcribe yields nothing, not itself")
@@ -206,59 +214,189 @@ struct PinyinServiceTests {
 
     // MARK: - Known ICU limits
 
-    @Test("Known limit: the neutral tone is rendered as a full tone")
-    func neutralToneIsRenderedAsFullTone() {
-        // Conventional Pinyin writes "xièxie" and "dōngxi" — the second
-        // syllable is neutral. ICU gives it a full tone. Not a defect in this
-        // service, and the reason the field stays editable. Should ICU ever
-        // improve, this test tells us.
-        #expect(PinyinService.pinyin(for: "谢谢") == "xièxiè")
-        #expect(PinyinService.pinyin(for: "东西") == "dōngxī")
+    // MARK: - What the lexicon fixed
+
+    @Test("The neutral tone now comes from the lexicon")
+    func neutralToneComesFromTheLexicon() {
+        // Phase 3 had to pin the wrong values here, because ICU has no
+        // neutral tone at all: "xièxiè" instead of "xièxie", "zǎoshàng"
+        // instead of "zǎoshang". CC-CEDICT writes tone 5 for exactly this,
+        // and these are now the linguistically correct values.
+        #expect(PinyinService.pinyin(for: "谢谢") == "xièxie")
+        #expect(PinyinService.pinyin(for: "早上") == "zǎoshang")
+        #expect(PinyinService.pinyin(for: "明白") == "míngbai")
+        #expect(PinyinService.resolution(for: "谢谢").source == .lexicon)
+        #expect(PinyinService.resolution(for: "谢谢").needsReview == false)
     }
 
-    @Test("Known limit: the reading of 不 and 一 is unreliable")
-    func readingOfBuAndYiIsUnreliable() {
-        // ICU does **not** implement tone sandhi — it simply picks the reading
-        // inconsistently. Measured in phase 3:
-        //   不是   → bú shì    sandhi is correct here, and applied
-        //   不明白 → bú míngbái  no sandhi applies (明 is 2nd tone) — wrong
-        //   不对   → bùduì     sandhi should apply (对 is 4th tone) — not applied
-        //   一点   → yīdiǎn    should be yìdiǎn — not applied
-        // So the deviation goes in both directions. Another reason the field
-        // stays editable.
-        #expect(PinyinService.pinyin(for: "我不明白。").hasPrefix("wǒ bú"))
+    @Test("A lone syllable keeps its tone mark now")
+    func loneSyllableKeepsItsToneMark() {
+        // 钱 is qián. ICU dropped the mark entirely — phase 3 had to pin
+        // "qian". The lexicon has two entries, `Qian2` for the surname and
+        // `qian2` for money; they agree on the reading, so it is unambiguous
+        // and the common-noun spelling wins.
+        #expect(PinyinService.pinyin(for: "钱") == "qián")
+        #expect(PinyinService.pinyin(for: "这个多少钱？").hasSuffix("qián"))
+    }
+
+    @Test("Context resolves a word that is ambiguous on its own")
+    func contextResolvesAmbiguity() {
+        // 东西 has two readings: dōngxi (thing) and dōngxī (east and west).
+        // Alone it cannot be decided — see `ambiguousWordIsFlagged`. Inside a
+        // phrase the lexicon knows, it can, and this needs no rule of our
+        // own: the longest known phrase wins.
+        #expect(PinyinService.pinyin(for: "买东西") == "mǎi dōngxi")
+        #expect(PinyinService.resolution(for: "买东西").needsReview == false)
+
+        #expect(PinyinService.pinyin(for: "东西南北") == "dōngxī nánběi")
+        #expect(PinyinService.resolution(for: "东西南北").needsReview == false)
+
+        // 好 alone is ambiguous (hǎo/hào), 早上好 is not.
+        #expect(PinyinService.pinyin(for: "早上好") == "zǎoshang hǎo")
+        #expect(PinyinService.resolution(for: "早上好").needsReview == false)
+    }
+
+    @Test("Word boundaries come from the segmentation, not from the lexicon")
+    func spacingFollowsWordBoundaries() {
+        // CC-CEDICT separates every syllable and marks no word boundaries:
+        // 早上好 is `zao3 shang5 hao3` exactly like 火车站 is
+        // `huo3 che1 zhan4`. Joining everything would give "zǎoshanghǎo", so
+        // the syllables are split back over the tokenizer's words — which is
+        // only sound because a Han headword has exactly one syllable per
+        // character, verified across all 124.202 such entries.
+        #expect(PinyinService.pinyin(for: "火车站") == "huǒchēzhàn", "one word stays one word")
+        #expect(PinyinService.pinyin(for: "早上好") == "zǎoshang hǎo", "two words stay two")
+    }
+
+    @Test("Segmentation is not a greedy character match")
+    func segmentationUsesWordBoundaries() {
+        // A purely character-based longest match reads 我不明白 as
+        // 我 + 不明 + 白 — both are real headwords — and produces
+        // "wǒ bùmíng bái". Cutting only at the tokenizer's boundaries gives
+        // 我 + 不 + 明白 and the correct "wǒ bù míngbai".
+        #expect(PinyinService.pinyin(for: "我不明白") == "wǒ bù míngbai")
+        #expect(PinyinService.resolution(for: "我不明白").needsReview == false)
+    }
+
+    @Test("A compound the lexicon has no headword for is built from its parts")
+    func unknownCompoundIsDecomposed() {
+        // ICU returns these as one token, and CC-CEDICT has no headword for
+        // them, but every part is in there with a single reading. Asking ICU
+        // for the whole token would put a review hint on a card where
+        // nothing is uncertain.
+        for (hanzi, expected) in [("啤酒杯", "píjiǔbēi"), ("水果店", "shuǐguǒdiàn"), ("苹果树", "píngguǒshù")] {
+            let resolution = PinyinService.resolution(for: hanzi)
+            #expect(resolution.text == expected)
+            #expect(resolution.source == .lexicon, "\(hanzi) is built from known words")
+            #expect(resolution.needsReview == false)
+        }
+    }
+
+    @Test("Decomposition stops at a word with several readings")
+    func decompositionRefusesToSplitAnAmbiguousWord() {
+        // 东西风 is not a headword, while 东, 西 and 风 each have exactly one
+        // reading — so a character-by-character split would succeed and
+        // produce a confident "dōngxīfēng". But 东西 is precisely the word
+        // that cannot be settled without context, and cutting it in half
+        // would be a silent guess. (东西方 by contrast *is* a headword,
+        // `dong1 xi1 fang1`, and resolves without any of this.)
+        #expect(PinyinService.resolution(for: "东西风").needsReview, "no reading may be claimed here")
+        #expect(PinyinService.resolution(for: "东西方").needsReview == false, "a real headword")
+    }
+
+    @Test("A malformed lexicon reading never reaches the field")
+    func malformedReadingIsRejected() {
+        // 13 entries write two syllables without the separating space — the
+        // metric-unit characters, 兙 reads `shi2ke4`. `PinyinTone` hands back
+        // what it cannot parse, so without a check the digits would show up
+        // in the Pinyin field as a certain reading.
+        for hanzi in ["兙", "瓩", "粨"] {
+            let resolution = PinyinService.resolution(for: hanzi)
+            #expect(resolution.text.contains(where: \.isNumber) == false, "no digits in Pinyin")
+            #expect(resolution.source != .lexicon, "and not sold as a lexicon reading")
+        }
+    }
+
+    // MARK: - Where it still has to guess
+
+    @Test("An ambiguous word is flagged instead of guessed")
+    func ambiguousWordIsFlagged() {
+        // Measured: 1250 of 121.189 headwords (1,03 %) really have several
+        // readings. Without context there is nothing to decide it with, so
+        // the value falls back to ICU and says so. The German side of the
+        // card would often settle it, but CC-CEDICT's glosses are English and
+        // there is no dependable offline bridge — see architecture.md A24.
+        let resolution = PinyinService.resolution(for: "东西")
+        #expect(resolution.text == "dōngxī", "ICU's reading, pinned as measured behaviour")
+        #expect(resolution.source == .icuFallback)
+        #expect(resolution.needsReview)
+    }
+
+    @Test("A sentence with one unresolved word is flagged as a whole")
+    func partlyResolvedSentenceIsFlagged() {
+        // From the device test: "Ich möchte etwas essen." → 我想吃点东西.
+        // 我, 想, 吃 and 点 all come from the lexicon. 东西 does not, and the
+        // decisive reason is that it is **ambiguous**, not merely absent: no
+        // phrase over the surrounding tokens is a headword (the candidates
+        // from 吃 are 吃点东西, 吃点, 吃 and from 点 they are 点东西, 点), and
+        // because 东西 has two readings the decomposition refuses to split it
+        // into 东 + 西 either. One guess is enough to ask the user to look.
+        let resolution = PinyinService.resolution(for: "我想吃点东西")
+        #expect(resolution.text == "wǒ xiǎng chī diǎn dōngxī", "ICU's reading for 东西, pinned as measured behaviour")
+        #expect(resolution.source == .mixed)
+        #expect(resolution.needsReview)
+
+        // Same with the full stop, which is dropped rather than transcribed.
+        #expect(PinyinService.pinyin(for: "我想吃点东西。") == "wǒ xiǎng chī diǎn dōngxī")
+    }
+
+    @Test("A fully resolved result is not flagged")
+    func resolvedResultIsNotFlagged() {
+        for hanzi in ["苹果", "火车站", "洗手间在哪里？", "我来自德国。", "请结账。"] {
+            let resolution = PinyinService.resolution(for: hanzi)
+            #expect(resolution.source == .lexicon, "\(hanzi) should come entirely from the lexicon")
+            #expect(resolution.needsReview == false)
+        }
+    }
+
+    @Test("Nothing to resolve is not something to review")
+    func emptyResultIsNotFlagged() {
+        for input in ["", "   ", "asdf", "123", "。"] {
+            let resolution = PinyinService.resolution(for: input)
+            #expect(resolution.text.isEmpty)
+            #expect(resolution.source == .empty)
+            #expect(resolution.needsReview == false, "an empty field is not a wrong reading")
+        }
+    }
+
+    @Test("Known limit: no tone sandhi, but the readings are the dictionary's now")
+    func sandhiIsNotApplied() {
+        // Neither the lexicon nor ICU applies tone sandhi, and conventional
+        // Pinyin does not write it either — 不 stays bù before a fourth tone
+        // instead of becoming bú. That is correct as written Pinyin and only
+        // worth knowing when speaking.
+        //
+        // What changed: phase 3 had ICU picking the 不 reading inconsistently
+        // and wrongly ("bú míngbái" — 明 is a second tone, so no sandhi
+        // applies at all). The readings now come from the data.
+        #expect(PinyinService.pinyin(for: "我不明白。") == "wǒ bù míngbai")
         #expect(PinyinService.pinyin(for: "不对") == "bùduì")
         #expect(PinyinService.pinyin(for: "一点") == "yīdiǎn")
+        // And these are lexicon readings, not ICU's — otherwise the test
+        // would not show where the improvement came from.
+        for hanzi in ["我不明白。", "不对", "一点"] {
+            #expect(PinyinService.resolution(for: hanzi).source == .lexicon)
+        }
     }
 
-    @Test("Known limit: the neutral tone in 东西 — neither path delivers it")
-    func neutralToneOfDongxiIsNotDelivered() {
-        // Found on the device in phase 4 with the sentence "Ich möchte etwas
-        // essen." → 我想吃点东西. In the sense "thing" the standard reading is
-        // "dōngxi" with a neutral second syllable; ICU gives "dōngxī".
-        //
-        // Measured separately for both paths, so this is not a tokenizer
-        // quirk that path 2 would fix:
-        //   tokenizer: 东西 → dōngxī        我想吃点东西 → wǒ xiǎng chī diǎn dōngxī
-        //   fallback : 东西 → dōng xī       我想吃点东西 → wǒ xiǎng chī diǎn dōng xī
-        // The fallback is worse: full tone *and* split syllables.
-        //
-        // The value below is pinned as **what ICU does**, not as correct
-        // Pinyin. Nothing Apple-native produces "dōngxi", because the reading
-        // depends on the word sense: in 东西南北 ("east and west") the full
-        // tone is right, and ICU renders both the same way. Fixing it would
-        // take a dictionary of our own — out of scope here, and the reason the
-        // Pinyin field stays editable.
-        #expect(PinyinService.pinyin(for: "东西") == "dōngxī")
-        #expect(PinyinService.pinyin(for: "我想吃点东西。") == "wǒ xiǎng chī diǎn dōngxī")
-        #expect(PinyinService.pinyin(for: "东西南北") == "dōngxī nánběi")
-    }
-
-    @Test("Known limit: single syllables can lose their tone mark")
-    func someSyllablesLoseTheirToneMark() {
-        // 钱 is qián. ICU drops the mark entirely — the one deviation that is
-        // not about the neutral tone.
-        #expect(PinyinService.pinyin(for: "钱") == "qian")
-        #expect(PinyinService.pinyin(for: "这个多少钱？") == "zhègè duōshǎo qian")
+    @Test("Known limit: an ambiguous word inside a sentence still guesses")
+    func ambiguousWordInsideASentenceGuesses() {
+        // 多少 has two readings, so that one word falls back to ICU while the
+        // rest is resolved: 这个 and 钱 are lexicon readings, only `duōshǎo`
+        // is ICU's guess and pinned as measured behaviour.
+        let resolution = PinyinService.resolution(for: "这个多少钱？")
+        #expect(resolution.text == "zhège duōshǎo qián")
+        #expect(resolution.source == .mixed, "part lexicon, part guess")
+        #expect(resolution.needsReview)
     }
 }

@@ -5,34 +5,76 @@
 
 import Foundation
 
+/// How a Pinyin value came about.
+///
+/// Deliberately categorical: either the reading came out of the lexicon, or
+/// something had to be guessed by transliteration. No percentages, no
+/// confidence — a number would suggest a precision that does not exist.
+struct PinyinResolution: Equatable {
+
+    enum Source: Equatable {
+        /// Every word came from the lexicon, with exactly one reading each.
+        case lexicon
+        /// Some words came from the lexicon, at least one had to fall back.
+        case mixed
+        /// Nothing could be looked up; the whole value is transliterated.
+        case icuFallback
+        /// Nothing to resolve — no Chinese in the input.
+        case empty
+    }
+
+    let text: String
+    let source: Source
+
+    /// Whether the user should look at this value before trusting it.
+    ///
+    /// True exactly when a transliterated guess is part of the result. That
+    /// is the one thing the editor shows a hint for.
+    var needsReview: Bool {
+        source == .mixed || source == .icuFallback
+    }
+
+    static let empty = PinyinResolution(text: "", source: .empty)
+}
+
 /// Turns Hanzi into Pinyin with tone marks.
 ///
-/// Runs entirely offline on ICU data shipped with the system: no network, no
-/// permission, no dictionary of our own, no external dependency.
+/// Runs entirely offline: the bundled CC-CEDICT readings plus the ICU data
+/// that ships with the system. No network, no permission, no external
+/// dependency.
 ///
-/// Two paths, in this order:
+/// Three questions, answered by whoever knows best:
 ///
-/// 1. `CFStringTokenizer` with `kCFStringTokenizerAttributeLatinTranscription`.
-///    Chinese is written without spaces, and the tokenizer knows where the
-///    word boundaries are, so `苹果` comes back as one word `píngguǒ` rather
-///    than the two syllables `píng guǒ`.
-/// 2. `CFStringTransform` with `kCFStringTransformMandarinLatin` as a
-///    fallback, for input the tokenizer yields nothing for.
+/// 1. **Where are the word boundaries?** `CFStringTokenizer` with the
+///    Simplified Chinese locale. Chinese is written without spaces, and ICU's
+///    segmentation is good at this — measured: `火车站`, `洗手间` and `明白`
+///    come back as single tokens.
+/// 2. **How is a word read?** `ChineseLexicon`, and only it, whenever the
+///    word has exactly one reading. This is where the neutral tone comes
+///    from: `谢谢` is `xièxie` and `早上` is `zǎoshang`, both of which ICU
+///    renders with a full second tone.
+/// 3. **What if the lexicon cannot say?** Then, and only then, ICU's own
+///    transcription — the tokenizer's, or `CFStringTransform` for the rare
+///    characters it has none for. Flagged either way, so the editor can ask
+///    the user to check it.
 ///
-/// Both paths are guarded twice, because ICU happily hands non-Chinese input
-/// straight back: the source has to contain Han script, and the result has to
-/// look like a transcription rather than a copy of the input. Measured in
-/// phase 4 on the device: without those guards `asdf` typed into the Hanzi
-/// field ended up as the Pinyin `asdf`.
+/// A token the lexicon has no headword for is decomposed into words it does
+/// know before ICU is asked — `啤酒杯` is `啤酒` plus `杯` — so an ordinary
+/// compound does not end up flagged for review over nothing.
 ///
-/// Known limit, deliberately not solved: ICU has no word sense. It picks one
-/// reading per word, which is wrong for polyphonic characters (多音字) in the
-/// less common reading and for the neutral tone — `东西` comes back as
-/// `dōngxī`, right for "east and west" and wrong for "thing". Word
-/// segmentation improves the odds but guarantees nothing, which is exactly
-/// why the Pinyin field stays editable and a hand-corrected value is never
-/// overwritten silently. Details in
-/// `docs/apple-frameworks.md` §10, Q6.
+/// The search runs longest-known-phrase-first over the ICU tokens, which is
+/// what resolves ambiguity from context without a single hand-written rule:
+/// `东西` alone has two readings and gets flagged, but in `买东西` the phrase
+/// is in the lexicon and reads `mǎi dōngxi`, while `东西南北` reads
+/// `dōngxī nánběi`. Using the ICU boundaries as the only candidate cut points
+/// is what keeps this safe — a purely character-based longest match reads `我不明白`
+/// as `不明` + `白`, which is wrong.
+///
+/// Known limit, deliberately not solved: a word with several readings that no
+/// surrounding phrase disambiguates. The German side of the card would often
+/// settle it — `etwas` versus `Osten und Westen` — but CC-CEDICT's glosses are
+/// English and there is no dependable offline bridge from German to them. See
+/// `docs/architecture.md` A24 and `docs/apple-frameworks.md` §10, Q6.
 enum PinyinService {
 
     /// The Pinyin for `hanzi`, or an empty string when nothing can be derived.
@@ -40,15 +82,21 @@ enum PinyinService {
     /// Never throws and never blocks: an empty result simply means the user
     /// fills the field in by hand.
     static func pinyin(for hanzi: String) -> String {
-        let source = hanzi.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Neither path recognises "this is not Chinese" — they transliterate
-        // what they can and pass the rest through. So the question is settled
-        // here, before either of them runs.
-        guard containsHanScript(source) else { return "" }
+        resolution(for: hanzi).text
+    }
 
-        let candidate = segmentedTranscription(of: source) ?? transliteration(of: source)
-        guard isPlausibleTranscription(candidate, of: source) else { return "" }
-        return candidate
+    /// The Pinyin plus where it came from.
+    @MainActor
+    static func resolution(for hanzi: String) -> PinyinResolution {
+        let source = hanzi.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Neither the lexicon nor ICU recognises "this is not Chinese" — ICU
+        // transliterates what it can and passes the rest through. So the
+        // question is settled here, before anything else runs.
+        guard containsHanScript(source) else { return .empty }
+
+        let resolved = resolveWords(in: source)
+        guard isPlausibleTranscription(resolved.text, of: source) else { return .empty }
+        return resolved
     }
 
     /// Whether `text` contains at least one Han character.
@@ -70,9 +118,209 @@ enum PinyinService {
         text.unicodeScalars.contains { $0.properties.isIdeographic }
     }
 
-    // MARK: - Path 1: word-segmented transcription
+    // MARK: - Resolution
 
-    private static func segmentedTranscription(of text: String) -> String? {
+    @MainActor
+    private static func resolveWords(in text: String) -> PinyinResolution {
+        let lexicon = ChineseLexicon.shared
+        let tokens = segmentedTokens(of: text)
+
+        var pieces: [String] = []
+        var usedLexicon = false
+        var usedFallback = false
+        var index = 0
+
+        while index < tokens.count {
+            let token = tokens[index]
+
+            // Not Chinese. Mixed input is allowed (see `containsHanScript`),
+            // and what ICU does with it decides whether this counts as a
+            // guess: Latin and digits come back unchanged, which is a
+            // pass-through and nothing to review, but Cyrillic or Kana get
+            // romanised — measured, `хорошо` becomes `horošo` — and that is
+            // ICU guessing at a script it was not asked about.
+            guard token.text.contains(where: { containsHanScript(String($0)) }) else {
+                if let transcription = token.transcription, transcription.isEmpty == false {
+                    pieces.append(transcription)
+                    if transcription != token.text {
+                        usedFallback = true
+                    }
+                }
+                index += 1
+                continue
+            }
+
+            // Longest known phrase first, cut only at ICU's word boundaries.
+            if let match = longestKnownPhrase(in: tokens, from: index, lexicon: lexicon) {
+                pieces.append(contentsOf: match.pinyin)
+                usedLexicon = true
+                index += match.tokenCount
+                continue
+            }
+
+            // ICU sometimes returns a compound as one token that the
+            // lexicon does not know as a headword, while every part of it is
+            // in there — `啤酒杯` is `啤酒` plus `杯`. Taking ICU's reading for
+            // the whole thing would put a review hint on a card where
+            // nothing is uncertain, so the token is decomposed first.
+            if let decomposed = decomposition(of: token.text, lexicon: lexicon) {
+                pieces.append(decomposed)
+                usedLexicon = true
+                index += 1
+                continue
+            }
+
+            // The lexicon has no single answer. Guess, and say that we did.
+            if let guess = transliterationGuess(for: token) {
+                pieces.append(guess)
+            }
+            usedFallback = true
+            index += 1
+        }
+
+        let joined = pieces.joined(separator: " ")
+        return PinyinResolution(text: joined, source: source(lexicon: usedLexicon, fallback: usedFallback, text: joined))
+    }
+
+    private static func source(lexicon: Bool, fallback: Bool, text: String) -> PinyinResolution.Source {
+        guard text.isEmpty == false else { return .empty }
+        switch (lexicon, fallback) {
+        case (true, false): return .lexicon
+        case (true, true): return .mixed
+        case (false, true): return .icuFallback
+        case (false, false): return .empty
+        }
+    }
+
+    /// The longest run of tokens starting at `start` that the lexicon knows
+    /// as one headword with a single reading.
+    ///
+    /// Returns one Pinyin piece per token, so the spacing follows ICU's word
+    /// boundaries rather than the lexicon's, which has none: CC-CEDICT writes
+    /// every syllable separately, `早上好` as `zao3 shang5 hao3`, and gives no
+    /// hint that this is two words. Splitting the syllables back over the
+    /// tokens works because a headword of pure Han characters has exactly one
+    /// syllable per character — verified across all 124.202 such entries in
+    /// the snapshot, and checked again here rather than assumed.
+    @MainActor
+    private static func longestKnownPhrase(
+        in tokens: [Token],
+        from start: Int,
+        lexicon: ChineseLexicon
+    ) -> (pinyin: [String], tokenCount: Int)? {
+        var count = tokens.count - start
+        while count >= 1 {
+            let group = tokens[start..<(start + count)]
+            let word = group.map(\.text).joined()
+
+            if word.count <= lexicon.longestHeadwordLength,
+               word.allSatisfy({ containsHanScript(String($0)) }),
+               let numbered = lexicon.reading(for: word),
+               let marked = markedPinyin(of: numbered, characterCount: word.count) {
+                var pinyin: [String] = []
+                var syllableIndex = 0
+                for token in group {
+                    let length = token.text.count
+                    pinyin.append(marked[syllableIndex..<(syllableIndex + length)].joined())
+                    syllableIndex += length
+                }
+                return (pinyin, count)
+            }
+            count -= 1
+        }
+        return nil
+    }
+
+    /// The tone-marked Pinyin for one lexicon reading, or `nil` when the
+    /// entry cannot be trusted.
+    ///
+    /// Two conditions. The syllable count has to match the character count,
+    /// which holds for every pure-Han headword in the data — checked rather
+    /// than assumed. And the converted text must not contain a digit: 13
+    /// entries write two syllables without the separating space (`兙` reads
+    /// `shi2ke4`, the metric-unit characters), and `PinyinTone` deliberately
+    /// hands anything it cannot parse back unchanged. Without this check
+    /// `shi2ke4` would appear in the Pinyin field as a certain reading.
+    @MainActor
+    private static func markedPinyin(of numbered: String, characterCount: Int) -> [String]? {
+        let syllables = numbered.split(separator: " ").map(String.init)
+        guard syllables.count == characterCount else { return nil }
+        let marked = syllables.map(PinyinTone.marked(syllable:))
+        guard marked.allSatisfy({ $0.contains(where: \.isNumber) == false }) else { return nil }
+        return marked
+    }
+
+    /// Splits a token the lexicon does not know as a whole into words it does
+    /// know, longest first, and returns their readings joined.
+    ///
+    /// No spaces in the result: the tokenizer considers this one word, and
+    /// this only fills in a reading it has no headword for.
+    ///
+    /// Gives up rather than guessing in two situations. A part that is not in
+    /// the lexicon at all ends the attempt — and so does a part that is
+    /// *known to have several readings*, because cutting such a word into
+    /// single characters would silently pick one of them: `东西方` would
+    /// become `dōngxīfāng` and look certain, when `东西` is exactly the word
+    /// that cannot be settled without context.
+    @MainActor
+    private static func decomposition(of token: String, lexicon: ChineseLexicon) -> String? {
+        let characters = Array(token)
+        guard characters.count > 1 else { return nil }
+
+        var pieces: [String] = []
+        var index = 0
+        while index < characters.count {
+            var length = min(lexicon.longestHeadwordLength, characters.count - index)
+            var matched = false
+            while length >= 1 {
+                let candidate = String(characters[index..<(index + length)])
+                if lexicon.isAmbiguous(candidate) { return nil }
+                if let numbered = lexicon.reading(for: candidate),
+                   let marked = markedPinyin(of: numbered, characterCount: length) {
+                    pieces.append(marked.joined())
+                    index += length
+                    matched = true
+                    break
+                }
+                length -= 1
+            }
+            guard matched else { return nil }
+        }
+        return pieces.joined()
+    }
+
+    /// ICU's own reading for a token the lexicon cannot settle.
+    ///
+    /// The tokenizer's transcription first, then `CFStringTransform` for the
+    /// rare characters it returns nothing for — measured: U+20000 has no
+    /// transcription but transforms to `hē`. Both are guesses, which is why
+    /// the caller marks the result for review either way.
+    private static func transliterationGuess(for token: Token) -> String? {
+        if let transcription = token.transcription,
+           transcription.contains(where: { $0.isLetter }) {
+            return transcription
+        }
+        guard let mutable = CFStringCreateMutableCopy(nil, 0, token.text as CFString),
+              CFStringTransform(mutable, nil, kCFStringTransformMandarinLatin, false) else {
+            return nil
+        }
+        let transformed = (mutable as String)
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        guard transformed.contains(where: { $0.isLetter }) else { return nil }
+        return transformed
+    }
+
+    // MARK: - ICU segmentation
+
+    private struct Token {
+        let text: String
+        /// ICU's own Latin transcription of this token, used only as the
+        /// fallback when the lexicon has no single reading.
+        let transcription: String?
+    }
+
+    private static func segmentedTokens(of text: String) -> [Token] {
         let cfText = text as CFString
         let range = CFRangeMake(0, CFStringGetLength(cfText))
         // The Simplified Chinese locale is what makes the tokenizer split a
@@ -81,60 +329,44 @@ enum PinyinService {
         guard let tokenizer = CFStringTokenizerCreate(
             nil, cfText, range, kCFStringTokenizerUnitWordBoundary, locale
         ) else {
-            return nil
+            return []
         }
 
-        var words: [String] = []
+        let nsText = text as NSString
+        var tokens: [Token] = []
         while CFStringTokenizerAdvanceToNextToken(tokenizer).rawValue != 0 {
-            let attribute = CFStringTokenizerCopyCurrentTokenAttribute(
-                tokenizer, kCFStringTokenizerAttributeLatinTranscription
+            let tokenRange = CFStringTokenizerGetCurrentTokenRange(tokenizer)
+            guard tokenRange.location >= 0, tokenRange.length > 0 else { continue }
+            let word = nsText.substring(
+                with: NSRange(location: tokenRange.location, length: tokenRange.length)
             )
-            guard let transcription = attribute as? String else { continue }
-            let word = transcription.trimmingCharacters(in: .whitespacesAndNewlines)
             // Punctuation does carry a transcription — "。" comes back as "｡".
             // Measured in phase 3; without this filter a sentence ended up as
             // "wǒ xiǎng chī diǎn dōngxī ｡". Pinyin is written without the
-            // Chinese punctuation, so anything without a letter or digit goes.
+            // Chinese punctuation, so tokens without a letter or digit go.
             guard word.contains(where: { $0.isLetter || $0.isNumber }) else { continue }
-            words.append(word)
-        }
 
-        return words.isEmpty ? nil : words.joined(separator: " ")
+            let transcription = (CFStringTokenizerCopyCurrentTokenAttribute(
+                tokenizer, kCFStringTokenizerAttributeLatinTranscription
+            ) as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            tokens.append(Token(text: word, transcription: transcription))
+        }
+        return tokens
     }
 
-    // MARK: - Path 2: plain transliteration
-
-    private static func transliteration(of text: String) -> String {
-        guard let mutable = CFStringCreateMutableCopy(nil, 0, text as CFString) else { return "" }
-        guard CFStringTransform(mutable, nil, kCFStringTransformMandarinLatin, false) else {
-            return ""
-        }
-        let transformed = collapsingWhitespace(in: mutable as String)
-        // Same filter as path 1, for the same reason.
-        guard transformed.contains(where: { $0.isLetter || $0.isNumber }) else { return "" }
-        return transformed
-    }
-
-    // MARK: - Shared
+    // MARK: - Plausibility
 
     /// Whether `candidate` is a transcription rather than the input handed
     /// back.
     ///
-    /// The Han check above lets mixed input through, and the ideographic
-    /// property covers a few scripts Mandarin transliteration knows nothing
-    /// about, so the result is checked as well: it has to differ from the
-    /// source and carry a cased letter. Han characters are letters but have
-    /// no case, so a result that is merely a copy of the input fails here.
+    /// The Han check lets mixed input through, and the ideographic property
+    /// covers a few scripts Mandarin transliteration knows nothing about, so
+    /// the result is checked as well: it has to differ from the source and
+    /// carry a cased letter. Han characters are letters but have no case, so
+    /// a result that is merely a copy of the input fails here.
     private static func isPlausibleTranscription(_ candidate: String, of source: String) -> Bool {
         guard candidate.isEmpty == false, candidate != source else { return false }
         return candidate.contains { $0.isCased }
-    }
-
-    /// Single spaces between words, nothing at the ends. Tone marks stay —
-    /// they are the whole point.
-    private static func collapsingWhitespace(in text: String) -> String {
-        text
-            .split(whereSeparator: \.isWhitespace)
-            .joined(separator: " ")
     }
 }

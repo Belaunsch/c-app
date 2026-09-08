@@ -70,6 +70,15 @@ c-app/
 │   ├── RootView.swift              TabView: Lernen · Karten
 │   ├── Assets.xcassets/            App-Icon-Slots, Akzentfarbe (Xcode-Template)
 │   │
+│   ├── Resources/
+│   │   └── ThirdParty/
+│   │       └── CC-CEDICT/          Lexikondaten Dritter, CC BY-SA 4.0
+│   │           ├── cedict-readings.txt    abgeleitet, 2,55 MB
+│   │           ├── cedict-ambiguous.txt   abgeleitet, 6 KB
+│   │           ├── LICENSE.txt
+│   │           ├── ATTRIBUTION.md
+│   │           └── SOURCE.md              Herkunft, Version, Änderungen
+│   │
 │   ├── Models/
 │   │   ├── Card.swift              @Model
 │   │   ├── Tag.swift               @Model
@@ -324,13 +333,65 @@ Fehler.
 
 ### PinyinService
 
-- Rein funktional, kein Zustand, kein Netzwerk, keine Berechtigung.
-- `CFStringTokenizer` mit `kCFStringTokenizerAttributeLatinTranscription` für
-  wortweise Segmentierung; `CFStringTransform` mit
-  `kCFStringTransformMandarinLatin` als Fallback.
-- Vollständig unit-testbar.
-- Grenzen (polyphone Zeichen, Versionsstabilität) siehe
-  [apple-frameworks.md](apple-frameworks.md#5-hanzi--pinyin-mit-tonzeichen).
+Beantwortet drei Fragen, jede von der Quelle, die sie am besten kann
+(Entscheidung A22):
+
+1. **Wo sind die Wortgrenzen?** `CFStringTokenizer` mit dem Locale
+   `zh_Hans`. Chinesisch wird ohne Leerzeichen geschrieben, und ICUs
+   Segmentierung ist darin gut — gemessen liefert sie `火车站`, `洗手间` und
+   `明白` als je ein Token.
+2. **Wie wird ein Wort gelesen?** `ChineseLexicon`, und nur es, sobald das
+   Wort genau eine Lesung hat. Daher kommen die neutralen Töne, die ICU
+   überhaupt nicht kennt.
+3. **Was, wenn das Lexikon nichts sagen kann?** Dann, und nur dann, ICUs
+   eigene Transkription — als `needsReview` gekennzeichnet.
+
+Gesucht wird die **längste bekannte Phrase ab der aktuellen Position**,
+geschnitten ausschließlich an ICUs Wortgrenzen. Das löst Mehrdeutigkeit aus
+dem Kontext ohne eine einzige selbst geschriebene Regel: `东西` allein hat
+zwei Lesungen und wird markiert, in `买东西` steht die Phrase im Lexikon und
+ergibt `mǎi dōngxi`, `东西南北` ergibt `dōngxī nánběi`.
+
+Rückgabe ist `PinyinResolution` mit `text`, `source`
+(`lexicon` · `mixed` · `icuFallback` · `empty`) und dem daraus abgeleiteten
+`needsReview`. Bewusst kategorial: **keine** Prozent- oder Confidence-Werte,
+weil es die Genauigkeit nicht gibt, die eine Zahl behaupten würde.
+
+Die beiden Schutzprüfungen aus Phase 4 bleiben vorgeschaltet: Die Quelle muss
+Han-Schrift enthalten, und das Ergebnis muss wie eine Transkription aussehen
+und nicht wie die durchgereichte Eingabe.
+
+Grenzen siehe
+[apple-frameworks.md §5](apple-frameworks.md#5-hanzi--pinyin-mit-tonzeichen)
+und §10, Q6.
+
+### ChineseLexicon
+
+Lädt die gebündelten CC-CEDICT-Ableitungen und beantwortet genau zwei Fragen:
+Wie liest sich dieses Wort, und ist das die einzige Lesung? Interpretiert
+keine Bedeutung.
+
+Gemessene Werte (Mac, Release-Build, Snapshot vom 2026-09-07):
+
+| | |
+| --- | --- |
+| Datei lesen | 2 ms |
+| Index aufbauen | 44 ms für 119.939 Einträge |
+| Speicher | 10,0 MB resident |
+| 80.000 Lookups | 2,4 ms |
+| Satz segmentieren | 5 µs |
+| Zuwachs Release-Bundle | 2,6 MB (1,3 MB → 4,1 MB) |
+
+Deshalb: **einmal laden und behalten.** Keine Datenbank, keine Index-Dateien,
+keine Cache-Verdrängung. Geladen wird aus dem `task` des Editors, damit die
+44 ms in die Sheet-Animation fallen und nicht mitten in eine Eingabe.
+
+### PinyinTone
+
+Wandelt CC-CEDICTs Tonziffern in Tonzeichen: `dong1 xi5` → `dōngxi`. Rein,
+deterministisch, ohne ICU — die eine Stelle der Kette, an der Korrektheit
+vollständig aus der Eingabe entscheidbar ist. Ton 5 ist der neutrale Ton und
+bekommt **kein** Zeichen; das ist der ganze Punkt.
 
 ### TranslationService
 
@@ -534,4 +595,8 @@ Konvention beim Schreiben des Modells.
 | A19 | Der Editor synchronisiert seinen Zustand **vor** dem Speichern, nicht erst beim Fokusverlust | `reconcileForSave()` tut, was das Verlassen des Feldes getan hätte: normalisieren, Herkunft abgleichen, und das Pinyin neu ableiten, wenn es nicht zum Hanzi im Feld gehört — ein manuell korrigiertes Pinyin ausgenommen. Die Frage lautet ausdrücklich **„aus welchem Hanzi wurde dieses Pinyin erzeugt?"** (`pinyinSourceHanzi`) und nicht „hat sich das Hanzi seit dem letzten Abgleich geändert?". Die beiden fallen auseinander, sobald eine Übersetzung eintrifft, während der Nutzer ein eigenes Hanzi tippt: `completeTranslation` gleicht die Herkunft ab — schiebt also die Hanzi-Baseline vor — und bricht dann ab, ohne das Pinyin anzufassen. Die änderungsbasierte Regel sah danach „nichts geändert" und speicherte das Pinyin des alten Worts; im Test `decliningTranslationDoesNotLeaveAStalePinyin` festgenagelt und gegen die alte Regel als rot gemessen. Nebeneffekt derselben Frage: Ein vom Nutzer **geleertes** Pinyin hat das aktuelle Hanzi als Quelle und wird deshalb nicht hinter seinem Rücken nachgefüllt — „Pinyin kann leer bleiben" stimmt damit wieder. Grund ist ein echter Fehler aus dem Gerätetest der Phase 4: „Brot" ergab `面包`/`miànbāo`, das Hanzi wurde von Hand auf `水` korrigiert, und direkt aus dem Hanzi-Feld gespeichert stand `水` mit `miànbāo` in der Karte — die Lesung eines Worts, das nicht mehr auf der Karte war. Ein Tap auf die Toolbar verschiebt den Fokus nicht zuverlässig, also darf die Korrektheit nicht davon abhängen, dass SwiftUI vorher ein Fokusereignis liefert. Die Regel ist ohne View testbar. |
 | A20 | Automatisches Pinyin nur aus echtem Hanzi, und veraltetes Pinyin wird geleert | `PinyinService` verlangt mindestens ein Han-Zeichen in der Quelle und ein plausibles Ergebnis (Details in [apple-frameworks.md §5](apple-frameworks.md#5-hanzi--pinyin-mit-tonzeichen)) — ICU reichte sonst Nicht-Chinesisch durch, im Gerätetest wurde aus `asdf` das Pinyin `asdf`. Lässt sich nichts ableiten, wird ein **automatisches** Pinyin geleert statt stehen gelassen: es gehörte zu einem anderen Hanzi. Ein **manuelles** Pinyin wird nie gelöscht, auch nicht vom Refresh. Dieselbe Prüfung gilt beim Speichern: Das Hanzi-Feld braucht mindestens ein Han-Zeichen, gemischter Text mit Han-Anteil bleibt erlaubt. |
 | A21 | Return/„Fertig" gibt nur den Fokus frei, gearbeitet wird an einer Stelle | Die drei Felder sind einzeilig, damit Return überhaupt ein Submit auslöst; `onSubmit` setzt lediglich `focusedField = nil`, was die Tastatur schließt. Die eigentliche Arbeit hängt an der Fokusänderung (`endEditing(of:)`). Damit kann ein Tastendruck strukturell keine zwei Übersetzungen starten, ohne Merker im View. Zusätzlich merkt sich das Modell den zuletzt angefragten deutschen Text, sodass ein doppelter Aufruf auch dort nichts auslöst. Leerzeichen bleiben erlaubt — Sätze brauchen sie, Satz-Pinyin auch —, nur Zeilenumbrüche werden beim Abschluss zu Leerzeichen normalisiert. **Preis der Einzeiligkeit:** Ein langer Satz ist nur scrollend im Feld zu lesen. Wenn sich das im Gerätetest als störend erweist, ist der dokumentierte Ausweg `axis: .vertical` plus ein „Fertig" in einer `ToolbarItemGroup(placement: .keyboard)` — dann bleibt es bei genau einem Abschlussweg (`focusedField = nil`), nur ausgelöst über die Tastatur-Toolbar statt über die Return-Taste. |
+| A22 | Das Lexikon ist die Primärquelle für Pinyin, ICU nur noch gekennzeichneter Fallback | Reine Transliteration reicht für eine Lern-App nicht: ICU kennt den neutralen Ton nicht (`谢谢`→`xièxiè` statt `xièxie`), verliert einzelne Tonzeichen (`钱`→`qian`) und wählt bei mehrdeutigen Zeichen inkonsistent. CC-CEDICT kodiert Ton 5 explizit, führt Wort- und Phraseneinträge und trennt mehrere Lesungen. Gemessen am Snapshot: **nur 1.250 von 121.189 Stichwörtern (1,03 %) haben tatsächlich verschiedene Lesungen**, und 1.249 davon sind ein bis drei Zeichen lang — mehrzeichige Wörter sind praktisch immer eindeutig. Der Aufwand liegt also fast vollständig in der Datenbeschaffung, nicht in der Disambiguierung. Daten als gebündeltes Asset, **keine** Laufzeit-Dependency; Herkunft und Lizenz in [SOURCE.md](../CApp/Resources/ThirdParty/CC-CEDICT/SOURCE.md). **Zwei bekannte Grenzen, bewusst so:** (1) Wer Deutsch tippt, Hanzi tippt und sofort speichert, speichert ein prüfbedürftiges Pinyin, ohne den Hinweis gesehen zu haben — der Editor darf nach Regel 5 nichts blockieren, und beim Wiederöffnen der Karte steht der Hinweis da, weil der Zustand abgeleitet wird. (2) 13 Einträge schreiben zwei Silben ohne Trennzeichen (`兙` liest `shi2ke4`, die metrischen Einheitenzeichen); solche Lesungen werden verworfen statt mit Ziffern ins Feld geschrieben. |
+| A23 | Wortgrenzen von ICU, Lesungen vom Lexikon | Zwei getrennte Fragen, zwei getrennte Quellen. CC-CEDICT trennt **jede** Silbe und kodiert keine Wortgrenzen — `早上好` steht als `zao3 shang5 hao3` genau wie `火车站` als `huo3 che1 zhan4` —, also käme aus dem Lexikon allein `zǎoshanghǎo` heraus. Umgekehrt zerschneidet ein rein zeichenbasierter Longest Match Wörter falsch: `我不明白` wird zu `我`+`不明`+`白` und ergibt `wǒ bùmíng bái` statt `wǒ bù míngbai`. Beides gemessen. Deshalb: Kandidatengrenzen sind ausschließlich ICUs Tokengrenzen, und die Silben einer Phrase werden an genau diesen Grenzen wieder aufgeteilt. **Ein Token, das das Lexikon nicht als Stichwort kennt, wird davor in bekannte Wörter zerlegt** — ICU liefert `啤酒杯` als ein Token, CC-CEDICT hat dafür kein Stichwort, aber `啤酒` und `杯` stehen beide darin. Ohne diese Zerlegung erschiene der Prüfhinweis auf gewöhnlichen Wortkarten, an denen nichts unsicher ist. Die Zerlegung bricht ab, sobald ein Teil **mehrdeutig** ist: `东西风` in `东`+`西`+`风` zu schneiden würde ein selbstsicheres `dōngxīfēng` ergeben, obwohl `东西` genau das Wort ist, das ohne Kontext nicht entscheidbar ist. Dafür existiert die Mehrdeutigkeitsliste im Asset. Das ist tragfähig, weil ein reines Han-Stichwort **exakt eine Silbe pro Zeichen** hat — über alle 124.202 solchen Einträge geprüft, und im Code noch einmal geprüft statt angenommen. |
+| A24 | Keine deutsche Bedeutungsauflösung in dieser Iteration | Das deutsche Feld wäre der natürliche Tiebreaker für die verbleibenden Mehrdeutigkeiten — `etwas` gegen `Osten und Westen` —, aber CC-CEDICTs Glossen sind **englisch**. Geprüfte Wege und warum keiner trägt: Apples Translation-Framework für Deutsch → Englisch macht die Pinyin-Erzeugung von einem zusätzlichen Sprachmodell abhängig, das nichts garantiert (und `TranslationSession` ist ohnehin nur über den View-Modifier zu bekommen); `NLEmbedding` ist einsprachig und kennt keine deutsch-englische Ausrichtung; eine eigene Wortliste wäre genau die verbotene Hardcode-Sammlung. Also **nicht geraten**: Was der chinesische Kontext nicht löst, wird ICU-Fallback mit `needsReview` und einem sichtbaren Hinweis. Der offene Weg ist eine deutschsprachige Lexikonquelle (HanDeDict, CH-DE-Dict) — erst nach Messung des Restbedarfs, siehe Roadmap Phase 4.5. |
+| A25 | Filter hinter einem Knopf, Kategorienverwaltung daneben | Die Liste ist der Zweck des Bildschirms, die Filter werden gelegentlich benutzt — also bekommt die Liste den Platz. Lernstatus und Kategorien liegen zusammen auf einem Sheet hinter einem Symbol, das **gefüllt** ist, solange etwas filtert; `CardFilterSelection` beantwortet als Wertetyp „filtert etwas" und „wie viele Gruppen" und ist ohne View testbar. Die Filtersemantik selbst (ein Status, Kategorien mit UND) ist unverändert und bleibt in `CardFilter`. Die Kategorienverwaltung bleibt ein eigener Knopf: Sie **ändert** Daten, während der Filter nur die Ansicht einschränkt — beides in ein Menü zu legen würde zwei verschiedene Dinge gleich aussehen lassen. |
 | A15 | Kategorien werden in place umbenannt, nie zusammengeführt | `TagManagement.rename` ändert die bestehende `Tag`-Entität. Ein neuer Tag plus Neuzuordnung würde dasselbe Ergebnis anstreben, aber jede Beziehung anfassen und dabei Fehler ermöglichen. Zielt der neue Name auf einen anderen bestehenden Tag, wird abgelehnt statt gemergt: Merging würde zwei Kategorien unumkehrbar verschmelzen, und der Nutzer hat kein Undo. |

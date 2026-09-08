@@ -289,7 +289,9 @@ struct CardEditorModelTests {
         let model = CardEditorModel(card: card)
         model.hanziEditingEnded()
 
-        #expect(model.pinyin == "xièxiè")
+        // "xièxie" with a neutral second syllable — from the lexicon since
+        // phase 4.5. ICU produced "xièxiè" here.
+        #expect(model.pinyin == "xièxie")
         #expect(model.pinyinIsManual == false)
     }
 
@@ -574,6 +576,152 @@ struct CardEditorModelTests {
         let card = try #require(try context.fetch(FetchDescriptor<Card>()).first)
         #expect(card.pinyin == "ping guo")
         #expect(card.pinyinWasEditedManually)
+    }
+
+    // MARK: - The review hint (phase 4.5)
+
+    @Test("A guessed Pinyin asks to be checked, a looked-up one does not")
+    func reviewFlagFollowsTheResolution() {
+        let model = CardEditorModel()
+
+        // 苹果 is in the lexicon with one reading.
+        model.hanzi = "苹果"
+        model.hanziEditingEnded()
+        #expect(model.pinyin == "píngguǒ")
+        #expect(model.pinyinNeedsReview == false)
+
+        // 东西 has two readings and no context to decide between them, so the
+        // value is ICU's guess and the editor says so.
+        model.hanzi = "东西"
+        model.hanziEditingEnded()
+        #expect(model.pinyin == "dōngxī")
+        #expect(model.pinyinNeedsReview)
+    }
+
+    @Test("Correcting the Pinyin by hand ends the review")
+    func manualCorrectionClearsTheReviewFlag() {
+        // The hint asked the user to look. They looked and typed a value, so
+        // there is nothing left to ask — from here the manual-edit protection
+        // takes over.
+        let model = CardEditorModel()
+        model.hanzi = "东西"
+        model.hanziEditingEnded()
+        #expect(model.pinyinNeedsReview)
+
+        model.pinyin = "dōngxi"
+        model.pinyinEditingEnded()
+
+        #expect(model.pinyinNeedsReview == false)
+        #expect(model.pinyinIsManual)
+        #expect(model.pinyin == "dōngxi")
+    }
+
+    @Test("The Pinyin refresh runs the resolver again and re-decides")
+    func refreshReRunsTheResolver() {
+        let model = CardEditorModel()
+        model.hanzi = "东西"
+        model.hanziEditingEnded()
+        #expect(model.pinyinNeedsReview)
+
+        // A Hanzi the lexicon can settle: the flag has to go, not linger from
+        // the previous run.
+        model.hanzi = "买东西"
+        model.regeneratePinyin()
+        #expect(model.pinyin == "mǎi dōngxi")
+        #expect(model.pinyinNeedsReview == false)
+
+        // And back the other way.
+        model.hanzi = "东西"
+        model.regeneratePinyin()
+        #expect(model.pinyinNeedsReview)
+    }
+
+    @Test("The refresh brings the hint back over a hand-corrected value")
+    func refreshRestoresTheReviewFlagOverAManualValue() {
+        // The other half of criterion 4.5.7: correcting by hand ends the
+        // review, and a deliberate ↻ starts it again if the new automatic
+        // value is a guess. Without this the flag could stay off after the
+        // refresh and the user would see a guessed reading presented as
+        // certain.
+        let model = CardEditorModel()
+        model.hanzi = "东西"
+        model.pinyin = "dōngxi"
+        model.pinyinEditingEnded()
+        #expect(model.pinyinIsManual)
+        #expect(model.pinyinNeedsReview == false)
+
+        model.regeneratePinyin()
+
+        #expect(model.pinyin == "dōngxī", "the guess replaced the hand-typed value")
+        #expect(model.pinyinIsManual == false)
+        #expect(model.pinyinNeedsReview, "and it says that it is a guess")
+    }
+
+    @Test("Reopening a card works the review state out again")
+    func reviewStateIsDerivedOnOpen() throws {
+        // Nothing about the hint is persisted — the resolver is pure and
+        // offline, so the stored Hanzi is enough to ask again.
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let guessed = Card(type: .word, german: "Ding", hanzi: "东西", pinyin: "dōngxī")
+        let certain = Card(type: .word, german: "Apfel", hanzi: "苹果", pinyin: "píngguǒ")
+        context.insert(guessed)
+        context.insert(certain)
+        try context.save()
+
+        let guessedModel = CardEditorModel(card: guessed)
+        guessedModel.prepareResolver()
+        #expect(guessedModel.pinyinNeedsReview)
+
+        let certainModel = CardEditorModel(card: certain)
+        certainModel.prepareResolver()
+        #expect(certainModel.pinyinNeedsReview == false)
+    }
+
+    @Test("A hand-corrected Pinyin is never put up for review on reopening")
+    func manualPinyinIsNeverFlaggedOnOpen() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let card = Card(
+            type: .word,
+            german: "Ding",
+            hanzi: "东西",
+            pinyin: "dōngxi",
+            pinyinWasEditedManually: true
+        )
+        context.insert(card)
+        try context.save()
+
+        let model = CardEditorModel(card: card)
+        model.prepareResolver()
+
+        #expect(model.pinyinNeedsReview == false, "the user already decided this one")
+        #expect(model.pinyin == "dōngxi")
+    }
+
+    @Test("An empty Pinyin is not something to review")
+    func emptyPinyinIsNotFlagged() {
+        let model = CardEditorModel()
+        model.hanzi = "asdf"
+        model.hanziEditingEnded()
+
+        #expect(model.pinyin.isEmpty)
+        #expect(model.pinyinNeedsReview == false, "the Hanzi hint explains this, not a Pinyin warning")
+        #expect(model.hanziHint != nil)
+    }
+
+    @Test("Resolution needs no translation at all")
+    func resolutionWorksWithoutTranslation() {
+        // The lexicon is bundled and ICU is local, so Hanzi to Pinyin has to
+        // work with translation unavailable — flight mode, or a device
+        // without the language models.
+        let model = CardEditorModel()
+        model.translationSupport = .unsupported
+        model.hanzi = "谢谢"
+        model.hanziEditingEnded()
+
+        #expect(model.pinyin == "xièxie")
+        #expect(model.pinyinNeedsReview == false)
     }
 
     // MARK: - Saving reconciles the state (phase-4 device findings)

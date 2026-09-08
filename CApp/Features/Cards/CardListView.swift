@@ -20,8 +20,8 @@ struct CardListView: View {
 
     @State private var type: CardType = .word
     @State private var searchText = ""
-    @State private var status: LearningStatus?
-    @State private var selectedTagKeys: Set<String> = []
+    @State private var filter = CardFilterSelection()
+    @State private var isShowingFilterSheet = false
     @State private var isShowingNewCardSheet = false
     @State private var cardPendingDeletion: Card?
     @State private var deleteFailure: AppError?
@@ -37,8 +37,8 @@ struct CardListView: View {
             to: allCards,
             type: type,
             searchText: searchText,
-            tagKeys: selectedTagKeys,
-            status: status
+            tagKeys: filter.tagKeys,
+            status: filter.status
         )
     }
 
@@ -54,31 +54,47 @@ struct CardListView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 8)
 
-                CardFilterBar(
-                    allTags: allTags,
-                    status: $status,
-                    selectedTagKeys: $selectedTagKeys
-                )
-
                 content
             }
             .navigationTitle("Karten")
-            .searchable(text: $searchText, prompt: "Deutsch, Hanzi oder Pinyin")
+            .navigationBarTitleDisplayMode(.inline)
+            // Keeps the search field under the navigation bar instead of
+            // letting it collapse into the toolbar, so the order on screen
+            // stays: title, search, words/sentences, list.
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Deutsch, Hanzi oder Pinyin"
+            )
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     NavigationLink {
                         TagListView()
                     } label: {
-                        Label("Kategorien", systemImage: "tag")
+                        Label("Kategorien verwalten", systemImage: "tag")
                     }
+                    .accessibilityLabel("Kategorien verwalten")
                 }
-                ToolbarItem(placement: .primaryAction) {
+                // One group, one placement: with two items in different
+                // placements the order on screen follows SwiftUI's placement
+                // priority rather than the declaration.
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        isShowingFilterSheet = true
+                    } label: {
+                        Label("Filter", systemImage: filterSymbol)
+                    }
+                    .accessibilityLabel(filterAccessibilityLabel)
+
                     Button {
                         isShowingNewCardSheet = true
                     } label: {
                         Label("Neue Karte", systemImage: "plus")
                     }
                 }
+            }
+            .sheet(isPresented: $isShowingFilterSheet) {
+                CardFilterSheet(allTags: allTags, selection: $filter)
             }
             .sheet(isPresented: $isShowingNewCardSheet) {
                 NavigationStack {
@@ -114,6 +130,23 @@ struct CardListView: View {
         }
     }
 
+    /// A filled icon while anything is filtered — the native way to say
+    /// "there is something behind this button" without a badge.
+    private var filterSymbol: String {
+        filter.hasActiveFilters
+            ? "line.3.horizontal.decrease.circle.fill"
+            : "line.3.horizontal.decrease.circle"
+    }
+
+    /// Spoken out, because the filled icon alone is invisible to VoiceOver.
+    private var filterAccessibilityLabel: String {
+        switch filter.activeGroupCount {
+        case 0: return "Filter"
+        case 1: return "Filter, 1 aktiv"
+        default: return "Filter, \(filter.activeGroupCount) aktiv"
+        }
+    }
+
     @ViewBuilder
     private var content: some View {
         if cardsOfCurrentType.isEmpty {
@@ -129,7 +162,7 @@ struct CardListView: View {
             ContentUnavailableView {
                 Label("Keine Treffer", systemImage: "magnifyingglass")
             } description: {
-                if selectedTagKeys.count > 1 {
+                if filter.tagKeys.count > 1 {
                     Text("Keine Karte passt zu Suche und Filter. Bei mehreren Kategorien müssen **alle** zutreffen.")
                 } else {
                     Text("Keine Karte passt zu Suche und Filter.")
@@ -137,8 +170,7 @@ struct CardListView: View {
             } actions: {
                 Button("Filter zurücksetzen") {
                     searchText = ""
-                    status = nil
-                    selectedTagKeys = []
+                    filter.reset()
                 }
             }
         } else {

@@ -467,6 +467,148 @@ Auswahl, Batch-Übersetzung bestehender Karten, Audio.
 
 ---
 
+## Phase 4.5 — Pinyin Accuracy + Karten-/Editor-Politur
+
+**Status: abgeschlossen.** Gerätetest auf physischem iPhone (iOS 26) am
+2026-09-08 bestanden: CC-CEDICT-Auflösung, Prüfhinweis bei nicht eindeutigen
+Fällen, geschützte manuelle Korrektur, ↻ setzt den Hinweis neu, Konsistenz
+nach App-Neustart, vollständige Pipeline offline, kein merkbares Stocken beim
+ersten Öffnen des Editors, sowie die gesamte UI-Politur. Zwischenphase,
+eingeschoben nach dem Gerätetest der Phasen 3+4. Phase 5 bleibt davon
+unberührt.
+
+### Ziel
+Zwei getrennte Themen aus dem Gerätetest abarbeiten. Erstens und wichtiger:
+Der reine ICU-Pfad erzeugt bei **gültigem** Chinesisch sprachlich falsche
+Lesungen. Zweitens: Karten- und Editor-Oberfläche kompakter und ruhiger
+machen.
+
+Belegt am Gerät: `Ich möchte etwas essen.` → `我想吃点东西` ergab
+`wǒ xiǎng chī diǎn dōngxī`. Im Sinn „Ding/etwas" ist `dōngxi` mit neutralem
+`xi` zu erwarten; der Apple-native Fallback liefert sogar nur `dōng xī`.
+Reine Transliteration reicht damit nicht als alleinige Quelle.
+
+### Scope
+`PinyinService` (Resolver), `ChineseLexicon`, `PinyinTone`, gebündelte
+CC-CEDICT-Daten, Editor-Hinweis, Karten- und Editor-UI. **Nicht** angefasst:
+`TranslationService`, Race-Schutz, Card-CRUD, Tagging, `LearningStatus`,
+SwiftData-Query-Strategie.
+
+### Tasks
+
+**Teil A — Pinyin Accuracy**
+
+- **4.5.1** **Research zuerst.** Lokale lexikalische Datenquelle suchen und
+  bewerten: vereinfachtes Chinesisch, Wort-/Phraseneinträge, mehrere
+  Lesungen, neutrale Töne, Glossen, Offline-Nutzung, Bundle-taugliche Größe,
+  Lizenz, die das Bündeln erlaubt. Ergebnis dokumentieren, **Datenquelle
+  bevorzugt gegenüber einer Laufzeit-Dependency**. *Ergebnis:* CC-CEDICT,
+  CC BY-SA 4.0, 125.009 Einträge. Herkunft, Lizenz, Version und alle
+  Ableitungen in
+  [SOURCE.md](../CApp/Resources/ThirdParty/CC-CEDICT/SOURCE.md) und
+  [ATTRIBUTION.md](../CApp/Resources/ThirdParty/CC-CEDICT/ATTRIBUTION.md).
+- **4.5.2** Datenbestand **messen, bevor** gebündelt wird: Dateigröße,
+  nutzbare Einträge, Parse-Zeit, Speicherbedarf, Bundle-Zuwachs. Messwerte in
+  [architecture.md §5](architecture.md#5-services) und SOURCE.md.
+- **4.5.3** Ableitung als Daten-Asset über ein reproduzierbares Skript
+  (`tools/generate-cedict-asset.py`, nicht Teil des App-Targets). Rohdatei
+  bleibt außerhalb des Repositories.
+- **4.5.4** `PinyinTone`: Tonziffern → Tonzeichen als reine, vollständig
+  getestete Funktion. Töne 1–4, neutraler Ton 5 **ohne** Zeichen, `ü` und
+  die `u:`-Schreibweise, korrekte Zeichenplatzierung, Groß-/Kleinschreibung.
+  Nicht über ICU lösen, wenn eine reine Funktion genügt.
+- **4.5.5** Auflösungs-Pipeline: eindeutiger Lexikoneintrag → chinesischer
+  Kontext über die längste bekannte Phrase → ansonsten **nicht raten**,
+  sondern ICU-Fallback mit `needsReview`. Wortgrenzen von ICU, Lesungen vom
+  Lexikon (A23).
+- **4.5.6** `PinyinResolution` mit `text`, `source` und `needsReview`.
+  Kategorial, **keine** Confidence-Werte. Sobald ein fachlich relevanter Teil
+  auf Fallback beruht, gilt das Gesamtergebnis als prüfbedürftig.
+- **4.5.7** Sichtbarer, **situativer** Hinweis direkt unter dem Pinyin-Feld,
+  wenn `needsReview`: „Pinyin konnte nicht eindeutig bestimmt werden. Bitte
+  prüfen." Kein Dauertext, nicht alarmistisch, keine Behauptung, der Wert sei
+  falsch. Manuelle Korrektur beendet den Hinweis, das ↻ setzt ihn neu.
+- **4.5.7a** Bekannte Grenze, bewusst so: Wer Deutsch tippt, Hanzi tippt und
+  sofort speichert, speichert ein prüfbedürftiges Pinyin, ohne den Hinweis
+  gesehen zu haben — blockieren darf der Editor nach Regel 5 nicht. Beim
+  Wiederöffnen der Karte steht der Hinweis da, weil der Zustand abgeleitet
+  wird.
+- **4.5.8** Warnzustand **abgeleitet**, nicht persistiert: Der Resolver ist
+  rein und offline, also beantwortet das gespeicherte Hanzi die Frage beim
+  Öffnen erneut. Keine Schemaänderung.
+- **4.5.9** Spike Deutsch → englische Glossen. *Ergebnis:* kein tragfähiger
+  lokaler Weg unter den Projektregeln, Begründung in
+  [architecture.md A24](architecture.md#10-zusammenfassung-der-architekturentscheidungen).
+  Nicht durch eine Heuristik ersetzt.
+- **4.5.10** Schutzmechanismen aus Phase 3/4 unverändert erhalten:
+  `pinyinSourceHanzi`, Q9-Herkunftslogik, Race- und Stale-Schutz, beide
+  Manuell-Merker, Save-Reconciliation, Han-Erkennung,
+  Plausibilitätsprüfung.
+
+**Teil B — UI-Politur**
+
+- **4.5.11** `Karten` als kompakter, zentrierter Navigation-Bar-Titel. Links
+  das Kategoriensymbol, rechts Filter und `+`. Native Toolbar, keine
+  nachgebaute Leiste. Bottom-Navigation unverändert.
+- **4.5.12** Lernstatus und Kategorien wandern von zwei Dauer-Controls auf
+  ein Filter-Sheet hinter einem Symbol. Filtersemantik unverändert,
+  Zurücksetzen enthalten.
+- **4.5.13** Aktiver Filter erkennbar über das **gefüllte** Symbol, dazu ein
+  gesprochenes Accessibility-Label mit der Anzahl aktiver Gruppen. Kein
+  Badge-Zirkus, keine Gamification.
+- **4.5.14** Reihenfolge im Kartenbildschirm: Navigationsleiste, Suche,
+  Wörter/Sätze, Liste. Keine zusätzliche Filterzeile.
+- **4.5.15** Kategorienverwaltung bleibt ein eigener Knopf mit dem Label
+  „Kategorien verwalten" und öffnet weiterhin `TagListView`. Nicht mit dem
+  Filter zusammenlegen (A25).
+- **4.5.16** Satzkarten: Deutsch, Hanzi und Pinyin wieder mehrzeilig
+  editierbar, Abschluss über „Fertig" in der Tastatur-Toolbar. Wortkarten
+  bleiben einzeilig mit Return. **Kein** Doppel-Trigger, Race-Schutz
+  unverändert.
+- **4.5.17** Permanente Erklärungstexte entfernen — Pflichtfelder,
+  ↻-Erklärung, allgemeiner Vorschlag- und Polyphonie-Hinweis. Situative
+  Hinweise bleiben. Faustregel: Dauertext weg, konkreter Zustand hin.
+
+### Akzeptanzkriterien
+- [x] `苹果` → `píngguǒ`, `谢谢` → `xièxie`, `早上` → `zǎoshang`, `钱` → `qián`.
+- [x] Der chinesische Kontext löst Mehrdeutigkeit: `买东西` → `mǎi dōngxi`,
+      `东西南北` → `dōngxī nánběi`, `早上好` → `zǎoshang hǎo`, jeweils **ohne**
+      Warnung.
+- [x] Ein nicht auflösbares Wort fällt auf ICU zurück und setzt
+      `needsReview` — `东西` allein und `我想吃点东西`.
+- [x] Ein vollständig aufgelöstes Ergebnis setzt **keinen** Warnzustand.
+- [x] Manuelle Pinyin-Korrektur beendet den Warnzustand, das ↻ setzt ihn neu.
+- [x] Der Warnzustand wird beim Öffnen einer bestehenden Karte korrekt neu
+      abgeleitet, ohne Schemaänderung.
+- [x] Nicht-Hanzi-Schutz, Plausibilitätsprüfung, Save-Reconciliation und
+      `pinyinSourceHanzi` bleiben grün.
+- [x] Auflösung funktioniert ohne Übersetzung und ohne Netz.
+- [x] Filterlogik: `hasActiveFilters`, Gruppenzählung, Zurücksetzen,
+      kombinierte Filter.
+- [x] Build und Tests grün, Debug und Release, warnungsfrei.
+- [x] Gerätetest: Auflösung, Prüfhinweis, ↻, Flugmodus. *(2026-09-08:
+      `谢谢`→`xièxie`, `早上`→`zǎoshang`, `钱`→`qián`, `买东西`→`mǎi dōngxi` und
+      `东西南北`→`dōngxī nánběi` je ohne Hinweis; `东西` und der Satz
+      `我想吃点东西` mit Hinweis; manuelle Korrektur geschützt und
+      hinweisfrei; ↻ setzt ihn wieder; Warnzustand nach Neustart konsistent;
+      Pipeline offline vollständig.)*
+- [x] Gerätetest: Navigationsleiste, Filter-Sheet, aktiver Filter, Suche,
+      Wörter/Sätze, mehrzeilige Satzfelder, „Fertig", entfallene Dauertexte.
+      *(2026-09-08 bestanden, „Fertig" ohne Doppeltrigger, direkter Save aus
+      fokussierten Feldern korrekt, Persistenz und bestehende
+      Kartenfunktionen unverändert.)*
+
+### Abhängigkeiten
+Phasen 3 und 4.
+
+### Ausdrücklich nicht in dieser Phase
+Zweite Wörterbuchquelle (erst nach Messung des Restbedarfs), deutsche
+Bedeutungsauflösung, Glossen im Asset, Aussprachebewertung, ML- oder
+LLM-Auflösung, generische NLP-, Repository- oder DI-Architektur, jede
+Phase-5-Funktionalität.
+
+---
+
 ## Phase 5 — Learning Engine (ohne UI)
 
 ### Ziel

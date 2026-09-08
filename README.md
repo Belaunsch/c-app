@@ -6,7 +6,7 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 4 abgeschlossen.**
+**Phasen 0 bis 4.5 abgeschlossen.**
 
 Vorhanden sind die Architektur- und Planungsdokumentation, die
 Claude-Code-Entwicklungsinfrastruktur (`.claude/agents/`, `.claude/skills/`,
@@ -17,7 +17,7 @@ löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
 Lernstatus, Kategorien umbenennen und löschen.
 
 Build und Unit-Tests laufen grün (iPhone-17-Simulator, iOS 26.5), und alle
-fünf Phasen sind auf dem echten iPhone bestätigt.
+sechs Phasen sind auf dem echten iPhone bestätigt.
 
 Neu aus den Phasen 3 und 4: Beim Anlegen einer Karte genügt der deutsche Text
 — mit Return oder beim Verlassen des Feldes erzeugt die App Hanzi über Apples
@@ -30,12 +30,36 @@ Pinyin-Erzeugung läuft komplett offline; auf dem Testgerät liegen auch die
 Noch nicht vorhanden: **Audio** (Sprachausgabe, Spracherkennung) und der
 **Lernmodus** — der Tab „Lernen" ist ein Platzhalter.
 
-Nächster Schritt: **Zwischenphase 4.5 — Pinyin Accuracy und Karten-/Editor-
-Politur**, danach **Phase 5 — Learning Engine**. Hintergrund: Die reine
-ICU-Transliteration erzeugt bei gültigem Chinesisch sprachlich falsche
-Lesungen — `东西` im Sinn „Ding/etwas" ergibt `dōngxī` statt `dōngxi` —, und
-das ist Apple-nativ nicht lösbar. Phase 4.5 stellt eine lokale lexikalische
-Auflösung davor und kennzeichnet den verbleibenden ICU-Fallback sichtbar.
+Neu aus Phase 4.5: Das Pinyin kommt nicht mehr aus reiner Transliteration,
+sondern aus einem gebündelten Lexikon — daher die neutralen Töne (`xièxie`,
+`zǎoshang`), die ICU nicht kennt. Was das Lexikon nicht eindeutig entscheiden
+kann, wird als prüfbedürftig gekennzeichnet statt geraten. Dazu eine ruhigere
+Kartenansicht: kompakter Navigationstitel, Filter hinter einem Knopf,
+mehrzeilige Felder für Satzkarten und keine Dauer-Erklärtexte mehr.
+
+Nächster Schritt: **Phase 5 — Learning Engine**.
+
+## Drittanbieter-Daten
+
+Der App-Code und die eingebundenen Fremddaten sind getrennt, auch lizenzrechtlich.
+
+| | App-Code | Lexikondaten |
+| --- | --- | --- |
+| Ort | `CApp/`, ohne `CApp/Resources/ThirdParty/` | `CApp/Resources/ThirdParty/CC-CEDICT/` |
+| Herkunft | dieses Projekt | [CC-CEDICT](https://www.mdbg.net/chinese/dictionary?page=cc-cedict), Herausgeber MDBG |
+| Lizenz | nicht durch die Datenlizenz berührt | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+
+Die gebündelten Dateien sind **Bearbeitungen** der Originaldaten (auf
+vereinfachtes Chinesisch und Aussprache reduziert) und stehen deshalb selbst
+unter CC BY-SA 4.0. Der Swift-Code liest diese Daten, ist aber keine
+Bearbeitung von ihnen — die ShareAlike-Pflicht greift auf ihn nicht über.
+Version, Bezugsquelle, alle vorgenommenen Änderungen und das
+Erzeugungsskript sind in
+[SOURCE.md](CApp/Resources/ThirdParty/CC-CEDICT/SOURCE.md) dokumentiert, die
+Namensnennung in
+[ATTRIBUTION.md](CApp/Resources/ThirdParty/CC-CEDICT/ATTRIBUTION.md). Es
+handelt sich um ein **Daten-Asset**, nicht um eine Laufzeit-Dependency: kein
+Swift Package, kein SDK, kein Server.
 
 Die Umsetzung erfolgt Phase für Phase gemäß
 [docs/roadmap.md](docs/roadmap.md), mit einem Test nach jeder Phase.
