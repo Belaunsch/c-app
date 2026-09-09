@@ -49,7 +49,9 @@ struct PinyinServiceTests {
 
     @Test("A sentence is segmented into words")
     func sentenceIsSegmented() {
-        #expect(PinyinService.pinyin(for: "洗手间在哪里？") == "xǐshǒujiān zài nǎlǐ")
+        // Third-tone sandhi applies inside `洗手间` and inside `哪里`, and
+        // deliberately not between `在` and `哪里` (A28).
+        #expect(PinyinService.pinyin(for: "洗手间在哪里？") == "xíshǒujiān zài nálǐ")
         #expect(PinyinService.pinyin(for: "请结账。") == "qǐng jiézhàng")
     }
 
@@ -284,7 +286,10 @@ struct PinyinServiceTests {
         // them, but every part is in there with a single reading. Asking ICU
         // for the whole token would put a review hint on a card where
         // nothing is uncertain.
-        for (hanzi, expected) in [("啤酒杯", "píjiǔbēi"), ("水果店", "shuǐguǒdiàn"), ("苹果树", "píngguǒshù")] {
+        // `水果` carries two third tones, so the spoken form has the first
+        // as a second — the rule reaches inside a decomposed part because
+        // that part is one lexicon headword and therefore one domain.
+        for (hanzi, expected) in [("啤酒杯", "píjiǔbēi"), ("水果店", "shuíguǒdiàn"), ("苹果树", "píngguǒshù")] {
             let resolution = PinyinService.resolution(for: hanzi)
             #expect(resolution.text == expected)
             #expect(resolution.source == .lexicon, "\(hanzi) is built from known words")
@@ -369,24 +374,74 @@ struct PinyinServiceTests {
         }
     }
 
-    @Test("Known limit: no tone sandhi, but the readings are the dictionary's now")
-    func sandhiIsNotApplied() {
-        // Neither the lexicon nor ICU applies tone sandhi, and conventional
-        // Pinyin does not write it either — 不 stays bù before a fourth tone
-        // instead of becoming bú. That is correct as written Pinyin and only
-        // worth knowing when speaking.
-        //
-        // What changed: phase 3 had ICU picking the 不 reading inconsistently
-        // and wrongly ("bú míngbái" — 明 is a second tone, so no sandhi
-        // applies at all). The readings now come from the data.
+    @Test("Tone sandhi is applied now, and the lexical reading stays reachable")
+    func sandhiIsApplied() {
+        // This test used to pin the opposite. Until phase 6.5 the app showed
+        // the dictionary tones — correct as written Pinyin, and not what a
+        // learner says. GB/T 16159-2012 §6.5.2 marks `一` and `不` with their
+        // original tone in general text and adds
+        // „在语言教学等方面，可根据需要按变调标写"; this is language teaching,
+        // so the spoken form is shown (A29).
+        #expect(PinyinService.pinyin(for: "不对") == "búduì")
+        #expect(PinyinService.pinyin(for: "一点") == "yìdiǎn")
+        #expect(PinyinService.pinyin(for: "你好") == "níhǎo")
+        #expect(PinyinService.pinyin(for: "展览馆") == "zhánlánguǎn")
+
+        // Unchanged: the readings are the dictionary's, the neutral tone is
+        // lexical, and `我不明白` is `不`+`明白` rather than `不明`+`白`.
         #expect(PinyinService.pinyin(for: "我不明白。") == "wǒ bù míngbai")
-        #expect(PinyinService.pinyin(for: "不对") == "bùduì")
-        #expect(PinyinService.pinyin(for: "一点") == "yīdiǎn")
-        // And these are lexicon readings, not ICU's — otherwise the test
-        // would not show where the improvement came from.
-        for hanzi in ["我不明白。", "不对", "一点"] {
+        #expect(PinyinService.pinyin(for: "对不起") == "duìbuqǐ", "lexical bu5 is untouched")
+
+        // A rule fired, and it says which class — no percentages.
+        #expect(PinyinService.resolution(for: "不对").transformations == [.bu])
+        #expect(PinyinService.resolution(for: "一点").transformations == [.yi])
+        #expect(PinyinService.resolution(for: "你好").transformations == [.thirdTone])
+        #expect(PinyinService.resolution(for: "苹果").transformations.isEmpty)
+        #expect(PinyinService.resolution(for: "你好").showsSpokenTones)
+        #expect(PinyinService.resolution(for: "苹果").showsSpokenTones == false)
+
+        // And all of it is still a lexicon result, not a guess: a tone rule
+        // never makes a reading uncertain.
+        for hanzi in ["我不明白。", "不对", "一点", "你好", "展览馆"] {
             #expect(PinyinService.resolution(for: hanzi).source == .lexicon)
+            #expect(PinyinService.resolution(for: hanzi).needsReview == false)
         }
+    }
+
+    @Test("一 is triggered by the tone under a reduction, not by the reduction")
+    func yiReadsTheBaseToneOfAReducedNeighbour() {
+        // `一个` is `yi1 ge5` in the data and is spoken `yíge`, because the
+        // rule is triggered by what `个` is underlyingly — a fourth tone.
+        // This pins the **wiring**: the resolver has to ask the lexicon for
+        // that base tone and put it on the syllable. The rule itself is
+        // covered synthetically in `ToneSandhiTests`, and without this test
+        // the wiring would only be measured by the corpus.
+        //
+        // The accuracy pass of phase 6.5 listed this as its highest-priority
+        // error; before the fix the field showed `yīge`.
+        #expect(PinyinService.pinyin(for: "一个") == "yí ge")
+        #expect(PinyinService.pinyin(for: "我有一个问题") == "wǒ yǒu yí ge wèntí")
+        #expect(PinyinService.resolution(for: "一个").transformations == [.yi])
+
+        // Where `个` already carries the full tone, nothing changes.
+        #expect(PinyinService.pinyin(for: "一个人") == "yí gè rén")
+
+        // And no reduction is turned back into a full tone anywhere.
+        for (hanzi, expected) in [("谢谢", "xièxie"), ("朋友", "péngyou"),
+                                  ("对不起", "duìbuqǐ"), ("孩子", "háizi"),
+                                  ("明白", "míngbai"), ("妈妈", "māma")] {
+            #expect(PinyinService.pinyin(for: hanzi) == expected, "\(hanzi)")
+        }
+    }
+
+    @Test("A guess is never healed by a tone rule")
+    func sandhiDoesNotHealAGuess() {
+        // `东西` has two readings, so it falls back to ICU and stays flagged.
+        // No rule may turn that into something that looks settled.
+        let resolution = PinyinService.resolution(for: "东西")
+        #expect(resolution.source == .icuFallback)
+        #expect(resolution.needsReview)
+        #expect(resolution.transformations.isEmpty, "nothing to apply a rule to")
     }
 
     @Test("Known limit: an ambiguous word inside a sentence still guesses")

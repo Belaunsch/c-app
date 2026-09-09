@@ -23,16 +23,43 @@ struct PinyinResolution: Equatable {
         case empty
     }
 
+    /// Which class of tone rule changed the reading on its way to the
+    /// spoken form.
+    ///
+    /// Three cases, not an event log: this exists so a test can show that a
+    /// rule fired and so the benchmark can sort its failures by rule class.
+    /// It says nothing about how often or where — that would be an analysis
+    /// nobody asked for.
+    enum Transformation: String, Equatable, Sendable, CaseIterable {
+        /// A third tone before a third tone, spoken as a second.
+        case thirdTone
+        /// `一` before a tone that changes it.
+        case yi
+        /// `不` before a fourth tone.
+        case bu
+    }
+
     let text: String
     let source: Source
 
+    /// The rule classes that fired. Empty means the visible text is exactly
+    /// the lexicon's reading.
+    var transformations: Set<Transformation> = []
+
     /// Whether the user should look at this value before trusting it.
     ///
-    /// True exactly when a transliterated guess is part of the result. That
-    /// is the one thing the editor shows a hint for.
+    /// True exactly when a transliterated guess is part of the result — a
+    /// tone rule never makes a reading uncertain, and never makes an
+    /// uncertain one safe. That is the one thing the editor shows a hint for.
     var needsReview: Bool {
         source == .mixed || source == .icuFallback
     }
+
+    /// Whether the visible text differs from the plain dictionary reading.
+    ///
+    /// The app shows the **spoken** form, which standard written Pinyin often
+    /// does not (`docs/architecture.md` A29).
+    var showsSpokenTones: Bool { transformations.isEmpty == false }
 
     static let empty = PinyinResolution(text: "", source: .empty)
 }
@@ -125,13 +152,24 @@ enum PinyinService {
         let lexicon = ChineseLexicon.shared
         let tokens = segmentedTokens(of: text)
 
-        var pieces: [String] = []
+        var syllables: [PinyinSyllable] = []
         var usedLexicon = false
         var usedFallback = false
         var index = 0
+        // Every lexicon headword match and every fallback piece gets its own
+        // number. Third-tone sandhi may only look inside one of them.
+        var unit = 0
 
         while index < tokens.count {
             let token = tokens[index]
+
+            // A sentence boundary: nothing to read, but every rule stops.
+            if token.isPunctuation {
+                syllables.append(.barrier(unit: unit))
+                unit += 1
+                index += 1
+                continue
+            }
 
             // Not Chinese. Mixed input is allowed (see `containsHanScript`),
             // and what ICU does with it decides whether this counts as a
@@ -141,7 +179,8 @@ enum PinyinService {
             // ICU guessing at a script it was not asked about.
             guard token.text.contains(where: { containsHanScript(String($0)) }) else {
                 if let transcription = token.transcription, transcription.isEmpty == false {
-                    pieces.append(transcription)
+                    syllables.append(.opaque(transcription, unit: unit, startsWord: true))
+                    unit += 1
                     if transcription != token.text {
                         usedFallback = true
                     }
@@ -151,9 +190,10 @@ enum PinyinService {
             }
 
             // Longest known phrase first, cut only at ICU's word boundaries.
-            if let match = longestKnownPhrase(in: tokens, from: index, lexicon: lexicon) {
-                pieces.append(contentsOf: match.pinyin)
+            if let match = longestKnownPhrase(in: tokens, from: index, unit: unit, lexicon: lexicon) {
+                syllables.append(contentsOf: match.syllables)
                 usedLexicon = true
+                unit += 1
                 index += match.tokenCount
                 continue
             }
@@ -163,23 +203,30 @@ enum PinyinService {
             // in there — `啤酒杯` is `啤酒` plus `杯`. Taking ICU's reading for
             // the whole thing would put a review hint on a card where
             // nothing is uncertain, so the token is decomposed first.
-            if let decomposed = decomposition(of: token.text, lexicon: lexicon) {
-                pieces.append(decomposed)
+            if let decomposed = decomposition(of: token.text, firstUnit: unit, lexicon: lexicon) {
+                syllables.append(contentsOf: decomposed.syllables)
                 usedLexicon = true
+                unit = decomposed.nextUnit
                 index += 1
                 continue
             }
 
             // The lexicon has no single answer. Guess, and say that we did.
             if let guess = transliterationGuess(for: token) {
-                pieces.append(guess)
+                syllables.append(.opaque(guess, unit: unit, startsWord: true))
+                unit += 1
             }
             usedFallback = true
             index += 1
         }
 
-        let joined = pieces.joined(separator: " ")
-        return PinyinResolution(text: joined, source: source(lexicon: usedLexicon, fallback: usedFallback, text: joined))
+        let spoken = ToneSandhi.applied(to: syllables)
+        let rendered = PinyinSyllable.rendered(spoken.syllables)
+        return PinyinResolution(
+            text: rendered,
+            source: source(lexicon: usedLexicon, fallback: usedFallback, text: rendered),
+            transformations: spoken.transformations
+        )
     }
 
     private static func source(lexicon: Bool, fallback: Bool, text: String) -> PinyinResolution.Source {
@@ -195,19 +242,26 @@ enum PinyinService {
     /// The longest run of tokens starting at `start` that the lexicon knows
     /// as one headword with a single reading.
     ///
-    /// Returns one Pinyin piece per token, so the spacing follows ICU's word
-    /// boundaries rather than the lexicon's, which has none: CC-CEDICT writes
-    /// every syllable separately, `早上好` as `zao3 shang5 hao3`, and gives no
-    /// hint that this is two words. Splitting the syllables back over the
-    /// tokens works because a headword of pure Han characters has exactly one
-    /// syllable per character — verified across all 124.202 such entries in
-    /// the snapshot, and checked again here rather than assumed.
+    /// The syllables carry the word boundaries with them, so the spacing
+    /// follows the segmentation rather than the lexicon, which has none:
+    /// CC-CEDICT writes every syllable separately, `早上好` as
+    /// `zao3 shang5 hao3`, and gives no hint that this is two words.
+    /// Splitting the syllables back over the characters works because a
+    /// headword of pure Han characters has exactly one syllable per character
+    /// — verified across all 124.202 such entries in the snapshot, and
+    /// checked in `PinyinSyllable.lexical(reading:of:unit:wordStartOffsets:)`
+    /// rather than assumed.
+    ///
+    /// All of them share one unit number. That is the sandhi domain: one
+    /// headword is one lexical word, and that is as far as an automatic tone
+    /// change may reach.
     @MainActor
     private static func longestKnownPhrase(
         in tokens: [Token],
         from start: Int,
+        unit: Int,
         lexicon: ChineseLexicon
-    ) -> (pinyin: [String], tokenCount: Int)? {
+    ) -> (syllables: [PinyinSyllable], tokenCount: Int)? {
         var count = tokens.count - start
         while count >= 1 {
             let group = tokens[start..<(start + count)]
@@ -215,46 +269,106 @@ enum PinyinService {
 
             if word.count <= lexicon.longestHeadwordLength,
                word.allSatisfy({ containsHanScript(String($0)) }),
-               let numbered = lexicon.reading(for: word),
-               let marked = markedPinyin(of: numbered, characterCount: word.count) {
-                var pinyin: [String] = []
-                var syllableIndex = 0
+               let reading = lexicon.reading(for: word) {
+                var offsets: Set<Int> = []
+                var offset = 0
                 for token in group {
-                    let length = token.text.count
-                    pinyin.append(marked[syllableIndex..<(syllableIndex + length)].joined())
-                    syllableIndex += length
+                    offsets.insert(offset)
+                    offset += token.text.count
                 }
-                return (pinyin, count)
+                if let syllables = PinyinSyllable.lexical(
+                    reading: reading,
+                    of: word,
+                    unit: unit,
+                    footSplit: footSplit(of: word, lexicon: lexicon),
+                    wordStartOffsets: offsets,
+                    underlyingTone: { lexicon.baseTone(ofSyllable: $1, character: $0) }
+                ) {
+                    return (syllables, count)
+                }
             }
             count -= 1
         }
         return nil
     }
 
-    /// The tone-marked Pinyin for one lexicon reading, or `nil` when the
-    /// entry cannot be trusted.
+    /// Where a headword brackets, or `nil` when the data does not say.
     ///
-    /// Two conditions. The syllable count has to match the character count,
-    /// which holds for every pure-Han headword in the data — checked rather
-    /// than assumed. And the converted text must not contain a digit: 13
-    /// entries write two syllables without the separating space (`兙` reads
-    /// `shi2ke4`, the metric-unit characters), and `PinyinTone` deliberately
-    /// hands anything it cannot parse back unchanged. Without this check
-    /// `shi2ke4` would appear in the Pinyin field as a certain reading.
+    /// A three-syllable headword is one word but two constituents, and the
+    /// bracketing decides the tones: `展览馆` is `[[展览]馆]` and spoken
+    /// `zhánlánguǎn`, `小老鼠` is `[小[老鼠]]` and spoken `xiǎoláoshǔ`. The
+    /// difference is not in the tones themselves — both are three third tones
+    /// — but in which constituent the rule applies to first (A28).
+    ///
+    /// The structure is not in the data, but a **sub-headword** is a usable
+    /// witness for it, and asking for one is what the phase brief asked for:
+    /// determine the lexical unit before applying anything. Longest prefix and
+    /// longest suffix are looked up; exactly one of them being a headword
+    /// settles the bracketing. Measured over the third-tone words in the
+    /// corpus: 14 of 17 are settled this way, and all 14 match what the
+    /// sources give.
+    ///
+    /// When both are headwords (`小雨伞` is `小雨` **and** `雨伞`) or neither is
+    /// (`导火索`), the split goes down the middle. That is the conservative
+    /// outcome rather than a claim: for a right-bracketing word it is the form
+    /// the sources give, and for a left-bracketing one it merely leaves the
+    /// leading syllable at its dictionary tone. What it never produces is a
+    /// third value no source supports — which is what applying the rule
+    /// uniformly across three third tones would do, and what the first
+    /// implementation did until the review caught it.
+    ///
+    /// This middle split *is* a positional heuristic inside the word, which
+    /// the phase brief otherwise rules out. It is confined to the case where
+    /// the data witnesses nothing, it errs towards the dictionary, and
+    /// `水果酒` is in the corpus as a measured failure because of it.
+    ///
+    /// A word of two characters needs no split; the pair is unambiguous.
     @MainActor
-    private static func markedPinyin(of numbered: String, characterCount: Int) -> [String]? {
-        let syllables = numbered.split(separator: " ").map(String.init)
-        guard syllables.count == characterCount else { return nil }
-        let marked = syllables.map(PinyinTone.marked(syllable:))
-        guard marked.allSatisfy({ $0.contains(where: \.isNumber) == false }) else { return nil }
-        return marked
+    private static func footSplit(of word: String, lexicon: ChineseLexicon) -> Int? {
+        let characters = Array(word)
+        guard characters.count >= 3 else { return nil }
+
+        func known(_ candidate: String) -> Bool {
+            lexicon.reading(for: candidate) != nil || lexicon.isAmbiguous(candidate)
+        }
+
+        var prefix: Int?
+        for length in stride(from: characters.count - 1, through: 2, by: -1)
+        where known(String(characters[0..<length])) {
+            prefix = length
+            break
+        }
+        var suffix: Int?
+        for start in 1...(characters.count - 2)
+        where known(String(characters[start...])) {
+            suffix = start
+            break
+        }
+
+        switch (prefix, suffix) {
+        case let (.some(index), .none): return index
+        case let (.none, .some(index)): return index
+        default:
+            // Not decidable — `小雨伞` is both `小雨` and `雨伞`, `导火索` is
+            // neither. Split down the middle, which is the conservative
+            // outcome rather than a claim about the language: for a
+            // right-bracketing word it is the form the sources give, and for
+            // a left-bracketing one it merely leaves the leading syllable at
+            // its dictionary tone. What it never produces is a third value
+            // that no source supports — which is what applying the rule
+            // uniformly across three third tones would do.
+            return characters.count / 2
+        }
     }
 
     /// Splits a token the lexicon does not know as a whole into words it does
-    /// know, longest first, and returns their readings joined.
+    /// know, longest first.
     ///
-    /// No spaces in the result: the tokenizer considers this one word, and
-    /// this only fills in a reading it has no headword for.
+    /// No word break in the result: the tokenizer considers this one word,
+    /// and this only fills in a reading it has no headword for. Each part
+    /// does get its **own** unit number, though — `啤酒杯` is two lexical
+    /// words that happen to be written without a space, and a tone rule
+    /// reaching across them would assume a prosody nobody stated.
     ///
     /// Gives up rather than guessing in two situations. A part that is not in
     /// the lexicon at all ends the attempt — and so does a part that is
@@ -263,11 +377,16 @@ enum PinyinService {
     /// become `dōngxīfāng` and look certain, when `东西` is exactly the word
     /// that cannot be settled without context.
     @MainActor
-    private static func decomposition(of token: String, lexicon: ChineseLexicon) -> String? {
+    private static func decomposition(
+        of token: String,
+        firstUnit: Int,
+        lexicon: ChineseLexicon
+    ) -> (syllables: [PinyinSyllable], nextUnit: Int)? {
         let characters = Array(token)
         guard characters.count > 1 else { return nil }
 
-        var pieces: [String] = []
+        var syllables: [PinyinSyllable] = []
+        var unit = firstUnit
         var index = 0
         while index < characters.count {
             var length = min(lexicon.longestHeadwordLength, characters.count - index)
@@ -275,9 +394,17 @@ enum PinyinService {
             while length >= 1 {
                 let candidate = String(characters[index..<(index + length)])
                 if lexicon.isAmbiguous(candidate) { return nil }
-                if let numbered = lexicon.reading(for: candidate),
-                   let marked = markedPinyin(of: numbered, characterCount: length) {
-                    pieces.append(marked.joined())
+                if let reading = lexicon.reading(for: candidate),
+                   let parts = PinyinSyllable.lexical(
+                       reading: reading,
+                       of: candidate,
+                       unit: unit,
+                       footSplit: footSplit(of: candidate, lexicon: lexicon),
+                       wordStartOffsets: index == 0 ? [0] : [],
+                       underlyingTone: { lexicon.baseTone(ofSyllable: $1, character: $0) }
+                   ) {
+                    syllables.append(contentsOf: parts)
+                    unit += 1
                     index += length
                     matched = true
                     break
@@ -286,7 +413,7 @@ enum PinyinService {
             }
             guard matched else { return nil }
         }
-        return pieces.joined()
+        return (syllables, unit)
     }
 
     /// ICU's own reading for a token the lexicon cannot settle.
@@ -318,6 +445,10 @@ enum PinyinService {
         /// ICU's own Latin transcription of this token, used only as the
         /// fallback when the lexicon has no single reading.
         let transcription: String?
+        /// Punctuation carries no reading but does end a sentence, so it is
+        /// kept as a boundary rather than dropped — see
+        /// `PinyinSyllable.barrier(unit:)`.
+        let isPunctuation: Bool
     }
 
     private static func segmentedTokens(of text: String) -> [Token] {
@@ -340,17 +471,21 @@ enum PinyinService {
             let word = nsText.substring(
                 with: NSRange(location: tokenRange.location, length: tokenRange.length)
             )
-            // Punctuation does carry a transcription — "。" comes back as "｡".
-            // Measured in phase 3; without this filter a sentence ended up as
-            // "wǒ xiǎng chī diǎn dōngxī ｡". Pinyin is written without the
-            // Chinese punctuation, so tokens without a letter or digit go.
-            guard word.contains(where: { $0.isLetter || $0.isNumber }) else { continue }
+            // Punctuation does carry a transcription — "。" comes back as
+            // "｡". Measured in phase 3; taking it would put "wǒ xiǎng chī
+            // diǎn dōngxī ｡" in the field, because Pinyin is written without
+            // the Chinese punctuation. It is kept as a **boundary** instead
+            // of dropped, so a tone rule cannot reach across a full stop.
+            guard word.contains(where: { $0.isLetter || $0.isNumber }) else {
+                tokens.append(Token(text: word, transcription: nil, isPunctuation: true))
+                continue
+            }
 
             let transcription = (CFStringTokenizerCopyCurrentTokenAttribute(
                 tokenizer, kCFStringTokenizerAttributeLatinTranscription
             ) as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            tokens.append(Token(text: word, transcription: transcription))
+            tokens.append(Token(text: word, transcription: transcription, isPunctuation: false))
         }
         return tokens
     }

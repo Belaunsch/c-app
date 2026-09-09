@@ -1,0 +1,240 @@
+# Pinyin Golden Corpus — datengestützter Teil.
+# ERZEUGT von tools/generate-pinyin-corpus.py. Nicht von Hand bearbeiten.
+# Die regelkritischen Kategorien stehen in pinyin-corpus-manual.tsv.
+#
+# Spalten: Kategorie, Hanzi, erwartete Lernaussprache, needsReview, Herkunft
+# des Sollwerts. Kategorien hier: A Grundwortschatz, B neutraler Ton,
+# C Polyphone im Kontext, D zwei dritte Töne, H Komposita/Zerlegung,
+# I Alltagssätze. E, F, G, J und K stehen von Hand in
+# pinyin-corpus-manual.tsv.
+A	苹果	píngguǒ	false	CC-CEDICT
+A	西瓜	xīguā	false	CC-CEDICT
+A	香蕉	xiāngjiāo	false	CC-CEDICT
+A	面包	miànbāo	false	CC-CEDICT
+A	牛奶	niúnǎi	false	CC-CEDICT
+A	咖啡	kāfēi	false	CC-CEDICT
+A	米饭	mǐfàn	false	CC-CEDICT
+A	鸡蛋	jīdàn	false	CC-CEDICT
+A	蔬菜	shūcài	false	CC-CEDICT
+A	医生	yīshēng	false	CC-CEDICT
+A	老师	lǎoshī	false	CC-CEDICT
+A	工人	gōngrén	false	CC-CEDICT
+A	司机	sījī	false	CC-CEDICT
+A	警察	jǐngchá	false	CC-CEDICT
+A	厨师	chúshī	false	CC-CEDICT
+A	农民	nóngmín	false	CC-CEDICT
+A	律师	lǜshī	false	CC-CEDICT
+A	北京	Běijīng	false	CC-CEDICT
+A	上海	Shànghǎi	false	CC-CEDICT
+A	中国	Zhōngguó	false	CC-CEDICT
+A	德国	Déguó	false	CC-CEDICT
+A	法国	Fǎguó	false	CC-CEDICT
+A	日本	Rìběn	false	CC-CEDICT
+A	美国	Měiguó	false	CC-CEDICT
+A	英国	Yīngguó	false	CC-CEDICT
+A	韩国	Hánguó	false	CC-CEDICT
+A	火车站	huǒchēzhàn	false	CC-CEDICT
+A	飞机场	fēijīchǎng	false	CC-CEDICT
+A	图书馆	túshūguǎn	false	CC-CEDICT
+A	博物馆	bówùguǎn	false	CC-CEDICT
+A	电影院	diànyǐngyuàn	false	CC-CEDICT
+A	邮局	yóujú	false	CC-CEDICT
+A	公园	gōngyuán	false	CC-CEDICT
+A	明天	míngtiān	false	CC-CEDICT
+A	昨天	zuótiān	false	CC-CEDICT
+A	今天	jīntiān	false	CC-CEDICT
+A	中午	zhōngwǔ	false	CC-CEDICT
+A	星期	xīngqī	false	CC-CEDICT
+A	天气	tiānqì	false	CC-CEDICT
+A	汉语	Hànyǔ	false	CC-CEDICT
+A	英语	Yīngyǔ	false	CC-CEDICT
+A	问题	wèntí	false	CC-CEDICT
+A	照片	zhàopiàn	false	CC-CEDICT
+A	学校	xuéxiào	false	CC-CEDICT
+A	教室	jiàoshì	false	CC-CEDICT
+A	报纸	bàozhǐ	false	CC-CEDICT
+A	手机	shǒujī	false	CC-CEDICT
+A	电视	diànshì	false	CC-CEDICT
+A	冰箱	bīngxiāng	false	CC-CEDICT
+A	空调	kōngtiáo	false	CC-CEDICT
+A	自行车	zìxíngchē	false	CC-CEDICT
+A	出租车	chūzūchē	false	CC-CEDICT
+A	地铁	dìtiě	false	CC-CEDICT
+A	机票	jīpiào	false	CC-CEDICT
+A	护照	hùzhào	false	CC-CEDICT
+A	房间	fángjiān	false	CC-CEDICT
+A	电话	diànhuà	false	CC-CEDICT
+A	邮票	yóupiào	false	CC-CEDICT
+C	银行	yínháng	false	CC-CEDICT Phrase + BLCU-Regeln
+C	行为	xíngwéi	false	CC-CEDICT Phrase + BLCU-Regeln
+C	进行	jìnxíng	false	CC-CEDICT Phrase + BLCU-Regeln
+C	旅行	lǚxíng	false	CC-CEDICT Phrase + BLCU-Regeln
+C	长大	zhǎngdà	false	CC-CEDICT Phrase + BLCU-Regeln
+C	长期	chángqī	false	CC-CEDICT Phrase + BLCU-Regeln
+C	校长	xiàozhǎng	false	CC-CEDICT Phrase + BLCU-Regeln
+C	生长	shēngzhǎng	false	CC-CEDICT Phrase + BLCU-Regeln
+C	东西南北	dōngxīnánběi	false	CC-CEDICT Phrase + BLCU-Regeln
+C	买东西	mǎidōngxi	false	CC-CEDICT Phrase + BLCU-Regeln
+C	音乐	yīnyuè	false	CC-CEDICT Phrase + BLCU-Regeln
+C	快乐	kuàilè	false	CC-CEDICT Phrase + BLCU-Regeln
+C	大家	dàjiā	false	CC-CEDICT Phrase + BLCU-Regeln
+C	大学	dàxué	false	CC-CEDICT Phrase + BLCU-Regeln
+C	个人	gèrén	false	CC-CEDICT Phrase + BLCU-Regeln
+C	一个人	yígèrén	false	CC-CEDICT Phrase + BLCU-Regeln
+C	号码	hàomǎ	false	CC-CEDICT Phrase + BLCU-Regeln
+C	口号	kǒuhào	false	CC-CEDICT Phrase + BLCU-Regeln
+C	为了	wèile	false	CC-CEDICT Phrase + BLCU-Regeln
+C	因为	yīnwèi	false	CC-CEDICT Phrase + BLCU-Regeln
+C	认为	rènwéi	false	CC-CEDICT Phrase + BLCU-Regeln
+C	作为	zuòwéi	false	CC-CEDICT Phrase + BLCU-Regeln
+C	教书	jiāoshū	false	CC-CEDICT Phrase + BLCU-Regeln
+C	教室	jiàoshì	false	CC-CEDICT Phrase + BLCU-Regeln
+C	还是	háishi	false	CC-CEDICT Phrase + BLCU-Regeln
+C	还有	háiyǒu	false	CC-CEDICT Phrase + BLCU-Regeln
+C	重要	zhòngyào	false	CC-CEDICT Phrase + BLCU-Regeln
+C	重复	chóngfù	false	CC-CEDICT Phrase + BLCU-Regeln
+C	差别	chābié	false	CC-CEDICT Phrase + BLCU-Regeln
+C	只有	zhíyǒu	false	CC-CEDICT Phrase + BLCU-Regeln
+C	只好	zhíhǎo	false	CC-CEDICT Phrase + BLCU-Regeln
+C	中间	zhōngjiān	false	CC-CEDICT Phrase + BLCU-Regeln
+C	中国	Zhōngguó	false	CC-CEDICT Phrase + BLCU-Regeln
+C	得到	dédào	false	CC-CEDICT Phrase + BLCU-Regeln
+C	觉得	juéde	false	CC-CEDICT Phrase + BLCU-Regeln
+C	睡觉	shuìjiào	false	CC-CEDICT Phrase + BLCU-Regeln
+C	方便	fāngbiàn	false	CC-CEDICT Phrase + BLCU-Regeln
+B	谢谢	xièxie	false	CC-CEDICT (Ton 5)
+B	明白	míngbai	false	CC-CEDICT (Ton 5)
+B	朋友	péngyou	false	CC-CEDICT (Ton 5)
+B	妈妈	māma	false	CC-CEDICT (Ton 5)
+B	爸爸	bàba	false	CC-CEDICT (Ton 5)
+B	哥哥	gēge	false	CC-CEDICT (Ton 5)
+B	弟弟	dìdi	false	CC-CEDICT (Ton 5)
+B	妹妹	mèimei	false	CC-CEDICT (Ton 5)
+B	孩子	háizi	false	CC-CEDICT (Ton 5)
+B	衣服	yīfu	false	CC-CEDICT (Ton 5)
+B	事情	shìqing	false	CC-CEDICT (Ton 5)
+B	时候	shíhou	false	CC-CEDICT (Ton 5)
+B	先生	xiānsheng	false	CC-CEDICT (Ton 5)
+B	太太	tàitai	false	CC-CEDICT (Ton 5)
+B	什么	shénme	false	CC-CEDICT (Ton 5)
+B	多么	duōme	false	CC-CEDICT (Ton 5)
+B	这么	zhème	false	CC-CEDICT (Ton 5)
+B	那么	nàme	false	CC-CEDICT (Ton 5)
+B	认识	rènshi	false	CC-CEDICT (Ton 5)
+B	休息	xiūxi	false	CC-CEDICT (Ton 5)
+B	困难	kùnnan	false	CC-CEDICT (Ton 5)
+B	萝卜	luóbo	false	CC-CEDICT (Ton 5)
+B	葡萄	pútao	false	CC-CEDICT (Ton 5)
+B	石头	shítou	false	CC-CEDICT (Ton 5)
+B	阿们	āmen	false	CC-CEDICT (Ton 5)
+B	啊哟	āyo	false	CC-CEDICT (Ton 5)
+B	挨着	āizhe	false	CC-CEDICT (Ton 5)
+B	爱爱	àiai	false	CC-CEDICT (Ton 5)
+B	爱人	àiren	false	CC-CEDICT (Ton 5)
+B	鞍子	ānzi	false	CC-CEDICT (Ton 5)
+B	暗里	ànli	false	CC-CEDICT (Ton 5)
+B	案子	ànzi	false	CC-CEDICT (Ton 5)
+B	鏊子	àozi	false	CC-CEDICT (Ton 5)
+B	吧嗒	bāda	false	CC-CEDICT (Ton 5)
+B	八哥	bāge	false	CC-CEDICT (Ton 5)
+B	巴唧	bāji	false	CC-CEDICT (Ton 5)
+B	巴结	bājie	false	CC-CEDICT (Ton 5)
+B	巴掌	bāzhang	false	CC-CEDICT (Ton 5)
+B	把儿	bàr	false	CC-CEDICT (Ton 5)
+B	把子	bàzi	false	CC-CEDICT (Ton 5)
+D	你好	níhǎo	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	水果	shuíguǒ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	手表	shóubiǎo	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	美好	méihǎo	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	可以	kéyǐ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	所以	suóyǐ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	语法	yúfǎ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	打扫	dásǎo	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	洗澡	xízǎo	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	老板	láobǎn	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	指导	zhídǎo	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	选举	xuánjǔ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	表演	biáoyǎn	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	领导	língdǎo	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	友好	yóuhǎo	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	也许	yéxǔ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	只有	zhíyǒu	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	起点	qídiǎn	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	早晚	záowǎn	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	允许	yúnxǔ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	保守	báoshǒu	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	广场	guángchǎng	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	处理	chúlǐ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	管理	guánlǐ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	展览	zhánlǎn	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	总统	zóngtǒng	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	雨伞	yúsǎn	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	老虎	láohǔ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	打死	dásǐ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	洗手	xíshǒu	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	理想	líxiǎng	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	有理	yóulǐ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	小组	xiáozǔ	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	首领	shóulǐng	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	保管	báoguǎn	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+D	尽管	jínguǎn	false	BLCU 现代汉语: 两个上声前后行，前头那个变阳平
+H	啤酒杯	píjiǔbēi	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	咖啡杯	kāfēibēi	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	苹果树	píngguǒshù	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	牛奶瓶	niúnǎipíng	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	汉语课	Hànyǔkè	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	英语课	Yīngyǔkè	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	医生们	yīshēngmen	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	老师们	lǎoshīmen	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	西瓜汁	xīguāzhī	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	香蕉皮	xiāngjiāopí	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	照片集	zhàopiànjí	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	邮局门	yóujúmén	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	博物馆门	bówùguǎnmén	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	飞机场路	fēijīchǎnglù	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	香蕉树	xiāngjiāoshù	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	西瓜皮	xīguāpí	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	牛奶店	niúnǎidiàn	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	鸡蛋皮	jīdànpí	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	英语书	Yīngyǔshū	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	汉语书	Hànyǔshū	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	医生室	yīshēngshì	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	警察们	jǐngchámen	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	邮局员	yóujúyuán	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	公园门	gōngyuánmén	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	图书馆门	túshūguǎnmén	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	电影院门	diànyǐngyuànmén	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	手机店	shǒujīdiàn	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	照片墙	zhàopiànqiáng	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	米饭碗	mǐfànwǎn	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	冰箱门	bīngxiāngmén	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+H	报纸堆	bàozhǐduī	false	CC-CEDICT Teil-Stichwörter + Zerlegung (A23)
+I	我是学生	wǒshìxuésheng	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	他是老师	tāshìlǎoshī	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	我有一个问题	wǒyǒuyígewèntí	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	明天我去学校	míngtiānwǒqùxuéxiào	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	她喜欢香蕉	tāxǐhuanxiāngjiāo	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	我不知道	wǒbùzhīdào	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	我不明白	wǒbùmíngbai	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	这个不错	zhègebúcuò	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	我在图书馆	wǒzàitúshūguǎn	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	她在教室里	tāzàijiàoshìlǐ	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	我们去公园	wǒmenqùgōngyuán	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	请等一下	qǐngděngyíxià	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	不客气	búkèqi	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	你叫什么名字	nǐjiàoshénmemíngzi	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	我二十岁	wǒèrshísuì	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	你住在哪里	nǐzhùzàinálǐ	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	我住在北京	wǒzhùzàiBěijīng	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	火车站在哪里	huǒchēzhànzàinálǐ	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	我想去博物馆	wǒxiǎngqùbówùguǎn	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	他七点吃早饭	tāqīdiǎnchīzǎofàn	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	我们八点上课	wǒmenbādiǎnshàngkè	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	她九点下班	tājiǔdiǎnxiàbān	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	我十点睡觉	wǒshídiǎnshuìjiào	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	今天是星期一	jīntiānshìXīngqīyī	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	她有一个妹妹	tāyǒuyígemèimei	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	他工作很忙	tāgōngzuòhěnmáng	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	我们一起去吃饭	wǒmenyìqǐqùchīfàn	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	我很喜欢中国	wǒhěnxǐhuanZhōngguó	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung
+I	他有一本书	tāyǒuyìběnshū	false	CC-CEDICT + BLCU-Regeln auf handgesetzter Segmentierung

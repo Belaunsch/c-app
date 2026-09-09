@@ -73,6 +73,7 @@ final class ChineseLexicon {
 
         readings = Self.loadReadings()
         ambiguousWords = Self.loadAmbiguousWords()
+        baseTones = Self.loadBaseTones()
         storedLongestHeadwordLength = readings.keys.reduce(1) { max($0, $1.count) }
 
         if readings.isEmpty {
@@ -91,6 +92,56 @@ final class ChineseLexicon {
     func reading(for word: String) -> String? {
         prepare()
         return readings[word]
+    }
+
+    /// The tone a syllable carries when it is **not** reduced, for a
+    /// character whose reading here is the neutral tone.
+    ///
+    /// `一个` is `yi1 ge5` in the data and is spoken `yíge`, because the `一`
+    /// rule is triggered by what `个` is underlyingly — a fourth tone — and
+    /// not by the neutral tone it surfaces with. Without this the app said
+    /// `yīge`, which the phase-6.5 accuracy pass listed as its
+    /// highest-priority error.
+    ///
+    /// The answer comes from `cedict-base-tones.txt`, a derivation of the
+    /// readings file that ships beside it: the same character appears with a
+    /// full tone in other headwords — `一个人` gives `ge4` — and the file
+    /// records the dominant one. Derived offline rather than counted at
+    /// launch because the census over every headword measured **314 ms**, and
+    /// this class is main-actor-bound: paying that while the editor sheet
+    /// appears is exactly the stutter the phase forbids.
+    ///
+    /// `nil` means "not decidable", and every caller has to treat that as
+    /// "apply no rule" rather than picking something. 131 of the 538 reduced
+    /// syllables in the snapshot land there: no full reading at all, none
+    /// dominant enough, or too few occurrences to call it dominant.
+    func baseTone(ofSyllable syllable: String, character: Character) -> Int? {
+        prepare()
+        return baseTones[Key(character: character, syllable: syllable.lowercased())]
+    }
+
+    /// One character in one reading. The syllable is part of the key because
+    /// a character with two readings has two base tones, and mixing them
+    /// would answer for the wrong one.
+    private struct Key: Hashable {
+        let character: Character
+        let syllable: String
+    }
+
+    private var baseTones: [Key: Int] = [:]
+
+    private static func loadBaseTones() -> [Key: Int] {
+        guard let text = bundledText(named: "cedict-base-tones") else { return [:] }
+        var tones: [Key: Int] = [:]
+        for line in text.split(separator: "\n", omittingEmptySubsequences: true)
+        where line.hasPrefix("#") == false {
+            let fields = line.split(separator: "\t")
+            guard fields.count >= 3,
+                  let character = fields[0].first, fields[0].count == 1,
+                  let tone = Int(fields[2]), (1...4).contains(tone) else { continue }
+            tones[Key(character: character, syllable: String(fields[1]))] = tone
+        }
+        return tones
     }
 
     /// Whether `word` is a headword with several different readings.

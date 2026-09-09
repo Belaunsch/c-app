@@ -74,11 +74,54 @@ nicht mitgebaut.
 | --- | --- | --- |
 | `cedict-readings.txt` | `Stichwort<TAB>Pinyin` für jedes vereinfachte Stichwort mit genau **einer** Lesung. 119.939 Zeilen. | 2,55 MB |
 | `cedict-ambiguous.txt` | Ein Stichwort pro Zeile für jedes Stichwort mit **mehreren** Lesungen. 1.250 Zeilen. | 6 KB |
+| `cedict-base-tones.txt` | Grundtöne neutralisierter Silben. 407 Zeilen. | 7 KB |
 | `LICENSE.txt` | Vollständiger Lizenztext CC BY-SA 4.0. | 20 KB |
 
-Beide Datendateien beginnen mit Kommentarzeilen, die Version, Lizenz und
+Alle Datendateien beginnen mit Kommentarzeilen, die Version, Lizenz und
 Herkunft nennen, damit die Angaben auch dann mitreisen, wenn die Datei
 einzeln kopiert wird.
+
+### `cedict-base-tones.txt` — nachträglich ergänzt in Phase 6.5
+
+Diese Datei ist eine **Ableitung zweiter Stufe**: Sie entsteht nicht aus dem
+CC-CEDICT-Original, sondern aus `cedict-readings.txt` in diesem Ordner.
+Erzeugt von [`tools/generate-cedict-base-tones.py`](../../../../tools/generate-cedict-base-tones.py),
+und damit allein aus dem Repository reproduzierbar.
+
+**Wozu.** `一个` steht als `yi1 ge5` und wird `yíge` gesprochen: Die
+`一`-Sandhi-Regel wird davon ausgelöst, was `个` **zugrunde** ist — ein vierter
+Ton —, nicht vom neutralen Ton an der Oberfläche. Diese Information steht in
+`cedict-readings.txt` nicht direkt, weil `个` allein ein mehrdeutiges
+Stichwort ist. Sie steckt aber darin: Dasselbe Zeichen erscheint in anderen
+Stichwörtern mit vollem Ton, `一个人` gibt `ge4`.
+
+**Wie.** Gezählt wird, welche Töne jede Silbe über alle reinen
+Han-Stichwörter hinweg annimmt; aufgeschrieben wird der **vorherrschende**,
+sofern er mindestens neun von zehn Nicht-Neutral-Vorkommen hält. Vorherrschend
+statt eindeutig ist wesentlich: `个` liest `ge4` 86-mal, `ge5` 43-mal und
+`ge3` genau einmal — wer einen eindeutigen Vollton verlangt, bekommt für den
+entscheidenden Fall keine Antwort.
+
+Dazu eine **Mindestevidenz von fünf Vorkommen**, nachträglich ergänzt: Ohne
+sie ruhten 59 Zeilen auf ein bis drei Belegen, und dort kippt der
+vorherrschende Vollton weg vom Grundton der reduzierten Form — `们 men` ergab
+2, und das stammte ausschließlich aus dem Ortsnamen 图们, nicht aus einem
+Vollton des Pluralsuffixes. Aus dem Review.
+
+Von 538 Silben mit Neutralton-Lesung bekommen damit 407 einen Grundton; die
+übrigen 131 bleiben ohne Eintrag, und die App wendet dort keine Regel an. Die
+Silbe steht in der **expandierten** Schreibweise (`nü`, nicht `nu:`), weil der
+Konsument sie so nachfragt — eine Zeile war deshalb unauffindbar, bis das
+Review es fand.
+
+**Warum vorberechnet.** Derselbe Zensus zur Laufzeit kostet gemessen 314 ms,
+und `ChineseLexicon` liegt auf dem Main Actor. Im `.task` des Editors wäre das
+ein merkbares Stocken. Die Daten sind statisch, die Ableitung deterministisch.
+
+**Lizenz.** Ableitung von CC-CEDICT, also dieselbe Lizenz: CC BY-SA 4.0. Keine
+neue Datenquelle — die Datei enthält keine Information, die nicht schon in
+`cedict-readings.txt` steckt; sie stellt sie nur so um, dass ein Nachschlagen
+sie findet.
 
 ## Gemessene Eigenschaften des Datenbestands
 

@@ -16,15 +16,16 @@ dahin erfüllen dieses Repository und die Dateiköpfe der Assets die Pflicht.
 
 | Pflicht | Erfüllt durch |
 | --- | --- |
-| Nennung der Urheber und der Quelle | Kurzform oben, [SOURCE.md](SOURCE.md), Kopfzeilen der beiden Asset-Dateien |
+| Nennung der Urheber und der Quelle | Kurzform oben, [SOURCE.md](SOURCE.md), Kopfzeilen der drei Asset-Dateien |
 | Hinweis auf die Lizenz mit Link | [LICENSE.txt](LICENSE.txt) und der Link in der Kurzform |
 | Kennzeichnung von Änderungen | [SOURCE.md](SOURCE.md), Abschnitt „Wurden die Originaldaten verändert?“ |
-| Weitergabe von Bearbeitungen unter derselben Lizenz (ShareAlike) | Die beiden erzeugten Dateien stehen selbst unter CC BY-SA 4.0, siehe unten |
+| Weitergabe von Bearbeitungen unter derselben Lizenz (ShareAlike) | Die drei erzeugten Dateien stehen selbst unter CC BY-SA 4.0, siehe unten |
 
 ## Wie weit reicht ShareAlike?
 
-**Betroffen:** die Dateien in diesem Ordner. `cedict-readings.txt` und
-`cedict-ambiguous.txt` sind Bearbeitungen der CC-CEDICT-Daten und stehen
+**Betroffen:** die Dateien in diesem Ordner. `cedict-readings.txt`,
+`cedict-ambiguous.txt` und `cedict-base-tones.txt` sind Bearbeitungen der
+CC-CEDICT-Daten und stehen
 deshalb unter CC BY-SA 4.0. Wer sie weitergibt — auch als Teil dieses
 öffentlichen Repositories — gibt sie unter dieser Lizenz weiter.
 

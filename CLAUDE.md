@@ -6,8 +6,8 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phasen 0–6 abgeschlossen.** Gerätetest der Phase 6 am
-**2026-09-08** vollständig bestanden. Stand des Gates: **296 Tests grün**, 0
+**Aktueller Stand: Phasen 0–6.5 abgeschlossen.** Gerätetest der Phase 6.5 am
+**2026-09-09** vollständig bestanden. Stand des Gates: **376 Tests grün**, 0
 fehlgeschlagen, 0 Compilerwarnungen auf einem Debug-Build von null,
 Release-Build von null ebenso.
 
@@ -20,6 +20,16 @@ Pinyin kommt primär aus gebündelten CC-CEDICT-Daten (`ChineseLexicon`,
 `PinyinTone`), ICU liefert nur noch die Wortgrenzen und den gekennzeichneten
 Fallback. Ein nicht eindeutig auflösbares Pinyin wird **nicht geraten**,
 sondern als prüfbedürftig markiert und im Editor benannt.
+
+Seit Phase 6.5 zeigt das Feld die **Lernaussprache** statt der
+Wörterbuchschreibung: `不对` → `búduì`, `一点` → `yìdiǎn`, `你好` → `níhǎo`.
+Die lexikalische Lesung und der gesprochene Ton sind getrennte Werte
+(`PinyinSyllable`), `ToneSandhi` ist eine reine Foundation-Schicht, und
+angewandt wird nur, was obligatorisch und lokal entscheidbar ist — Details und
+Begründung in A28 bis A30. Gemessen an einem Golden Corpus mit 372 Fällen:
+343 von 347 exakt. Vier bekannte Grenzen stehen namentlich in
+`PinyinCorpusTests.knownFailures`; in allen vier fehlt die Information in den
+Daten, nicht im Algorithmus.
 
 Die Lernlogik liegt als reine, getestete Foundation-Schicht in
 `CApp/Learning/` — Gewichtung, gewichtete Auswahl ohne Zurücklegen, Queue mit
@@ -34,12 +44,11 @@ Session-Setup, Abfrage, Selbsteinschätzung, Rückschreiben nach SwiftData nach
 Kartenliste mit **UND** (A26 gegen A12) — zwei Bildschirme, zwei Fragen. Kein
 Audio, keine Spracherkennung.
 
-**Nächster Schritt ist Phase 6.5 — Pinyin & Pronunciation Accuracy
-Hardening:** lexikalische Lesung und Lernaussprache trennen, Tonsandhi als
-eigene reine Schicht (dritter Ton, `一`, `不`). Vor dem Beginn sind zwei
-Entscheidungen zu klären, sie stehen in der Roadmap: Sandhi über Wortgrenzen
-hinweg oder nur innerhalb eines Wortes, und `一下`/`一点` aus dem Lexikon
-oder über die Regel.
+**Nächster Schritt ist Phase 7 — Sprachausgabe (Mandarin TTS).** Kein Audio,
+keine Spracherkennung und keine Aussprachebewertung existieren bisher. Für
+Phase 9 ist vorab festgehalten: Ein Treffer der Spracherkennung heißt „der
+erkannte Text stimmt wahrscheinlich mit dem Zieltext überein" — nie „richtig
+ausgesprochen" (harte Regel 7).
 
 Drittanbieter-Daten liegen ausschließlich in
 `CApp/Resources/ThirdParty/CC-CEDICT/` und stehen unter CC BY-SA 4.0; die

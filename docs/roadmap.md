@@ -825,39 +825,237 @@ Wiederaufnahme einer unterbrochenen Session.
 
 ## Phase 6.5 — Pinyin & Pronunciation Accuracy Hardening
 
-**Status: geplant, noch nicht begonnen.** Zwischenphase, vom Nutzer nach dem
-Gerätetest der Phase 6 angeordnet und vor Phase 7 einzuschieben. Dieser
-Abschnitt hält nur den vereinbarten Umfang fest; er ist noch keine
-Implementierungsvorgabe im Detail.
+**Status: abgeschlossen.** Zwischenphase, vor Phase 7 eingeschoben. Der
+physische Gerätetest lief am **2026-09-09** durch, in zwei Läufen: der
+Hauptdurchlauf über Neutralton, dritten Ton, `一`, `不` und Polyphone samt
+manueller Korrektur, ↻ und Persistenz, und danach ein gezielter Nachtest über
+die Änderungen des Accuracy Pass. Bestätigt am Gerät: `一个` → `yí ge`,
+`我有一个问题` → `wǒ yǒu yí ge wèntí`, `一号` → `yí hào`, `千禧一代` →
+`Qiānxǐ Yī dài`, `不看` → `bù kàn`, `很好` → `hěn hǎo` mit Prüfhinweis.
+`cedict-base-tones.txt` ist auf dem Gerät wirksam, das Editor-Sheet stockt
+beim ersten Öffnen nach vollständigem Neustart nicht, Flugmodus funktioniert.
+**Alle sechs Gerätewerte sind deckungsgleich mit der Simulatormessung.**
 
-### Ziel
-Die Karte soll die Aussprache zeigen, die ein Lernender tatsächlich sagen
-soll — nicht nur die Wörterbuchlesung. Beides ist heute dasselbe Feld, und
-genau das ist die Ungenauigkeit: `你好` steht im Lexikon als `ni3 hao3`,
-gesprochen wird `níhǎo`.
+### Gemessener Stand
 
-### Scope
-- **Lexikalische und oberflächliche Lesung trennen.** Die kanonische Lesung
-  bleibt, was CC-CEDICT sagt; die Lernaussprache wird daraus abgeleitet.
-- **`ToneSandhiEngine`** als reine, getestete Schicht: dritter Ton vor
-  drittem Ton, die Regeln für `一` und für `不`. Die Regeln werden vorher
-  recherchiert und dokumentiert, nicht geschätzt.
-- **Neutraler Ton bleibt lexikalisch.** Ton 5 wird gelesen, nie geraten.
-- **Polyphone bleiben eine eigene Stufe.** Sandhi löst keine Mehrdeutigkeit,
-  und Mehrdeutigkeit löst kein Sandhi.
-- **Erweiterter Auflösungszustand**, damit sichtbar bleibt, woher eine Lesung
-  kommt und was geprüft werden sollte.
-- **Golden Corpus** mit begründeten Erwartungen als Messlatte, plus
-  Gegenproben durch Mutation.
-- **Keine weitere Datenquelle ohne gemessenen Bedarf**, kein Backend.
-- Die manuelle Korrektur bleibt geschützt wie bisher (A17, A19, A20).
+| | |
+| --- | --- |
+| Golden Corpus | **372 Fälle** in elf Kategorien |
+| davon mit Aussprache-Erwartung | 347 |
+| exakt getroffen | **343 / 347 = 98,8 %** |
+| Wortgrenzen (Kategorie K) | 0 Abweichungen |
+| falsch gesetzte Prüfhinweise | 0 |
+| Tests | **373 grün**, 0 Warnungen, Debug und Release von null |
 
-### Zwei offene Entscheidungen, vor dem Beginn zu klären
-1. Soll Sandhi über Wortgrenzen hinweg angewandt werden oder nur innerhalb
-   eines Wortes? Über Grenzen hinweg ist es prosodisch, nicht lexikalisch —
-   also nicht immer entscheidbar.
-2. `一下` und `一点`: aus dem Lexikon lesen oder über die `一`-Regel
-   ableiten? Die beiden Wege ergeben nicht überall dasselbe.
+Der Prozentwert gilt für **genau diesen Corpus**, nicht für beliebigen Text.
+Es gibt bewusst keine Schwelle auf der Quote — statt einer Zahl prüft
+`goldenCorpus()` die Fehlermenge **namentlich** gegen
+`PinyinCorpusTests.knownFailures` plus leere Review- und Abstandslisten. Das
+wirkt in beide Richtungen: eine neue Abweichung wird rot, eine behobene muss
+dort erst gestrichen werden.
+
+Der Resolver-Aufwand der neuen Schicht liegt im Messrauschen, gegengeprüft mit
+abgeschalteter Sandhi-Schicht. Lexikon kalt 100 ms, Grundton-Abfrage 0 ms,
+Wort 0,28 ms, langer Satz 0,57 ms.
+
+### Was entstanden ist
+
+- **`PinyinSyllable`** — strukturierte Zwischenrepräsentation mit sieben
+  Feldern: Hanzi, Buchstaben ohne Tonzeichen, **lexikalischer Ton**
+  (Oberfläche), **Oberflächenton** (was gesprochen wird), **Grundton** (was
+  eine Nachbarregel auslöst), **Unit-Nummer** (Wort), **Fuß-Nummer**
+  (Konstituente im Wort), Wortanfang. Die letzten drei sind der eigentliche
+  Inhalt dieser Phase.
+- **`ToneSandhi`** — reine Funktion, importiert nur `Foundation`,
+  `nonisolated`, **33 eigene Tests in 41 Fällen**. Eine Silbe schreibt immer
+  nur ihren *eigenen* Oberflächenton; welchen Ton eine Regel **liest**, ist
+  dagegen von Fall zu Fall verschieden und in
+  [A28](architecture.md#anhang-entscheidungen-und-begründungen)/[A30](architecture.md#anhang-entscheidungen-und-begründungen)
+  festgehalten: erster Dritt-Ton-Zyklus lexikalisch, zweiter Zyklus über die
+  Fußgrenze auf dem Oberflächenton, `一`/`不` auf dem Grundton des Nachbarn.
+  Diese drei auseinanderzuhalten ist nicht Pedanterie — wer den zweiten
+  Zyklus für redundant hält und „aufräumt", stellt `xiáoláoshǔ` wieder her.
+- **`PinyinService.footSplit`** — bestimmt die Klammerung über Teil-Stichwörter
+  (längstes Präfix, längstes Suffix; genau eines bekannt entscheidet, sonst
+  Teilung in der Mitte als konservativer Fall).
+- **`cedict-base-tones.txt`** — 407 Zeilen, Grundtöne reduzierter Silben,
+  abgeleitet aus dem schon gebündelten `cedict-readings.txt` von
+  `tools/generate-cedict-base-tones.py`. Keine neue Datenquelle;
+  Herkunft, Verfahren und Lizenz in
+  [SOURCE.md](../CApp/Resources/ThirdParty/CC-CEDICT/SOURCE.md).
+- **`PinyinResolution.transformations`** — kategorial `thirdTone`, `yi`, `bu`.
+  Keine Confidence, kein Ereignisprotokoll.
+- Satzzeichen bleiben als tonlose Grenze in der Silbenkette erhalten, sonst
+  hätte `他不。对了` über den Punkt hinweg `bú` ergeben.
+- Golden Corpus in `CAppTests/Resources/`: der datengestützte Teil aus
+  `tools/generate-pinyin-corpus.py`, die regelkritischen Kategorien E, F, G,
+  J und K von Hand. **Keine Schemaänderung, kein Netzzugriff.**
+
+### Die zwei offenen Entscheidungen, beide geschlossen
+
+1. **Sandhi über Wortgrenzen?** Beim dritten Ton **nein** — nur innerhalb
+   einer Lexikoneinheit, und dort zusätzlich zyklisch je Konstituente, weil
+   die Realisierung über Grenzen hinweg prosodisch variabel ist (A28). Bei
+   `一` und `不` **ja** — diese Regeln hängen am Zeichen und an der
+   unmittelbar folgenden Silbe, nicht an einer Domäne; deshalb wird `一天` zu
+   `yìtiān`, obwohl es kein Stichwort ist.
+2. **`一下` und `一点`: Lexikon oder Regel?** Beides, in dieser Reihenfolge.
+   Das Lexikon liefert die **lexikalische** Lesung (`yi1 xia4`, `yi1 dian3`),
+   die Regel leitet daraus die gesprochene Form ab (`yíxià`, `yìdiǎn`). Die
+   beiden Wege widersprechen sich nicht, sobald man sie als zwei Schichten
+   liest statt als Alternativen — genau das ist die Trennung, die diese Phase
+   eingeführt hat.
+
+### Accuracy Pass — was aus den sechs Restfehlern wurde
+
+| | |
+| --- | --- |
+| Restfehler vor dem Pass | 6 |
+| algorithmisch behoben | **3** — `一个` und seine zwei Satzvorkommen |
+| Goldwert korrigiert | 0 |
+| als echte Mehrdeutigkeit umgebucht | 0 |
+| prosodisch variabel | 0 |
+| verbleibende echte Fehler | **4**, alle Datenlücke |
+
+Die letzte Zeile ist eine mehr als drei behobene aus sechs erwarten lässt, und
+das hat einen Grund: `不看` war vor dem Pass ein Restfehler, ich hatte es
+**aus dem Messsatz genommen**, und das wurde zurückgenommen — siehe unten.
+
+**Behoben, Klasse B (verlorene lexikalische Information) — `一个`.** Kein
+Sonderfall, sondern ein Datenmodellproblem: `一个` ist `yi1 ge5`, gesprochen
+`yíge`, weil die `一`-Regel vom **Grundton** des folgenden Zeichens ausgelöst
+wird und nicht vom neutralen Ton an der Oberfläche. `PinyinSyllable`
+unterscheidet jetzt beides; die Reduktion bleibt in der Ausgabe erhalten.
+
+Den Grundton liefert `cedict-base-tones.txt`. Verfahren: zählen, welche Töne
+jede Silbe über alle reinen Han-Stichwörter annimmt, den **vorherrschenden**
+nehmen ab 90 % der Nicht-Neutral-Vorkommen, bei **mindestens fünf** Belegen.
+Vorherrschend statt eindeutig ist wesentlich — `个` liest `ge4` 86-mal, `ge5`
+43-mal, `ge3` genau einmal, und wer Eindeutigkeit verlangt, bekommt für den
+entscheidenden Fall keine Antwort. Die Mindestevidenz kam aus dem Review:
+ohne sie ruhten 59 Zeilen auf ein bis drei Belegen, und `们 men` ergab 2 allein
+aus dem Ortsnamen 图们, nicht aus einem Vollton des Pluralsuffixes. **407 von
+538** reduzierten Silben bekommen so einen Grundton; die übrigen **131**
+antworten `nil`, und `nil` heißt „keine Regel anwenden".
+
+Vorberechnet statt zur Laufzeit gezählt, weil derselbe Zensus gemessen 314 ms
+kostet und `ChineseLexicon` auf dem Main Actor liegt — im `.task` des Editors
+wäre das ein merkbares Stocken.
+
+**Reichweite, ehrlich:** 407 Zeilen sind nicht 407 wirksame Antworten. Über
+den ganzen gebündelten Bestand stehen nur vier Silbenpaare `一`/`不`
+unmittelbar vor einer reduzierten Silbe, und **`一`+`个` ist das einzige, bei
+dem der Mechanismus die Ausgabe tatsächlich verändert** — bei `不`+`得` ist
+`不` meist selbst lexikalisch neutral, bei `不`+`儿` und `不`+`是` wird der
+Grundton nie gefragt. Die übrigen Regelzweige sind synthetisch in
+`ToneSandhiTests` festgehalten, nicht am Bestand gemessen. Das Zählen kam aus
+den beiden Reviews; meine erste Formulierung „466 Silben" legte eine
+Reichweite nahe, die die Daten nicht tragen.
+
+**Meine zurückgenommene Fehlentscheidung — `不看`.** Ich hatte `不看` samt
+`不难`, `不喝` und `不说` nach Kategorie J umgebucht, mit der Begründung, für
+denselben Fall eine Aussprache **und** einen Prüfhinweis zu erwarten sei
+widersprüchlich. Das Review hat es widerlegt: Die Konjunktion ist der
+**informativste** Fall — `needsReview` sagt „die App ist unsicher", der
+Sollwert sagt „so ist es richtig", zusammen „unsicher und falsch". Die
+J-Politik gilt für Fälle, in denen die *Wahrheit selbst* unentscheidbar ist
+(`东西`); `不看` ist keiner, dort ist `看` das `kàn` von „nicht ansehen" und
+die Lernform determiniert. Die Umbuchung hätte einen messbaren Fehler aus dem
+Satz genommen und die Quote von 98,8 auf 99,1 % geschmeichelt — zwei
+Maßstäbe, während `一号`, `千禧一代` und `水果酒` mit dem richtigen Sollwert
+stehen bleiben. **Zurückgenommen**; alle vier stehen wieder mit Sollwert und
+Prüfhinweis im Messsatz.
+
+**`一号` bleibt ein Fehler, aber nicht der, den ich vermutet hatte.** Die
+Normfrage war zu klären, bevor eine Seite angepasst wird. Belegt: `一月一号`
+ist `yī yuè yī hào` — als Ordnungs- und Datumsangabe behält `一` den
+Grundton. Der Corpus-Sollwert war also **richtig** und die App liegt falsch.
+Damit greift der Korrekturzweig „Goldwert reparieren" hier gerade nicht.
+
+### Bekannte Grenzen, gemessen statt behauptet
+
+Alle vier stehen mit dem **sprachlich richtigen** Sollwert im Corpus und
+namentlich in `PinyinCorpusTests.knownFailures`, tauchen also in der Messung
+auf statt in einer Wortliste zu verschwinden.
+
+- **`一号`** — Ordnungs- und Datumsangabe, siehe oben. Ob ein `一` zählt oder
+  benennt, ist semantisch; CC-CEDICT trägt die Klassifikator-Markierung in
+  den **englischen Glossen**, und die hat das Asset verworfen. Konkreter
+  Vorschlag für eine spätere Phase: eine Klassifikator-Kennzeichnung ins
+  Asset aufnehmen, dann ist die ganze Ordnungszahl-Klasse lösbar (`一号`,
+  `一楼`, `一年级`).
+- **`千禧一代`** — CC-CEDICT schreibt `Yi1` groß, obwohl es kein Eigenname
+  ist, und der Eigennamen-Guard fällt darauf herein. Den Guard zu streichen
+  ist schlechter: dann käme in jedes `不列颠`-Kompositum ein falsches `bú`.
+  Die Alternativen sind im Review an den Daten durchprobiert — „nur wenn die
+  Silbe die erste des Stichworts ist" repariert `千禧一代`, bricht aber
+  `一带一路`. Im vorhandenen Signal gibt es keine bessere Regel.
+- **`水果酒`** — das Wort **ist** ein Stichwort und bildet eine Unit; Ursache
+  ist die Fuß-Heuristik. `水果` **und** `果酒` sind Stichwörter, damit ist die
+  Klammerung unbelegt, es greift die Mittelteilung, und `水` behält seinen
+  dritten Ton. Das Leerzeichen im Ergebnis kommt von ICUs Segmentierung, der
+  Tonfehler nicht. (Zuerst stand hier eine Fehldiagnose auf die Domänenregel
+  — vom Audit gefunden.) **Kein anderer Tie-Break hilft, und das ist gemessen
+  statt behauptet:** Linkspräferenz repariert `水果酒`, bricht aber `小雨伞`
+  (`[小[雨伞]]`, kleiner Regenschirm); Mitte und Rechtspräferenz umgekehrt.
+  Über die unentscheidbaren Fälle des Corpus treffen alle drei gleich oft. Es
+  ist ein echter Tausch zwischen zwei Wörtern, nicht ein behebbarer Fehler —
+  die Frequenzinformation, die ihn entscheiden würde, steht nicht im Asset.
+- **`不看`** — `看` ist mehrdeutig, kommt tonlos bei der Regel an und kann sie
+  nicht auslösen. Der Prüfhinweis erscheint korrekt, die Aussprache ist
+  trotzdem falsch, weil `看` hier determiniert `kàn` ist.
+
+**Die größte Fehlerklasse liegt weiterhin nicht beim Sandhi, sondern in der
+Grundauflösung:** 34 von 60 gewöhnlichen Alltagssätzen enthalten mindestens
+ein Wort ohne eindeutige Lexikonlesung. Alltagszeichen wie `好`, `个`, `大`,
+`行`, `长`, `为`, `号`, `少`, `教`, `重`, `还`, `都`, `得`, `觉`, `乐`, `差`
+stehen alle in der Mehrdeutigkeitsliste.
+
+### Akzeptanzkriterien
+- [x] Lexikalische Lesung und Lernaussprache sind getrennte Werte; die
+      kanonische Lesung bleibt aus dem Lexikon ablesbar.
+- [x] Dritter Ton vor drittem Ton wird angewandt, aber nur innerhalb einer
+      belegten lexikalischen Einheit und dort zyklisch je Konstituente.
+      `你好`→`níhǎo`, `展览馆`→`zhánlánguǎn`, `小老鼠`→`xiǎoláoshǔ`.
+- [x] Keine globale Zeichenpositions-Heuristik über einen ganzen String; die
+      einzige positionsbasierte Entscheidung ist die Mittelteilung im
+      unbelegten Fall, benannt in A28.
+- [x] `一` vor viertem Ton `yí`, sonst `yì`, mit strukturell erkannten
+      Ausnahmen: Ordnungszahl nach `第`, Ziffernnachbarschaft, Reduplikation,
+      Eigennamen-Signal.
+- [x] `不` vor viertem Ton `bú`, sonst `bù`; lexikalischer Neutralton hat
+      Vorrang und wird von keiner Regel angefasst (`对不起`, `看不见`).
+- [x] Neutralton wird nie geraten, sondern gelesen.
+- [x] Polyphone bleiben eine getrennte Stufe; Sandhi entscheidet nie eine
+      Lesung, und ein Rateergebnis wird von keiner Tonregel geheilt.
+- [x] `needsReview` greift genau dort, wo die App keine sichere Antwort hat —
+      0 Abweichungen über 372 Fälle, als harte Zusicherung im Test.
+- [x] Golden Corpus vorhanden, Sollwerte nicht aus der Implementierung
+      abgeleitet, Restfehler namentlich festgeschrieben.
+- [x] Manuelle Korrektur, beide ↻ und die Editor-Warnung unverändert.
+- [x] Kein Schemawechsel, keine Laufzeit-Dependency, kein Netzzugriff, kein
+      Audio, kein Speech-Code.
+- [x] Keine merkbare Verzögerung im Editor; Ladezeit gegen den Stand vor der
+      Phase gemessen.
+- [x] Gezielter Nachtest auf dem Gerät zu den Änderungen nach dem
+      Hauptdurchlauf — bestanden, siehe Statuszeile.
+
+### Der gezielte Nachtest und warum er nötig war
+Nach dem Hauptdurchlauf kamen hinzu: eine neue gebündelte Ressource
+(`cedict-base-tones.txt`, 7 KB, in `ChineseLexicon.prepare()` geladen), ein
+`let`-Feld auf einem Werttyp und zwei Regel-Aufrufstellen. Nichts an UI,
+Provenance-Logik oder Persistenz. Ein vollständiger Durchlauf war deshalb
+nicht gerechtfertigt, zwei Dinge konnte der Simulator aber nicht beantworten,
+und beide sind am Gerät bestätigt:
+
+1. **Liegt die neue Datei im Gerätebundle?** Sie hängt am Mechanismus der
+   synchronisierten Ordner, und der Ausfall wäre **stumm** gewesen:
+   `loadBaseTones` liefert dann `[:]`, `一个` fällt lautlos auf `yīge` zurück,
+   und es erscheint kein Hinweis. Am Gerät kommt `yí ge`, die Datei ist also
+   wirksam.
+2. **Stockt das Editor-Sheet beim ersten Öffnen?** Die Ladearbeit liegt im
+   `.task` auf dem Main Actor, und die 314 ms, die die Vorberechnung
+   begründen, sind gemessen und nicht geschätzt. Kein merkbares Stocken.
 
 ### Ausdrücklich nicht in dieser Phase
 Audio, Spracherkennung, Aussprachebewertung. **Für Phase 9 wird festgehalten:**
@@ -985,6 +1183,53 @@ ob das Gesagte zum Sollwert passt.
 - **9.8** Verweigerte Berechtigung sauber behandeln: Mikrofonteil entfällt,
   der Rest der App bleibt uneingeschränkt nutzbar.
 - **9.9** Nicht mehr benötigte Locale-Reservierungen wieder freigeben.
+
+### Qualitätsanforderung, festgelegt in Phase 6.5
+
+**Spracherkennung und Aussprachebewertung sind zwei verschiedene Dinge.** Diese
+Phase misst ausschließlich das Erste. Die Kette ist:
+
+```text
+gesprochenes Mandarin
+→ Apples Spracherkennung
+→ erkanntes Hanzi
+→ Normalisierung
+→ Vergleich mit dem Ziel-Hanzi
+```
+
+Daraus darf **genau** eine von zwei Aussagen entstehen:
+
+- „wahrscheinlich erkannt"
+- „abweichend erkannt"
+
+Nicht daraus entstehen darf: „richtig ausgesprochen", „Ton korrekt", ein
+Prozentwert, ein Score, eine Sternebewertung. Ein Treffer der
+Spracherkennung heißt, dass der erkannte **Text** wahrscheinlich zum Zieltext
+passt — nichts über die Aussprache. Das ist harte Regel 7 in `CLAUDE.md`, und
+es gilt auch dann, wenn die Erkennung sehr zuverlässig arbeitet: Ein Erkenner
+mit gutem Sprachmodell errät den richtigen Satz auch aus schlechter
+Aussprache.
+
+**Kein automatisches Heraufsetzen des Lernstatus** allein aufgrund eines
+einzelnen ASR-Treffers. Die Selbsteinschätzung bleibt die Quelle des
+Lernstands (§6.1 in [learning-engine.md](learning-engine.md)).
+
+### Gerätebenchmark, Voraussetzung für READY
+
+Vor dem Phasenabschluss ein eigener Benchmark auf echter Hardware, mindestens:
+
+| Dimension | Fälle |
+| --- | --- |
+| Länge | einsilbige Wörter, mehrsilbige Wörter, kurze Sätze, lange Sätze |
+| Wiederholung | dieselbe Äußerung mehrfach |
+| Umgebung | normale Zimmergeräusche, leise Stimme, laute Stimme |
+| Netz | Flugmodus |
+| Gegenproben | bewusst falsche Wörter, ähnlich klingende Wörter |
+
+Metriken mindestens: exakte Übereinstimmung des normalisierten Hanzi,
+Character Error Rate, False Accepts, False Rejects. Die letzten zwei sind die
+wichtigen — sie sagen, wie oft die App eine falsche Äußerung durchwinkt und
+wie oft sie eine richtige ablehnt.
 
 ### Akzeptanzkriterien
 - [ ] Q2, Q3 und Q4 sind mit Messergebnissen vom Gerät dokumentiert.

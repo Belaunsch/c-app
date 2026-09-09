@@ -1,0 +1,298 @@
+# Pinyin Golden Corpus — regelkritischer Teil, VON HAND.
+#
+# Diese Fälle lassen sich nicht aus den Daten ableiten, weil genau die
+# Ausnahmen sie interessant machen. Jeder Sollwert ist einzeln hergeleitet;
+# die Spalte `basis` sagt woraus. Der datengestützte Teil steht in
+# pinyin-corpus.tsv und wird von tools/generate-pinyin-corpus.py erzeugt.
+#
+# Spalten: Kategorie, Hanzi, erwartete Lernaussprache, needsReview, Herkunft.
+#
+# Ein leeres Erwartungsfeld heißt: **keine** Erwartung an den Text, nur an
+# needsReview. Das ist Kategorie J — dort ist der Text ein ICU-Rateergebnis,
+# und das als Sollwert festzuschreiben würde ein Raten zur Wahrheit erklären.
+#
+# Kategorien:
+#   E  längere Folgen dritter Töne — die Verzweigung entscheidet
+#   F  一-Sandhi samt Ausnahmen
+#   G  不-Sandhi samt lexikalischem Neutralton
+#   J  bekannte nicht auflösbare Fälle — müssen als prüfbedürftig gelten
+#   K  Wortgrenzen — die einzigen Fälle, die auf Abstand geprüft werden
+#
+# Regelquelle für F und G: 北京语言大学, 现代汉语, Kapitel Variation:
+#   一: „『一』字基调是阴平，阴阳上前全降声；去声之前念中升，叠字中间须读轻"
+#   不: „『不』字基调是去声，阴阳上前不变更；去声之前变中升，叠字当中也念轻"
+# Dass die App die gesprochene Form überhaupt zeigt, erlaubt
+# GB/T 16159-2012 §6.5.2 ausdrücklich für den Sprachunterricht.
+
+# --- Wortgrenzen. Nur wo ein Sollwert ein Leerzeichen enthält, prüft der
+#     Benchmark den Abstand; überall sonst ist er leerzeichenunabhängig, weil
+#     Wortabstände Orthografie sind und nicht Aussprache. Diese vier Fälle
+#     sind die aus apple-frameworks.md Q6, an denen die Segmentierung
+#     fachlich hängt: das Lexikon kennt keine Wortgrenzen, ICU liefert sie.
+K	买东西	mǎi dōngxi	false	A23: Grenzen von ICU, Lesungen vom Lexikon
+K	东西南北	dōngxī nánběi	false	A23: zwei Wörter, Phrase im Lexikon
+K	早上好	zǎoshang hǎo	false	A23: `zao3 shang5 hao3` ist zwei Wörter
+K	我不明白	wǒ bù míngbai	false	A23: nicht `不明`+`白`, sondern `不`+`明白`
+
+# --- E: Längere Folgen dritter Töne. **Von Hand**, und zwar bewusst.
+#     Diese Kategorie stand zuerst im generierten Teil, wo das Skript die
+#     Regel gleichförmig von links anwandte — und damit dieselbe Annahme
+#     traf wie die Implementierung. Das Review hat es gefunden: Der Corpus
+#     hätte den Fehler als Erfolg gemeldet.
+#
+#     Der Sollwert kommt jetzt aus meinem eigenen Strukturbefund, nicht aus
+#     einer Lexikonabfrage. Bei drei dritten Tönen entscheidet die
+#     Verzweigung, und die Quelle gibt zwei Muster:
+#       双单格 [[AB]C] → 2-2-3   (展览|馆, 广场|舞)
+#       单双格 [A[BC]] → 3-2-3   (小|老鼠, 纸|老虎)
+#     Bei nur **zwei** dritten Tönen in Folge ist die Struktur belanglos —
+#     die erste Silbe wird immer zum zweiten Ton.
+#
+#     Quelle: 北京语言大学, 现代汉语 — „两个上声前后行，前头那个变阳平" für
+#     das Paar; für drei Silben im 双单格 „前两个音节变阳平". Für das
+#     单双格 ändert sich obligatorisch nur die Mittelsilbe; die erste ist in
+#     der Literatur optional, und Optionales wird hier nicht geraten.
+
+# 双单格 [[AB]C] → 2-2-3
+E	展览馆	zhánlánguǎn	false	双单格 [[展览]馆], Ausstellungs-Halle
+E	总统府	zóngtóngfǔ	false	双单格 [[总统]府], Präsidenten-Residenz
+E	水彩笔	shuícáibǐ	false	双单格 [[水彩]笔], Wasserfarben-Stift
+E	指导者	zhídáozhě	false	双单格 [[指导]者], Anleitender
+E	手写体	shóuxiétǐ	false	双单格 [[手写]体], Handschrift-Stil
+E	水果酒	shuíguójiǔ	false	双单格 [[水果]酒], Obst-Wein
+E	所有者	suóyóuzhě	false	双单格 [[所有]者], Eigentümer
+E	广场舞	guángchángwǔ	false	双单格 [[广场]舞], Platz-Tanz
+E	处理者	chúlízhě	false	双单格 [[处理]者], Bearbeitender
+E	保守党	báoshóudǎng	false	双单格 [[保守]党], konservative Partei
+
+# 单双格 [A[BC]] → 3-2-3. Nur die Mittelsilbe ändert sich obligatorisch.
+E	小老鼠	xiǎoláoshǔ	false	单双格 [小[老鼠]], kleine Maus
+E	纸老虎	zhǐláohǔ	false	单双格 [纸[老虎]], Papiertiger
+E	小酒馆	xiǎojiúguǎn	false	单双格 [小[酒馆]], kleine Schenke
+E	小拇指	xiǎomúzhǐ	false	单双格 [小[拇指]], kleiner Finger
+E	小雨伞	xiǎoyúsǎn	false	单双格 [小[雨伞]], kleiner Regenschirm
+E	冷处理	lěngchúlǐ	false	单双格 [冷[处理]], Kaltbehandlung
+
+# `使领馆` ist eine Zusammenziehung von 使馆 und 领馆 — koordinativ, also
+# streng genommen keine der beiden Formen. Der Sollwert ist 3-2-3, weil nur
+# die Mittelsilbe obligatorisch wechselt. (Der Code kommt hier über das
+# Suffix-Stichwort `领馆` zum selben Ergebnis, nicht über den konservativen
+# Rückfall — Hinweis aus dem Audit.)
+E	使领馆	shǐlíngguǎn	false	Koordinativ; nur die Mittelsilbe obligatorisch
+# `导火索`: weder `导火` noch `火索` ist Stichwort, die Struktur ist aus den
+# Daten nicht zu belegen. Erwartet wird die konservative Lesart.
+E	导火索	dǎohuósuǒ	false	Struktur unbelegbar, konservativ 3-2-3
+
+# Nur zwei dritte Töne in Folge: Struktur belanglos, die erste Silbe ändert
+# sich immer.
+E	洗手间	xíshǒujiān	false	Paar 洗+手, danach T1
+E	打火机	dáhuǒjī	false	Paar 打+火, danach T1
+E	养老院	yánglǎoyuàn	false	Paar 养+老, danach T4
+E	管理员	guánlǐyuán	false	Paar 管+理, danach T2
+E	打点滴	dádiǎndī	false	Paar 打+点, danach T1
+E	小姐姐	xiáojiějie	false	Paar 小+姐; 姐 vor Neutralton unverändert
+
+# Vier dritte Töne. 双双格 [[AB][CD]] → 2-3-2-3: innerhalb jeder Hälfte
+# greift die Paarregel, über die Grenze nicht, weil die erste Silbe der
+# zweiten Hälfte dort schon zum zweiten Ton geworden ist.
+E	养老保险	yánglǎo báoxiǎn	false	双双格 [[养老][保险]], Rentenversicherung
+E	哪里哪里	nálǐ nálǐ	false	双双格, verdoppelte Höflichkeitsformel
+
+# --- F: 一 vor viertem Ton → yí ---
+F	一下	yíxià	false	BLCU: 去声之前念中升
+F	一定	yídìng	false	BLCU: 去声之前念中升
+F	一样	yíyàng	false	BLCU: 去声之前念中升
+F	一半	yíbàn	false	BLCU: 去声之前念中升
+F	一切	yíqiè	false	BLCU: 去声之前念中升
+F	一共	yígòng	false	BLCU: 去声之前念中升
+F	一次	yícì	false	BLCU: 去声之前念中升
+F	一遍	yíbiàn	false	BLCU: 去声之前念中升
+F	一块	yíkuài	false	BLCU: 去声之前念中升
+
+# --- F: 一 vor erstem, zweitem, drittem Ton → yì ---
+F	一些	yìxiē	false	BLCU: 阴阳上前全降声 (vor T1)
+F	一般	yìbān	false	BLCU: 阴阳上前全降声 (vor T1)
+F	一心	yìxīn	false	BLCU: 阴阳上前全降声 (vor T1)
+F	一生	yìshēng	false	BLCU: 阴阳上前全降声 (vor T1)
+F	一时	yìshí	false	BLCU: 阴阳上前全降声 (vor T2)
+F	一同	yìtóng	false	BLCU: 阴阳上前全降声 (vor T2)
+F	一直	yìzhí	false	BLCU: 阴阳上前全降声 (vor T2)
+F	一头	yìtóu	false	BLCU: 阴阳上前全降声 (vor T2)
+F	一点	yìdiǎn	false	BLCU: 阴阳上前全降声 (vor T3)
+F	一起	yìqǐ	false	BLCU: 阴阳上前全降声 (vor T3)
+F	一手	yìshǒu	false	BLCU: 阴阳上前全降声 (vor T3)
+F	一口	yìkǒu	false	BLCU: 阴阳上前全降声 (vor T3)
+F	一体	yìtǐ	false	BLCU: 阴阳上前全降声 (vor T3)
+
+# --- F: 一 über eine Wortgrenze hinweg. Kein Stichwort, die Regel gilt
+#     trotzdem — sie ist lokal und an das Zeichen gebunden, nicht an eine
+#     prosodische Domäne wie beim dritten Ton. ---
+F	一天	yìtiān	false	BLCU (vor T1), Zerlegung 一+天
+F	一年	yìnián	false	BLCU (vor T2), Zerlegung 一+年
+F	一本	yìběn	false	BLCU (vor T3), Zerlegung 一+本
+F	一件	yíjiàn	false	BLCU (vor T4), Zerlegung 一+件
+F	一条	yìtiáo	false	BLCU (vor T2), Zerlegung 一+条
+F	一张	yìzhāng	false	BLCU (vor T1), Zerlegung 一+张
+F	一杯	yìbēi	false	BLCU (vor T1), Zerlegung 一+杯
+F	一瓶	yìpíng	false	BLCU (vor T2), Zerlegung 一+瓶
+
+# --- F: 一 vor einer **reduzierten** Silbe. Der Auslöser ist der Grundton
+#     unter der Reduktion, nicht der neutrale Ton an der Oberfläche. `个` ist
+#     zugrunde ein vierter Ton — belegt aus dem Asset selbst, `一个人` gibt
+#     `ge4` —, also `yíge`. Die Reduktion bleibt in der Ausgabe erhalten.
+#     Aus dem Accuracy Pass, Klasse B: die Information war fachlich vorhanden
+#     und wurde in der Zwischenrepräsentation verworfen. ---
+F	一个	yíge	false	BLCU vor T4; `个` ist zugrunde T4, belegt durch `一个人` = `yi1 ge4 ren2`
+F	一个人	yígèrén	false	Hier trägt `个` den vollen Ton schon selbst
+
+# --- F: Ausnahmen. Ordnungszahl nach 第 behält den Grundton. ---
+F	第一	dìyī	false	Ordnungszahl, keine Zahlbedeutung „eins"
+F	第一次	dìyīcì	false	Ordnungszahl vor T4, trotzdem Grundton
+
+# --- F: Ausnahmen. 一 als Ziffer in einer Zahl behält den Grundton. ---
+F	十一	shíyī	false	Zahl, 一 am Ende
+F	一一	yīyī	false	Ziffernfolge/Reduplikation
+F	一二三	yīèrsān	false	Ziffernfolge, kein „eins" vor einem Wort
+
+# --- F: Ausnahmen. Eigennamen behalten den Grundton; CC-CEDICT schreibt
+#     sie groß, das ist das Signal. ---
+F	一月	Yīyuè	false	Eigenname (Monatsname), CC-CEDICT `Yi1 yue4`
+F	十一月	Shíyīyuè	false	Eigenname (Monatsname)
+F	一战	Yīzhàn	false	Eigenname (Erster Weltkrieg)
+F	一带一路	YīdàiYīlù	false	Eigenname (Initiative)
+
+# --- F: Ausnahme. Zwischen zwei gleichen Zeichen (V-一-V) reduziert 一;
+#     CC-CEDICT führt hier den Grundton, und die App erfindet keinen
+#     neutralen Ton, den die Daten nicht hergeben. ---
+F	看一看	kànyīkàn	false	BLCU 叠字中间须读轻; Daten geben yi1, kein Raten
+
+# --- F: 一 am Wortende, ohne folgende Silbe — nichts kann auslösen. ---
+F	唯一	wéiyī	false	Kein Folgeton, Grundton bleibt
+F	统一	tǒngyī	false	Kein Folgeton, Grundton bleibt
+F	万一	wànyī	false	Kein Folgeton, Grundton bleibt
+
+# --- F: bekannte Grenze. `一号` ist der Erste eines Monats, also eine
+#     Zahlbezeichnung, und behält den Grundton. Kein Nachbarzeichen sagt das,
+#     deshalb wendet die App die Regel an und liegt hier falsch. Bewusst mit
+#     dem **richtigen** Sollwert im Corpus, damit der Fehler in der Messung
+#     auftaucht statt in einer Wortliste zu verschwinden. ---
+F	一号	yīhào	false	Zahlbezeichnung; dokumentierte Grenze der Regel
+
+# --- F/G: Großschreibung als Eigennamen-Signal, beide Richtungen. Aus dem
+#     Review. `不列颠` ist die Transliteration von Britain — dort ist `bu`
+#     eine Silbe und kein Negationsmorphem, die Regel darf nicht greifen.
+#     `千禧一代` zeigt die Gegenrichtung: ein gewöhnliches Substantiv, dessen
+#     `一` CC-CEDICT großschreibt, sodass die Regel ausfällt. Der Sollwert ist
+#     die **richtige** Form, damit die Schwäche des Signals in der Messung
+#     auftaucht. ---
+G	不列颠	Bùlièdiān	false	Eigenname, kein Negations-不 (Review)
+F	千禧一代	Qiānxǐyídài	false	Gewöhnliches Wort, aber `Yi1` großgeschrieben — Grenze
+
+# --- G: 不 vor viertem Ton → bú ---
+G	不对	búduì	false	BLCU: 去声之前变中升
+# `不是` ist als Stichwort mehrdeutig (`bu4 shi4` / `bu2 shi5`). Die App löst
+# es trotzdem auf, weil ICU an der Wortgrenze schneidet und beide Zeichen
+# einzeln eindeutig sind — die normale Verneinung ist gemeint.
+G	不是	búshì	false	BLCU vor T4; ICU-Grenze löst das mehrdeutige Stichwort
+G	不会	búhuì	false	BLCU: 去声之前变中升
+G	不要	búyào	false	BLCU: 去声之前变中升
+G	不用	búyòng	false	BLCU: 去声之前变中升
+G	不错	búcuò	false	BLCU: 去声之前变中升
+G	不但	búdàn	false	BLCU: 去声之前变中升
+G	不过	búguò	false	BLCU: 去声之前变中升
+G	不够	búgòu	false	BLCU: 去声之前变中升
+G	不再	búzài	false	BLCU: 去声之前变中升
+G	不客气	búkèqi	false	BLCU vor T4; `qi5` bleibt neutral
+
+# --- G: 不 vor erstem, zweitem, drittem Ton bleibt bù ---
+G	不好	bùhǎo	false	BLCU: 阴阳上前不变更 (vor T3)
+G	不少	bùshǎo	false	BLCU: 阴阳上前不变更 (vor T3)
+G	不同	bùtóng	false	BLCU: 阴阳上前不变更 (vor T2)
+G	不能	bùnéng	false	BLCU: 阴阳上前不变更 (vor T2)
+G	不行	bùxíng	false	BLCU: 阴阳上前不变更 (vor T2)
+G	不忙	bùmáng	false	BLCU: 阴阳上前不变更 (vor T2)
+G	不好意思	bùhǎoyìsi	false	BLCU vor T3; `si5` bleibt neutral
+
+# --- G: lexikalischer Neutralton hat Vorrang. Keine Regel darf `bu5` in
+#     `bù` oder `bú` verwandeln — auch dann nicht, wenn das folgende Zeichen
+#     ein vierter Ton ist (看不见). ---
+G	对不起	duìbuqǐ	false	CC-CEDICT `dui4 bu5 qi3`, Neutralton lexikalisch
+G	差不多	chàbuduō	false	CC-CEDICT `cha4 bu5 duo1`
+G	看不见	kànbujiàn	false	CC-CEDICT `kan4 bu5 jian4`, Neutralton vor T4
+G	来不及	láibují	false	CC-CEDICT `lai2 bu5 ji2`
+G	了不起	liǎobuqǐ	false	CC-CEDICT `liao3 bu5 qi3`
+G	好不好	hǎobuhǎo	false	CC-CEDICT `hao3 bu5 hao3`, A-不-A
+G	是不是	shìbushì	false	CC-CEDICT `shi4 bu5 shi4`, A-不-A
+
+# --- G: A-不-A, wo die Daten den Grundton führen. CC-CEDICT schreibt
+#     `dui4 bu4 dui4`, obwohl die Frageform reduziert. Die App wendet die
+#     vierte-Ton-Regel **nicht** an: ein erfundener Neutralton wäre geraten,
+#     ein `bú` wäre falsch. Also bleibt der lexikalische Ton stehen. ---
+G	对不对	duìbùduì	false	Produktentscheidung: A-不-A ohne T4-Sandhi
+
+# --- G: 不 über eine Wortgrenze hinweg, kein Stichwort. ---
+G	不去	búqù	false	BLCU vor T4, Zerlegung 不+去
+G	不多	bùduō	false	BLCU vor T1, Zerlegung 不+多
+G	不来	bùlái	false	BLCU vor T2, Zerlegung 不+来
+G	不吃	bùchī	false	BLCU vor T1, Zerlegung 不+吃
+
+# `不` vor einem **mehrdeutigen** Zeichen. Hier steht beides: die richtige
+# Lernaussprache **und** die Erwartung, dass die App einen Prüfhinweis setzt.
+#
+# Im Accuracy Pass hatte ich diese vier nach J umgebucht, mit der Begründung,
+# Aussprache und Prüfhinweis zugleich zu erwarten sei widersprüchlich. Das
+# Review hat das widerlegt, und zu Recht: Die Konjunktion ist der
+# **informativste** Fall — `needsReview` sagt „die App ist unsicher", der
+# Sollwert sagt „so ist es richtig", und beides zusammen heißt „unsicher und
+# falsch". Die J-Politik gilt für Fälle, in denen die **Wahrheit selbst**
+# unentscheidbar ist (`东西`). Das ist hier nicht so: In `不看` ist `看` das
+# `kàn` von „nicht ansehen", die Lernaussprache ist determiniert. Die
+# Umbuchung hat damit einen messbaren Fehler aus dem Messsatz genommen und
+# die Quote geschmeichelt — zwei Maßstäbe, während `一号`, `千禧一代` und
+# `水果酒` mit dem richtigen Sollwert stehen bleiben. Zurückgenommen.
+#
+# `不看` scheitert deshalb weiterhin sichtbar (Klasse F: ohne Ton für `看`
+# kann die Regel nicht auslösen); die anderen drei trifft ICUs Rateergebnis
+# zufällig richtig — richtig, aber zu Recht markiert.
+G	不看	búkàn	true	BLCU vor T4; `看` mehrdeutig, Regel kann nicht auslösen
+G	不难	bùnán	true	BLCU vor T2; `难` mehrdeutig, Ergebnis zufällig richtig
+G	不喝	bùhē	true	BLCU vor T1; `喝` mehrdeutig, Ergebnis zufällig richtig
+G	不说	bùshuō	true	BLCU vor T1; `说` mehrdeutig, Ergebnis zufällig richtig
+G	不明白	bùmíngbai	false	BLCU vor T2; `bai5` bleibt neutral
+
+# --- G: 不 und 一 im selben Wort. Beide Regeln greifen unabhängig und lesen
+#     die **lexikalischen** Töne, nicht das Ergebnis der jeweils anderen. ---
+G	不一样	bùyíyàng	false	不 vor T1 unverändert; 一 vor T4 → yí
+G	不一定	bùyídìng	false	不 vor T1 unverändert; 一 vor T4 → yí
+
+# --- G: Satzgrenze. Über einen Punkt hinweg darf keine Regel greifen. ---
+G	他不。对了	tābùduìle	false	Punkt trennt; 不 sieht 对 nicht
+
+# --- J: bekannte nicht auflösbare Fälle. Erwartet wird **nur** der
+#     Prüfhinweis. Der Text bleibt offen, weil er ein ICU-Rateergebnis ist
+#     und ein Rateergebnis kein Sollwert sein kann. ---
+J	东西		true	Mehrdeutig ohne Kontext (dōngxi / dōngxī)
+J	好		true	Einzelzeichen mehrdeutig (hǎo / hào)
+J	个		true	Einzelzeichen mehrdeutig
+J	大		true	Einzelzeichen mehrdeutig (dà / dài)
+J	行		true	Einzelzeichen mehrdeutig (xíng / háng)
+J	长		true	Einzelzeichen mehrdeutig (cháng / zhǎng)
+J	为		true	Einzelzeichen mehrdeutig (wéi / wèi)
+J	号		true	Einzelzeichen mehrdeutig (hào / háo)
+J	多少		true	Mehrdeutig (duōshǎo / duōshao)
+J	少		true	Einzelzeichen mehrdeutig (shǎo / shào)
+J	教		true	Einzelzeichen mehrdeutig (jiāo / jiào)
+J	重		true	Einzelzeichen mehrdeutig (chóng / zhòng)
+J	还		true	Einzelzeichen mehrdeutig (hái / huán)
+J	都		true	Einzelzeichen mehrdeutig (dōu / dū)
+J	得		true	Einzelzeichen mehrdeutig (dé / de / děi)
+J	觉		true	Einzelzeichen mehrdeutig (jué / jiào)
+J	乐		true	Einzelzeichen mehrdeutig (lè / yuè)
+J	差		true	Einzelzeichen mehrdeutig (chā / chà)
+J	很好		true	Enthält das mehrdeutige 好
+J	我很好		true	Enthält das mehrdeutige 好
+J	很长		true	Enthält das mehrdeutige 长
+J	这个多少钱？		true	Enthält das mehrdeutige 多少
+J	我想吃点东西		true	东西 ohne auflösende Phrase
+J	吃东西		true	东西 ohne auflösende Phrase
+J	行不行		true	Enthält das mehrdeutige 行

@@ -6,7 +6,7 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 6 abgeschlossen.**
+**Phasen 0 bis 6.5 abgeschlossen.**
 
 Vorhanden sind die Architektur- und Planungsdokumentation, die
 Claude-Code-Entwicklungsinfrastruktur (`.claude/agents/`, `.claude/skills/`,
@@ -16,10 +16,10 @@ Kartenverwaltung: Wörter und Sätze getrennt, Karten anlegen, bearbeiten und
 löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
 Lernstatus, Kategorien umbenennen und löschen.
 
-Build und Unit-Tests laufen grün: **296 Tests, 0 Fehlschläge, 0
+Build und Unit-Tests laufen grün: **376 Tests, 0 Fehlschläge, 0
 Compilerwarnungen** auf einem Debug-Build von null (iPhone-17-Simulator, iOS
 26.5), Release-Build von null ebenso. Jede Phase ist auf einem echten iPhone
-bestätigt, die letzte am **2026-09-08**.
+bestätigt, die letzte am **2026-09-09**.
 
 Neu aus den Phasen 3 und 4: Beim Anlegen einer Karte genügt der deutsche Text
 — mit Return oder beim Verlassen des Feldes erzeugt die App Hanzi über Apples
@@ -54,10 +54,27 @@ kann, wird als prüfbedürftig gekennzeichnet statt geraten. Dazu eine ruhigere
 Kartenansicht: kompakter Navigationstitel, Filter hinter einem Knopf,
 mehrzeilige Felder für Satzkarten und keine Dauer-Erklärtexte mehr.
 
-Nächster Schritt: **Phase 6.5 — Pinyin & Pronunciation Accuracy Hardening**.
-Die Karte soll die Aussprache zeigen, die man tatsächlich sagt, nicht nur die
-Wörterbuchlesung: `你好` steht im Lexikon als `ni3 hao3`, gesprochen wird
-`níhǎo`.
+Neu aus Phase 6.5: Das Feld zeigt die Aussprache, die man tatsächlich sagt,
+nicht die Wörterbuchschreibung. `你好` steht im Lexikon als `ni3 hao3` und
+erscheint als `níhǎo`, `不对` als `búduì`, `一点` als `yìdiǎn`. Angewandt wird
+nur, was obligatorisch und lokal entscheidbar ist: dritter Ton vor drittem Ton
+innerhalb einer Lexikoneinheit und dort abhängig von der Verzweigung
+(`展览馆` → `zhánlánguǎn`, aber `小老鼠` → `xiǎoláoshǔ`), dazu die Regeln für
+`一` und `不`. Prosodisch variable Fälle bleiben in der Wörterbuchform, und
+der lexikalische Neutralton wird von keiner Regel angetastet — `对不起` bleibt
+`duìbuqǐ`.
+
+Gemessen an einem Golden Corpus mit **372 Fällen** in elf Kategorien, dessen
+Sollwerte aus GB/T 16159-2012, 现代汉语-Lehrmaterial und CC-CEDICT stammen und
+**nicht** aus dem App-Code: **343 von 347** Fällen mit Aussprache-Erwartung
+exakt getroffen. Der Wert gilt für genau diesen Corpus und ist keine Aussage
+über beliebigen chinesischen Text. Vier bekannte Grenzen stehen namentlich im
+Testcode und in
+[docs/roadmap.md](docs/roadmap.md): `一号`, `千禧一代`, `水果酒`, `不看` — in
+allen vier fehlt die entscheidende Information in den Daten, nicht im
+Algorithmus.
+
+Nächster Schritt: **Phase 7 — Sprachausgabe (Mandarin TTS)**.
 
 ## Drittanbieter-Daten
 
