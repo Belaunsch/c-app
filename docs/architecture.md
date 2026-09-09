@@ -97,11 +97,18 @@ c-app/
 │   │
 │   ├── Services/
 │   │   ├── PinyinService.swift             CoreFoundation, pur (Phase 3)
+│   │   ├── PinyinSyllable.swift            Silbe mit Ton, Unit und Fuß (Phase 6.5)
+│   │   ├── ToneSandhi.swift                reine Regeln, nur Foundation (Phase 6.5)
+│   │   ├── ChineseLexicon.swift            gebündelte CC-CEDICT-Daten
+│   │   ├── PinyinTone.swift                Tonziffern zu Tonzeichen
 │   │   ├── TranslationService.swift        Verfügbarkeit + Konfiguration (Phase 4)
-│   │   ├── SpeechSynthesisService.swift    AVSpeechSynthesizer
+│   │   ├── MandarinVoice.swift             reine Stimmenauswahl (Phase 7)
+│   │   ├── SpeechSynthesisService.swift    AVSpeechSynthesizer (Phase 7)
 │   │   └── SpeechRecognitionService.swift  SpeechAnalyzer/SpeechTranscriber
 │   │
 │   ├── Features/
+│   │   ├── Speech/
+│   │   │   └── SpeakButton.swift           Lautsprecher + Hinweis (Phase 7)
 │   │   ├── Learn/
 │   │   │   ├── SessionSetupView.swift      Inhalt + Richtung + Tags wählen
 │   │   │   ├── LearnSessionView.swift
@@ -458,11 +465,50 @@ Der Service gibt Vorschläge zurück. Er schreibt nie direkt in die Karte.
 ### SpeechSynthesisService
 
 - Hält **eine** langlebige `AVSpeechSynthesizer`-Instanz (das System retained
-  sie nicht selbst — sonst bricht die Ausgabe sofort ab).
-- Wählt beim Start die beste verfügbare `zh-CN`-Stimme
-  (`.premium` > `.enhanced` > `.default`) und merkt sie sich.
-- Meldet nach außen, ob überhaupt eine `zh-CN`-Stimme vorhanden ist, damit die
-  UI im Zweifel einen Hinweis statt eines toten Buttons zeigt.
+  sie nicht selbst — sonst bricht die Ausgabe sofort ab) **und** den Delegate,
+  denn `delegate` ist eine schwache Referenz. Erzeugt in `CAppApp`, verteilt
+  über die Environment — kein Singleton, weil der `ModelContainer` schon so
+  verfährt, und kein DI-Container.
+- Spricht **Hanzi**, nie Pinyin (A31).
+- Wählt die Stimme über die reine Funktion in `MandarinVoice.swift`:
+  Mainland-Mandarin filtern (über den geparsten BCP-47-Tag, damit `zh-TW` und
+  `yue-HK` draußen bleiben), dann `.premium` > `.enhanced` > `.default`.
+  Auf dem Zielgerät wählt genau diese Ordnung seit der Installation von
+  `Lili (Premium)` diese Stimme — ohne Sonderfall im Code, und im direkten
+  Hörvergleich gegen Tingting bestätigt (Q5). Ein `if name == "Lili"` gibt es
+  bewusst nicht: Es würde auf dem nächsten Gerät nur falsch liegen.
+  **Innerhalb derselben Qualitätsklasse** entscheidet eine Liste bevorzugter
+  Identifier. Sie wird erst gebraucht, wenn die beste installierte Klasse
+  mehrere Stimmen enthält — der erste Gerätebestand war genau dieser Fall:
+  neun `zh-CN`-Stimmen, alle `.default`, `voiceTraits` überall `0`, also kein
+  technisches Kriterium. Diese Präferenz auf Tingting ist eine
+  **Produktentscheidung aus einem physischen Hörvergleich** (Q5), keine
+  Behauptung über technische Überlegenheit, und sie bleibt der Weg für Geräte
+  ohne Premium- oder Enhanced-Stimme. Fällt sie aus, gilt der kleinste
+  Identifier: willkürlich, aber stabil gegen die undokumentierte Reihenfolge
+  von `speechVoices()`.
+- Eigene Qualitätsordnung als `VoiceQuality`, weil
+  `AVSpeechSynthesisVoiceQuality` nicht `Comparable` ist und Apple keine
+  Rangfolge dokumentiert.
+- **Die Audio-Session gehört dem Service.** `usesApplicationAudioSession` ist
+  `true` (gemessen), der Synthesizer verwaltet sie also nicht selbst.
+  `.playback` + `.voicePrompt`, je Äußerung aktiviert und am Ende mit
+  `notifyOthersOnDeactivation` freigegeben — nicht dauerhaft aktiv gehalten.
+- **Der neueste Tap ersetzt die laufende Wiedergabe**, und diese Logik stützt
+  sich bewusst **nicht** auf die Delegate-Callbacks: `didCancel` feuert
+  dokumentiert nicht verlässlich, und seine Reihenfolge gegenüber einem direkt
+  folgenden `speak(_:)` ist nicht dokumentiert. Also wird der Zustand
+  synchron beim Tap gesetzt, `stopSpeaking(at: .immediate)` bedingungslos
+  aufgerufen, und ein Callback zu einer fremden Äußerung per
+  `ObjectIdentifier` verworfen. Über den Actor-Hop reist nur diese Identität,
+  weil `AVSpeechUtterance` nicht `Sendable` ist.
+- `stop()` beim Verschwinden der Lernsession und des Editors: sonst redet die
+  Karte in den nächsten Bildschirm, und es ist der einzige Teardown ohne
+  Delegate-Callback.
+- Meldet nach außen, ob überhaupt eine Mandarin-Stimme vorhanden ist, damit
+  die UI den Knopf **ausblendet** statt ihn tot dastehen zu lassen, plus
+  einmal pro App-Lauf ein Hinweis auf den Systemweg. Kein Schemafeld, kein
+  dauerhaftes „nie wieder".
 
 ### SpeechRecognitionService
 
@@ -674,5 +720,6 @@ würde entfallen.
 | A26 | Kategorien im Lernen mit **ODER**, in der Kartenliste mit **UND** | Die beiden Bildschirme stellen verschiedene Fragen. Die Kartenliste fragt „welche Karte suche ich?" — dort verengt jeder Filter, und Kategorien mit ODER wären inkonsistent zu Typ, Suche und Status (A12, unverändert). Der Lernbildschirm fragt „was soll ich jetzt üben?" — „Essen" und „Reisen" auszuwählen heißt „beides üben". Aus dem Gerätetest der Phase 6: Mit UND leerte die Auswahl einer zweiten Kategorie die Session, weil kaum eine Karte in zwei Kategorien liegt; wer den Stoff erweitern wollte, bekam das Gegenteil. Umgesetzt in `LearnSessionModel.matchesAnyCategory` (`tagKeys.isDisjoint(with:) == false`), keine Auswahl heißt weiterhin keine Einschränkung. Der **Kartentyp bleibt außerhalb dieser Regel** und läuft weiter über `CardFilter.apply(to:type:)` — Wörter und Sätze mischen sich nie, ODER gilt ausschließlich für Kategorien. Der Filter benennt den Unterschied im Fußtext, statt ihn erklären zu müssen: „Geübt wird alles aus **einer** der ausgewählten Kategorien." Beide Regeln stehen in `categoryRulesDifferBetweenContexts` direkt nebeneinander, weil ein späterer Leser sie sonst für einen Fehler hält. |
 | A27 | Eine Container-Gesture ist nie der tragende Weg für eine fachliche Aktion | Aus einer Regression im Gerätetest der Phase 6: Am Karteneditor hing ein Tastatur-Dismiss als `simultaneousGesture` an der `Form`. Simultane Erkennung **verschluckt** einen Tap nicht — aber sie **entzieht sich der Arbitrierung**: `simultaneousGesture` bedeutet ausdrücklich „zusätzlich zu den Gesten der Kinder erkennen", und sobald die Vorfahren-Gesture erkennt, wird der Touch im darunterliegenden UIKit-Control storniert (`cancelsTouchesInView`, Standard `true`). Der Druck des Buttons bricht ab, und zwar unabhängig vom Tastaturzustand — deshalb war der naheliegende Verdacht auf den Guard falsch, und deshalb blieb auch der zweite Tap wirkungslos. `.gesture` ohne Zusatz ist dagegen laut Doku „with a lower precedence than gestures defined by the view": erkennt das Kind, erkennt der Container gar nicht und kann nichts stornieren. Folge: Ein Tap auf `Hinzufügen` schloss nur die Tastatur, die Kategorie wurde nie angelegt, und weitere Taps blieben ebenso wirkungslos — unabhängig vom Tastaturzustand, weshalb der naheliegende Verdacht auf den Guard falsch war. Die zwischenzeitliche räumliche Eingrenzung (`SpatialTapGesture` gegen eine per `onGeometryChange` gemeldete Feldfläche) war doppelt falsch: Sie löste ein Problem, das bei Standardpriorität gar nicht existiert, und behielt die Ursache. **Regel:** Jeder fachliche Effekt liegt in der Aktion des Controls (`addCategory`, der Kategorie-Toggle). **Am Karteneditor gibt es deshalb gar keine Tap-Gesture mehr.** Die Annahme, dass die Standardpriorität von `.gesture` auch über die UIKit-Zellgrenze einer `Form`-Zeile trägt, hat der Gerätetest **widerlegt**: Die Kategorienzeilen ließen sich anschließend überhaupt nicht mehr an- oder abwählen — ausgewählt wurde eine Kategorie nur noch dadurch, dass man sie neu anlegte. Damit ist der in dieser Entscheidung vorgesehene Rückweg eingetreten und ausgeführt. Drei Varianten sind auf diesem Screen gemessen gescheitert: `simultaneousGesture` mit einem einfachen `TapGesture`, dieselbe räumlich eingegrenzt über `SpatialTapGesture` plus `onGeometryChange`, und `.gesture` mit Standardpriorität. **Keine weiteren Versuche** — auch nicht `highPriorityGesture`, Geometrie-Hit-Testing oder eine Delay-Konstruktion. Der Preis ist bewusst bezahlt: Ein Tap auf völlig freie Fläche schließt die Tastatur nicht mehr. Funktionierende Controls haben Vorrang. Der plattformeigene Weg aus einer Tastatur ist `scrollDismissesKeyboard(.interactively)`; er hängt an keiner Arbitrierung. **Rückweg, falls am Gerät doch ein Control eine Aktion verliert:** die Container-Gesture **entfernen** — dann kostet die freie Fläche eine Wischbewegung statt eines Taps. Nicht auf `simultaneousGesture` und nicht auf eine räumliche Eingrenzung ausweichen; beides ist gemessen gescheitert. Ein Button in einer `Form`-Zeile braucht außerdem `.buttonStyle(.borderless)`, sonst wirkt die ganze Zeile als Button und die Konkurrenzfläche wird unnötig groß. |
 | A28 | Tonsandhi des dritten Tons nur **innerhalb einer Lexikoneinheit** | `你好` wird `níhǎo`, `展览馆` wird `zhánlánguǎn` — beide sind je **ein** CC-CEDICT-Stichwort, also eine sichere Domäne. Über eine Wortgrenze hinweg wird **nicht** angewandt: `我很好` bleibt `wǒ hénhǎo`, das führende `我` behält seinen dritten Ton. Grund ist keine Bequemlichkeit, sondern die Quellenlage — Duanmus Analyse lässt die Regel zyklisch je Fuß greifen und **optional** zwischen zwei Zweigen, und die konkrete Realisierung hängt an prosodischer Gruppierung, syntaktischer Verzweigung, Fokus und Sprechtempo. Eine automatische Entscheidung wäre so oft falsch wie richtig. Technisch trägt jede Silbe eine `unit`-Nummer (`PinyinSyllable`): ein Stichwort ist eine Unit, jeder Zerlegungsteil und jeder Fallback bekommt seine eigene. Damit steckt die Domänengrenze in der Datenstruktur und nicht in einer Bedingung im Regelcode. **Innerhalb einer Unit entscheidet zusätzlich die Verzweigung**, und zwar über eine zweite Nummer, den `foot`: Bei drei dritten Tönen gibt die Quelle zwei Muster — 双单格 `[[AB]C]` ergibt 2-2-3 (`展览馆` → `zhánlánguǎn`), 单双格 `[A[BC]]` ergibt 3-2-3 (`小老鼠` → `xiǎoláoshǔ`). Gleiche Tonfolge, verschiedenes Ergebnis; den Unterschied macht allein die Klammerung. `ToneSandhi` wendet die Regel deshalb **zyklisch** an: erst innerhalb des Fußes auf den lexikalischen Tönen, dann über die Fußgrenze auf dem **Oberflächenton** des Nachbarn. Im 双单格 trägt die Mittelsilbe dort noch ihren dritten Ton und wird geändert; im 单双格 ist sie schon zum zweiten Ton geworden und blockiert damit die erste Silbe. Die Klammerung steht nicht in den Daten, aber ein **Teil-Stichwort** ist ein brauchbarer Zeuge: `PinyinService.footSplit` fragt längstes Präfix und längstes Suffix ab, und genau eines von beiden entscheidet. Gemessen über die Dritt-Ton-Wörter des Corpus: 14 von 17 werden so entschieden, und alle 14 stimmen mit den Quellen. Sind beide oder keines Stichwort (`小雨伞` ist `小雨` **und** `雨伞`, `导火索` ist keines), wird in der Mitte geteilt — das ist die konservative Richtung: für ein rechtsverzweigendes Wort die Quellenform, für ein linksverzweigendes bloß der Wörterbuchton auf der ersten Silbe. Was es nie erzeugt, ist ein dritter Wert, den keine Quelle stützt — und genau das täte eine gleichförmige Anwendung von links. **Das war der erste Anlauf, und das Review hat ihn gefunden**: `小老鼠` kam als `xiáoláoshǔ` heraus, was weder Wörterbuch- noch Quellenform ist, und der Corpus meldete es als Erfolg, weil sein Sollwert aus derselben Annahme stammte. Kategorie E des Corpus steht seither von Hand. **Zwei weitere Regeln werden bewusst nicht angewandt:** dritter Ton vor **neutralem** Ton, weil die Variation nicht vorhersagbar ist — 北京语言大学s 现代汉语 gibt beide Realisierungen an, `214+轻声→35` (打扫, 想想) und `214+轻声→21` (李子, 姐姐) —, und der neutrale Ton selbst, der ausschließlich aus den Daten kommt. **`一` und `不` sind davon ausgenommen** und wirken lokal über Wortgrenzen: Ihre Regeln hängen am Zeichen und an der unmittelbar folgenden Silbe, nicht an einer prosodischen Domäne. Deshalb wird `一天` zu `yìtiān`, obwohl es kein Stichwort ist. Satzzeichen bleiben als tonlose Grenze in der Silbenkette erhalten (`PinyinSyllable.barrier`), sonst hätte `他不。对了` über den Punkt hinweg `bú` ergeben. |
+| A31 | Die Sprachausgabe bekommt **Hanzi**, nie Pinyin — und ist von `needsReview` entkoppelt | Der Utterance-Text ist immer der chinesische Text der Karte. Das ist keine Bequemlichkeit, sondern die Grenze zwischen zwei Aufgaben: Unsere Pinyin-Schicht ist eine **sichtbare Lernhilfe** (A29), Apples Synthese ist die **hörbare Aussprache**. Gäbe man ihr eine lateinische Umschrift, würde sie Buchstaben aussprechen statt Chinesisch, und unsere Tonregeln würden zu einer zweiten Sprachsynthese, die niemand gebaut hat und niemand pflegt. Auch ein **von Hand korrigiertes** Pinyin ändert die Eingabe nicht: Es ist die Notiz des Nutzers an sich selbst, keine Aussprachevorschrift für Apple. Ebenso ausgeschlossen sind IPA, SSML, Audio-Postprocessing und Cloud-TTS — spricht Apple ein Hanzi reproduzierbar falsch, wird das dokumentiert und nicht heimlich umgangen. **Zweite Hälfte der Entscheidung:** `PinyinResolution.needsReview` sagt nichts über die Sprechbarkeit. `东西` trägt den Prüfhinweis, weil sich seine *Lesung* nicht eindeutig bestimmen lässt — Apple entscheidet sie selbst, und die Karte bleibt hörbar. Die beiden zu koppeln würde genau die Wörter stumm schalten, die man am dringendsten hören will. Umgesetzt in `SpeechSynthesisService.canSpeak`, das ausschließlich auf Han-Schrift prüft — dieselbe Frage, die der Pinyin-Resolver stellt, damit „brauchbares Chinesisch“ in der App eine Bedeutung hat. |
 | A30 | Die Zwischenrepräsentation trennt **Oberflächenton** und **Grundton** | `一个` steht als `yi1 ge5` und wird `yíge` gesprochen: Die `一`-Regel wird davon ausgelöst, was `个` **zugrunde** ist — ein vierter Ton —, nicht vom neutralen Ton an der Oberfläche. `PinyinSyllable` hält beides: `lexicalTone` ist die Oberfläche und bleibt in der Ausgabe neutral, `underlyingTone` ist der Auslöser. **Nur die `一`- und `不`-Regel lesen den Grundton.** Die Dritt-Ton-Regel bleibt bewusst auf dem Oberflächenton, weil dritter Ton vor *neutralem* Ton variabel ist und absichtlich nicht angewandt wird (A28) — ihr einen tieferen Auslöser zu geben würde eine dokumentierte Zurückhaltung in ein Raten verwandeln. Den Grundton liefert `cedict-base-tones.txt`, eine **Ableitung des schon gebündelten Assets** und keine neue Datenquelle: Dasselbe Zeichen erscheint in anderen Stichwörtern mit vollem Ton, `一个人` gibt `ge4`. Gezählt wird über alle reinen Han-Stichwörter, aufgeschrieben der vorherrschende Ton ab neun von zehn Vorkommen. **Vorherrschend statt eindeutig**, und das ist wesentlich: `个` liest `ge4` 86-mal, `ge5` 43-mal, `ge3` genau einmal — wer Eindeutigkeit verlangt, bekommt für den entscheidenden Fall keine Antwort. Dazu eine Mindestevidenz von fünf Vorkommen, aus dem Review: ohne sie ruhten 59 Zeilen auf ein bis drei Belegen, und `们 men` ergab 2 allein aus dem Ortsnamen 图们. 407 von 538 Neutralton-Silben bekommen damit einen Grundton; die 131 übrigen antworten `nil`, und `nil` heißt „keine Regel anwenden", nie „etwas auswählen". Vorberechnet statt zur Laufzeit gezählt, weil derselbe Zensus gemessen 314 ms kostet und `ChineseLexicon` auf dem Main Actor liegt — im `.task` des Editors wäre das ein merkbares Stocken. Aus dem Accuracy Pass der Phase 6.5, wo `一个` der höchstpriorisierte Fehler war. |
 | A29 | Sichtbares Pinyin zeigt die **Lernaussprache**, nicht die Wörterbuchschreibung | `不对` steht im Feld als `búduì`, nicht als `bùduì`; `一点` als `yìdiǎn`, nicht `yīdiǎn`. Das ist eine bewusste Abweichung von der üblichen Schreibung, und sie ist normativ gedeckt: GB/T 16159-2012 §6.5.2 schreibt `„一"、„不"一般标原调，不标变调` und ergänzt im selben Absatz `在语言教学等方面，可根据需要按变调标写` — im Sprachunterricht darf nach der Tonveränderung geschrieben werden. Diese App **ist** Sprachunterricht. Angewandt wird nur, was obligatorisch und lokal entscheidbar ist (A28); alles Variable bleibt in der Wörterbuchform, was die harmlose Richtung ist, weil jedes Wörterbuch sie druckt. `PinyinResolution.transformations` sagt kategorial, welche Regelklasse gegriffen hat — `thirdTone`, `yi`, `bu` —, damit Tests und Benchmark das zuordnen können. **Keine Confidence-Werte und kein Ereignisprotokoll.** Eine Tonregel ändert `needsReview` nie in eine Richtung: Sie macht eine sichere Lesung nicht prüfbedürftig, und sie heilt kein Rateergebnis. |

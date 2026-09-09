@@ -17,6 +17,7 @@ import Translation
 /// replace something typed by hand.
 struct CardEditorView: View {
     @Environment(\.modelContext) private var context
+    @Environment(SpeechSynthesisService.self) private var speech
     @Environment(\.dismiss) private var dismiss
 
     @Query(sort: [SortDescriptor(\Tag.name)]) private var allTags: [Tag]
@@ -102,6 +103,11 @@ struct CardEditorView: View {
         // user actually touched, plus the platform's own drag. A working
         // control beats a convenience.
         .scrollDismissesKeyboard(.interactively)
+        // Der Editor geht zu, der Ton hört auf. Sonst redet die Aussprache
+        // der eben bearbeiteten Karte in den nächsten Bildschirm hinein —
+        // und `stop()` ist zugleich der einzige Weg, die Audio-Session
+        // freizugeben, der nicht von einem Delegate-Callback abhängt.
+        .onDisappear { speech.stop() }
         .task {
             model.prepareResolver()
             await model.refreshTranslationSupport()
@@ -178,6 +184,13 @@ struct CardEditorView: View {
                     .disabled(model.canTranslate == false)
                     .accessibilityLabel("Neu übersetzen")
                 }
+
+                // Speaks what is **in the field right now**, not what the
+                // card holds: the point is checking the pronunciation while
+                // creating a card, before anything is saved. A third
+                // sibling in the row, with its own action — no gesture, no
+                // container, same shape as the ↻ next to it (A27).
+                SpeakButton(hanzi: model.hanzi)
             }
 
             HStack(spacing: 12) {

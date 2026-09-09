@@ -24,6 +24,10 @@ enum AppError: Error {
     case tagRenameFailed(any Error)
     case tagDeleteFailed(any Error)
 
+    /// Die Audio-Session ließ sich nicht starten. Blockiert nie etwas: Eine
+    /// Karte bleibt ohne Ton lernbar.
+    case speechUnavailable(any Error)
+
     /// Short, German, aimed at the user.
     var message: String {
         switch self {
@@ -43,6 +47,8 @@ enum AppError: Error {
             "Die Kategorie konnte nicht angelegt werden."
         case .tagRenameFailed:
             "Die Kategorie konnte nicht umbenannt werden. Der alte Name bleibt bestehen."
+        case .speechUnavailable:
+            "Die Aussprache konnte nicht abgespielt werden."
         case .tagDeleteFailed:
             "Die Kategorie konnte nicht gelöscht werden. Sie ist weiterhin vorhanden."
         }
@@ -57,7 +63,8 @@ enum AppError: Error {
              .cardDeleteFailed(let error),
              .tagCreateFailed(let error),
              .tagRenameFailed(let error),
-             .tagDeleteFailed(let error):
+             .tagDeleteFailed(let error),
+             .speechUnavailable(let error):
             error.localizedDescription
         }
     }

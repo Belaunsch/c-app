@@ -14,6 +14,7 @@ import SwiftUI
 /// (`docs/learning-engine.md` §1).
 struct LearnSessionView: View {
     @Environment(\.modelContext) private var context
+    @Environment(SpeechSynthesisService.self) private var speech
     @Environment(\.dismiss) private var dismiss
 
     @State private var model: LearnSessionModel
@@ -41,6 +42,9 @@ struct LearnSessionView: View {
                     }
                 }
             }
+            // Die Session endet, der Ton endet. Auch der einzige Teardown, der
+            // ohne Delegate-Callback auskommt.
+            .onDisappear { speech.stop() }
             .task {
                 model.start(in: context)
             }

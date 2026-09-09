@@ -16,6 +16,15 @@ struct CAppApp: App {
     /// (`docs/architecture.md` §7).
     private let container: Result<ModelContainer, any Error>
 
+    /// Genau **eine** Instanz für die Laufzeit der App, wie der Container.
+    ///
+    /// Sie muss so lange leben, weil `AVSpeechSynthesizer` vom System nicht
+    /// gehalten wird — pro View einen zu erzeugen wäre der klassische Weg zu
+    /// abgeschnittener Wiedergabe. Weitergegeben über die Environment, nicht
+    /// als Singleton: Der Container fährt schon so, also braucht es kein
+    /// zweites Muster und keinen DI-Container.
+    @State private var speech = SpeechSynthesisService()
+
     init() {
         container = Result { try Self.makeModelContainer() }
     }
@@ -26,6 +35,7 @@ struct CAppApp: App {
             case .success(let container):
                 RootView()
                     .modelContainer(container)
+                    .environment(speech)
             case .failure(let error):
                 PersistenceErrorView(error: error)
             }

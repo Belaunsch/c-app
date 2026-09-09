@@ -13,9 +13,10 @@ import SwiftUI
 /// German stays: it is the reference the answer belongs to, and having it
 /// vanish makes checking harder.
 ///
-/// No sound, in either direction. The prompt asks the learner to say the
-/// answer out loud, and nothing listens — speaking it is for their own ear.
-/// Playback comes in phase 7, recognition in phase 9.
+/// Since phase 7 the revealed answer carries a speaker. **Only** the
+/// revealed one: before that, sound would hand over the answer the learner
+/// is supposed to produce themselves. Nothing listens, and nothing plays on
+/// its own — recognition is phase 9, and autoplay is not planned.
 struct PromptGermanToChineseView: View {
     let card: Card
     let isRevealed: Bool
@@ -57,20 +58,33 @@ struct PromptGermanToChineseView: View {
     /// mode never asks `PinyinService` again.
     private var answer: some View {
         VStack(spacing: 6) {
-            Text(LearnAnswer.hanzi(for: card))
-                .font(.system(size: 44, weight: .medium))
-                .multilineTextAlignment(.center)
-
-            let pinyin = LearnAnswer.pinyin(for: card)
-            if pinyin.isEmpty == false {
-                Text(pinyin)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+            // The two texts stay one accessibility element with the curated
+            // label they had before phase 7. The speaker is a **sibling**,
+            // not a child: inside a `.combine` element it would lose its
+            // action, and its own label would be swallowed.
+            VStack(spacing: 6) {
+                Text(LearnAnswer.hanzi(for: card))
+                    .font(.system(size: 44, weight: .medium))
                     .multilineTextAlignment(.center)
+
+                let pinyin = LearnAnswer.pinyin(for: card)
+                if pinyin.isEmpty == false {
+                    Text(pinyin)
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(LearnAnswer.accessibilityLabel(for: card))
+
+            // Speaks the card's Hanzi, never its Pinyin (A31). Sits with the
+            // answer because that is what it belongs to, and it disappears
+            // with the answer.
+            SpeakButton(hanzi: LearnAnswer.hanzi(for: card))
+                .font(.title3)
+                .padding(.top, 4)
         }
         .padding(.top, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(LearnAnswer.accessibilityLabel(for: card))
     }
 }

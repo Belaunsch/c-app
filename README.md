@@ -6,7 +6,7 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 6.5 abgeschlossen.**
+**Phasen 0 bis 7 abgeschlossen.**
 
 Vorhanden sind die Architektur- und Planungsdokumentation, die
 Claude-Code-Entwicklungsinfrastruktur (`.claude/agents/`, `.claude/skills/`,
@@ -16,8 +16,8 @@ Kartenverwaltung: Wörter und Sätze getrennt, Karten anlegen, bearbeiten und
 löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
 Lernstatus, Kategorien umbenennen und löschen.
 
-Build und Unit-Tests laufen grün: **376 Tests, 0 Fehlschläge, 0
-Compilerwarnungen** auf einem Debug-Build von null (iPhone-17-Simulator, iOS
+Build und Unit-Tests laufen grün: **389 Testfunktionen / 447 Einzelausführungen,
+0 Fehlschläge, 0 Compilerwarnungen** auf einem Debug-Build von null (iPhone-17-Simulator, iOS
 26.5), Release-Build von null ebenso. Jede Phase ist auf einem echten iPhone
 bestätigt, die letzte am **2026-09-09**.
 
@@ -44,8 +44,20 @@ Kategorienfilter im Lernen verknüpft mit **ODER** („üb beides"), die
 Kartenliste mit **UND** („zeig mir genau die") — zwei Bildschirme, zwei
 Fragen. Keine Streaks, keine Punkte, keine Timer.
 
-Noch nicht vorhanden: **Audio** (Sprachausgabe, Spracherkennung) und der
-Lernmodus in umgekehrter Richtung.
+Neu aus Phase 7: **Sprachausgabe.** Ein Lautsprecher in der aufgedeckten
+Lernkarte, in der Kartenliste und im Editor spricht das Chinesische — im
+Editor den gerade eingegebenen, noch nicht gespeicherten Text. Gesprochen
+wird immer **Hanzi**, nie Pinyin. Die Stimme wird nach Qualität gewählt
+(`.premium` > `.enhanced` > `.default`); auf dem Testgerät ist das die
+nachgeladene **Lili (Premium)**, ohne Premium- oder Enhanced-Stimme
+**Tingting**. Sprechrate `0.45`, verstellbar erst in Phase 10. Ein neuer Tap
+ersetzt die laufende Wiedergabe, es gibt keine Warteschlange und kein
+automatisches Abspielen. Fehlt jede chinesische Stimme, verschwindet der
+Knopf und die App erklärt einmal pro Lauf den Weg über die
+iOS-Einstellungen — die erreichbare Qualität hängt am Gerätebestand.
+
+Noch nicht vorhanden: **Spracherkennung** und der Lernmodus in umgekehrter
+Richtung.
 
 Neu aus Phase 4.5: Das Pinyin kommt nicht mehr aus reiner Transliteration,
 sondern aus einem gebündelten Lexikon — daher die neutralen Töne (`xièxie`,
@@ -74,7 +86,7 @@ Testcode und in
 allen vier fehlt die entscheidende Information in den Daten, nicht im
 Algorithmus.
 
-Nächster Schritt: **Phase 7 — Sprachausgabe (Mandarin TTS)**.
+Nächster Schritt: **Phase 8 — Lernmodus B: Chinesisches Audio → Deutsch**.
 
 ## Drittanbieter-Daten
 

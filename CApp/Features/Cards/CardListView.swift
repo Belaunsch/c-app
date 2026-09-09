@@ -176,10 +176,21 @@ struct CardListView: View {
         } else {
             List {
                 ForEach(visibleCards) { card in
-                    NavigationLink {
-                        CardEditorView(card: card)
-                    } label: {
-                        CardRow(card: card)
+                    // The speaker sits **beside** the link, not inside its
+                    // label. Inside, the row's navigation would take the tap
+                    // and the button would never fire — the phase-6 lesson
+                    // from A27, applied instead of rediscovered. Two
+                    // siblings, two tap areas, no gesture of our own.
+                    HStack(spacing: 8) {
+                        NavigationLink {
+                            CardEditorView(card: card)
+                        } label: {
+                            CardRow(card: card)
+                        }
+
+                        SpeakButton(hanzi: card.hanzi)
+                            .font(.title3)
+                            .foregroundStyle(.tint)
                     }
                     .swipeActions(edge: .trailing) {
                         Button("Löschen", role: .destructive) {

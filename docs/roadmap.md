@@ -1067,6 +1067,67 @@ Prozentangabe, kein Ton-Feedback (harte Regel 7 in `CLAUDE.md`).
 
 ## Phase 7 — Sprachausgabe (Mandarin TTS)
 
+**Status: abgeschlossen.** Der physische Gerätetest lief am **2026-09-09**
+vollständig durch, auf einem iPhone 16 Pro unter iOS 26.6. Bestätigt am
+Gerät: Wiedergabe im Lernmodus erst nach dem Aufdecken; fünf schnelle Taps
+erzeugen **keine** Warteschlange; ein Kartenwechsel spricht den neuen Text;
+nur der gerade sprechende Knopf zeigt den aktiven Zustand, und er bleibt
+nicht hängen. In der Kartenliste öffnet der Lautsprecher-Tap den Editor
+**nicht**, der Zeilen-Tap öffnet ihn — das A27-Risiko ist am Gerät geprüft
+und tritt nicht ein. Im Editor spricht der Knopf das **ungespeicherte**
+Hanzi, und beide ↻, Kategorien, Tastatur, Cursor, Speichern und Abbrechen
+verhalten sich unverändert. Audio: bei aktivem Lautlos-Schalter weiterhin
+hörbar, über Lautsprecher und Kopfhörer, Lautstärketasten normal, im
+**Flugmodus** funktionsfähig, kurzer und langer Satz vollständig ohne
+vorzeitigen Abbruch. Lifecycle mit Tabwechsel und Hintergrundwechsel sowie
+eine **echte Audio-Unterbrechung** hinterlassen keinen hängenden Zustand.
+
+### Stimme und Parameter
+
+| | |
+| --- | --- |
+| Regel | `.premium` > `.enhanced` > `.default`, innerhalb einer Klasse ein deterministischer Identifier-Tiebreak |
+| Auf dem Testgerät gewählt | **Lili (Premium)**, `com.apple.voice.premium.zh-CN.Lili`, `zh-CN`, `.premium` |
+| Getesteter Default-Fallback | **Tingting**, `com.apple.voice.super-compact.zh-CN.Tingting` |
+| Sprechrate | **0.45**, gemessen gegen `0.40` und `0.50` |
+| Audio-Session | `.playback` + `.voicePrompt`, bei Bedarf aktiviert, mit `notifyOthersOnDeactivation` freigegeben |
+| Utterance-Text | immer **Hanzi**, nie Pinyin (A31) |
+| Tests | **389 Testfunktionen / 447 Einzelausführungen**, 0 Fehlschläge, 0 Compilerwarnungen, Debug und Release von null |
+
+Lili wurde erst während der Phase über die iOS-Einstellungen nachgeladen.
+Gewählt wird sie vom **unveränderten** Qualitätsselektor, ohne Sonderfall auf
+Namen oder Identifier — der Tiebreak wird nicht einmal befragt, weil die
+Qualitätsklasse vorher entscheidet. Die Vorzugsliste auf Tingting bleibt der
+Weg für Geräte ohne Premium- oder Enhanced-Stimme; sie stammt aus einem
+physischen Hörvergleich und nicht aus einer technischen Kennzeichnung, denn
+im ersten Gerätebestand meldeten alle neun `zh-CN`-Stimmen dieselbe Klasse.
+Details beider Messrunden in [apple-frameworks.md](apple-frameworks.md), Q5.
+
+### Bekannte Grenzen
+
+- **Die erreichbare Qualität hängt am Gerätebestand.** Ohne nachgeladene
+  Premium- oder Enhanced-Stimme spricht die App mit einer `.default`-Stimme
+  und klingt entsprechend synthetischer. Die App lädt keine Stimmen nach und
+  bietet keine Stimmenauswahl an — das ist Sache der iOS-Einstellungen. Für
+  andere Premium- oder Enhanced-Stimmen als Lili verlässt sich die App auf
+  Apples Klassifikation, ohne sie gehört zu haben.
+- **Der Fall „keine Mandarin-Stimme" ist auf diesem Gerät nicht erzeugbar**,
+  weil die neun `zh-CN`-Stimmen Systemkomponenten sind. Die *Regel* ist über
+  eine Datennaht (`installedVoices`) vollständig getestet, die *Anzeige* des
+  Hinweises hat weder Test- noch Gerätebeleg. Bewusst so akzeptiert, statt
+  Stimmen zu löschen.
+- **Kein Interruption-Observer.** `stop()` hängt an `onDisappear` der
+  Lernsession und des Editors; die Kartenliste ist ein Tab-Root und
+  verschwindet nie. Der Gerätetest zeigt nach Hintergrundwechsel und echter
+  Unterbrechung keinen hängenden Zustand, deshalb bleibt ein
+  `AVAudioSession`-Beobachter ungebaut — er käme erst bei einem belegten
+  Finding, nicht auf Verdacht.
+- **Ersetzung statt Warteschlange ist gerätegedeckt, nicht testgedeckt.** Das
+  bedingungslose `stopSpeaking(at: .immediate)` vor jedem `speak` lässt sich
+  an dieser Naht nicht seriös automatisieren, weil das Timing von
+  `synthesizer.isSpeaking` nicht dokumentiert ist. Belegt durch „fünf
+  schnelle Taps" am Gerät.
+
 ### Ziel
 Korrekte Mandarin-Aussprache auf Knopfdruck hören.
 
@@ -1095,13 +1156,13 @@ Kartenübersicht.
   setzen; die Verstellbarkeit kommt in Phase 10.
 
 ### Akzeptanzkriterien
-- [ ] Ein Wort wird in verständlichem Mandarin mit korrekten Tönen ausgegeben.
-- [ ] Ein Satz ebenso.
-- [ ] Die Wiedergabe bricht nicht vorzeitig ab (Retain-Problem ausgeschlossen).
-- [ ] Wiedergabe funktioniert über Lautsprecher und Kopfhörer.
-- [ ] Ohne passende Stimme erscheint ein verständlicher Hinweis statt eines
+- [x] Ein Wort wird in verständlichem Mandarin mit korrekten Tönen ausgegeben.
+- [x] Ein Satz ebenso.
+- [x] Die Wiedergabe bricht nicht vorzeitig ab (Retain-Problem ausgeschlossen).
+- [x] Wiedergabe funktioniert über Lautsprecher und Kopfhörer.
+- [x] Ohne passende Stimme erscheint ein verständlicher Hinweis statt eines
       toten Buttons.
-- [ ] Funktioniert im Flugmodus.
+- [x] Funktioniert im Flugmodus.
 
 ### Abhängigkeiten
 Phase 6.

@@ -6,10 +6,12 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phasen 0–6.5 abgeschlossen.** Gerätetest der Phase 6.5 am
-**2026-09-09** vollständig bestanden. Stand des Gates: **376 Tests grün**, 0
-fehlgeschlagen, 0 Compilerwarnungen auf einem Debug-Build von null,
-Release-Build von null ebenso.
+**Aktueller Stand: Phasen 0–7 abgeschlossen.** Gerätetest der Phase 7 am
+**2026-09-09** vollständig bestanden. Stand des Gates: **389 Testfunktionen /
+447 Einzelausführungen grün** — parametrisierte Tests machen daraus zwei
+Zahlen, also immer mit Einheit nennen —, 0 fehlgeschlagen, 0
+Compilerwarnungen auf einem Debug-Build von null, Release-Build von null
+ebenso.
 
 Die Kette `Deutsch → Hanzi → Pinyin` läuft mit Return oder beim Verlassen des
 Feldes automatisch, beide Werte bleiben editierbar, und ein von Hand gesetzter
@@ -41,11 +43,26 @@ einzeln `nonisolated`).
 Darüber liegt seit Phase 6 der Lernmodus A in `CApp/Features/Learn/`:
 Session-Setup, Abfrage, Selbsteinschätzung, Rückschreiben nach SwiftData nach
 **jeder** Antwort. Der Kategorienfilter im Lernen verknüpft mit **ODER**, die
-Kartenliste mit **UND** (A26 gegen A12) — zwei Bildschirme, zwei Fragen. Kein
-Audio, keine Spracherkennung.
+Kartenliste mit **UND** (A26 gegen A12) — zwei Bildschirme, zwei Fragen.
 
-**Nächster Schritt ist Phase 7 — Sprachausgabe (Mandarin TTS).** Kein Audio,
-keine Spracherkennung und keine Aussprachebewertung existieren bisher. Für
+Seit Phase 7 gibt es **Sprachausgabe**: ein Lautsprecher in der aufgedeckten
+Lernkarte, in der Kartenliste und im Editor, dort auf dem noch nicht
+gespeicherten Text. Der Synthesizer bekommt immer **Hanzi**, nie Pinyin
+(A31); `SpeechSynthesisService` hält genau eine `AVSpeechSynthesizer`-Instanz
+und ihren Delegate für die App-Laufzeit und wird über die Environment
+verteilt. Die Stimme wird nach Qualität gewählt — `.premium` > `.enhanced` >
+`.default`, innerhalb einer Klasse ein deterministischer Identifier-Tiebreak.
+Auf dem Testgerät ergibt das die nachgeladene **Lili (Premium)**, ohne
+Premium- oder Enhanced-Stimme **Tingting** als getesteten Fallback; einen
+Sonderfall auf einen Stimmennamen gibt es nicht. Rate `0.45` (gemessen gegen
+`0.40` und `0.50`), Session `.playback` + `.voicePrompt`. Ein neuer Tap
+ersetzt die laufende Wiedergabe, es gibt keine Warteschlange, kein Autoplay
+und keinen Interruption-Observer. Bekannte Grenze: Die erreichbare Qualität
+hängt am Gerätebestand — die App lädt keine Stimmen nach. Beide Messrunden
+stehen in [apple-frameworks.md](docs/apple-frameworks.md) unter Q5.
+
+**Nächster Schritt ist Phase 8 — Lernmodus B: Chinesisches Audio → Deutsch.**
+Spracherkennung und Aussprachebewertung existieren weiterhin nicht. Für
 Phase 9 ist vorab festgehalten: Ein Treffer der Spracherkennung heißt „der
 erkannte Text stimmt wahrscheinlich mit dem Zieltext überein" — nie „richtig
 ausgesprochen" (harte Regel 7).
