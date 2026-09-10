@@ -6,9 +6,9 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phasen 0–7 abgeschlossen.** Gerätetest der Phase 7 am
-**2026-09-09** vollständig bestanden. Stand des Gates: **389 Testfunktionen /
-447 Einzelausführungen grün** — parametrisierte Tests machen daraus zwei
+**Aktueller Stand: Phasen 0–8 abgeschlossen.** Gerätetest der Phase 8 am
+**2026-09-10** vollständig bestanden. Stand des Gates: **451 Testfunktionen /
+509 Einzelausführungen grün** — parametrisierte Tests machen daraus zwei
 Zahlen, also immer mit Einheit nennen —, 0 fehlgeschlagen, 0
 Compilerwarnungen auf einem Debug-Build von null, Release-Build von null
 ebenso.
@@ -50,9 +50,8 @@ UND-Semantik der Liste (A12, A26) ist überholt. Dort verengen Typ, Suche und
 Status weiter, die Kategorien sind eine ODER-Gruppe innerhalb dieser
 UND-Kette.
 
-Seit Phase 7 gibt es **Sprachausgabe**: ein Lautsprecher in der aufgedeckten
-Lernkarte, in der Kartenliste und im Editor, dort auf dem noch nicht
-gespeicherten Text. Der Synthesizer bekommt immer **Hanzi**, nie Pinyin
+Seit Phase 7 gibt es **Sprachausgabe**: ein Lautsprecher in der Lernkarte, in
+der Kartenliste und im Editor, dort auf dem noch nicht gespeicherten Text. Der Synthesizer bekommt immer **Hanzi**, nie Pinyin
 (A31); `SpeechSynthesisService` hält genau eine `AVSpeechSynthesizer`-Instanz
 und ihren Delegate für die App-Laufzeit und wird über die Environment
 verteilt. Die Stimme wird nach Qualität gewählt — `.premium` > `.enhanced` >
@@ -66,7 +65,18 @@ und keinen Interruption-Observer. Bekannte Grenze: Die erreichbare Qualität
 hängt am Gerätebestand — die App lädt keine Stimmen nach. Beide Messrunden
 stehen in [apple-frameworks.md](docs/apple-frameworks.md) unter Q5.
 
-**Nächster Schritt ist Phase 8 — Lernmodus B: Chinesisches Audio → Deutsch.**
+Seit Phase 8 gibt es **Lernmodus B: chinesisches Audio → Deutsch**. Die
+Richtung ist ein Wert in `SessionConfiguration` (`SessionDirection`, Standard
+`.germanToChinese`) und wird im Setup gewählt; sie ist **reine Präsentation**
+— nichts unter `Learning/` liest die Konfiguration, also erreicht sie
+Gewichtung, Batch, Queue und Statusübergänge nicht. Drei Stufen: nur Audio,
+dann auf Wunsch das **Hanzi allein** ohne die Bedeutung, dann die volle
+Antwort, die als einzige die Selbsteinschätzung freigibt. Kein Autoplay. Der
+Phase-7-TTS-Service wird unverändert wiederverwendet; laufende Sprache stoppt
+beim Kartenwechsel. Der vollständig aufgedeckte Zustand ist in beiden
+Richtungen dieselbe `LearnRevealedAnswerView` (A34).
+
+**Nächster Schritt ist Phase 9 — Spracherkennung (Mandarin).**
 Spracherkennung und Aussprachebewertung existieren weiterhin nicht. Für
 Phase 9 ist vorab festgehalten: Ein Treffer der Spracherkennung heißt „der
 erkannte Text stimmt wahrscheinlich mit dem Zieltext überein" — nie „richtig

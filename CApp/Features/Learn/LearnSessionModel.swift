@@ -46,6 +46,22 @@ final class LearnSessionModel {
     /// assessing: only a revealed card can be rated, and rating clears it.
     private(set) var isRevealed = false
 
+    /// Mode B's middle step: the Hanzi is on screen, the meaning is not.
+    ///
+    /// Beside `isRevealed` rather than replacing it, so mode A and `submit`
+    /// keep the exact token they have used since phase 6. Meaningless in
+    /// mode A, where nothing ever sets it.
+    private(set) var hasShownHanzi = false
+
+    /// How much of the card is uncovered, as one value.
+    ///
+    /// Derived rather than stored — two flags that can disagree is how a
+    /// card ends up "revealed but still hidden". The derivation itself is a
+    /// pure function so it can be tested; see `PromptStage`.
+    var promptStage: PromptStage {
+        PromptStage.stage(isRevealed: isRevealed, hasShownHanzi: hasShownHanzi)
+    }
+
     /// How many assessments this session has recorded. Shown as a plain
     /// number, never as a target — the session has no natural end.
     private(set) var answeredCount = 0
@@ -139,12 +155,13 @@ final class LearnSessionModel {
     /// button would stay disabled after the user created their first card.
     /// One rule, two callers.
     ///
-    /// **Categories are combined with OR here, unlike in the card list.** The
-    /// device test made the difference concrete: picking "Allgemein" and
-    /// "Essen" in a session means "practise either", not "practise the few
-    /// cards that carry both" — asking for two topics should widen the
-    /// session, not empty it. The card list asks the opposite question, where
-    /// every filter narrows, and keeps its AND (A12 versus A26).
+    /// **Categories are combined with OR.** The device test made it
+    /// concrete: picking "Allgemein" and "Essen" in a session means
+    /// "practise either", not "practise the few cards that carry both" —
+    /// asking for two topics should widen the session, not empty it. This
+    /// was the difference from the card list when it was written (A26 versus
+    /// A12); the list has since been measured against the same use and
+    /// adopted the same rule (A32).
     static func poolCards(from cards: [Card], configuration: SessionConfiguration) -> [Card] {
         // Type filtering stays with `CardFilter`, so "words and sentences
         // never mix" has one owner. Only the category rule differs.
@@ -193,6 +210,16 @@ final class LearnSessionModel {
         isRevealed = true
     }
 
+    /// Mode B's middle step: show the Hanzi without giving the meaning away.
+    ///
+    /// Idempotent, and it never runs backwards — a second tap changes
+    /// nothing, and it cannot un-reveal a card that is already fully
+    /// visible, because `promptStage` reads `isRevealed` first.
+    func showHanzi() {
+        guard currentCard != nil else { return }
+        hasShownHanzi = true
+    }
+
     /// Records one self-assessment: engine first, then the store, then the
     /// session state.
     ///
@@ -237,6 +264,11 @@ final class LearnSessionModel {
 
         queue = advanced
         answeredCount += 1
+        // The next card starts covered again. Reset here rather than where
+        // `currentCard` is assigned, because this is the one path from one
+        // card to the next — and because a failed save above returns before
+        // it, leaving the user on the same card exactly as they left it.
+        hasShownHanzi = false
         advanceToNextAnswerableCard(in: context)
     }
 

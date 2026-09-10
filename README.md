@@ -6,7 +6,7 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 7 abgeschlossen.**
+**Phasen 0 bis 8 abgeschlossen.**
 
 Vorhanden sind die Architektur- und Planungsdokumentation, die
 Claude-Code-Entwicklungsinfrastruktur (`.claude/agents/`, `.claude/skills/`,
@@ -16,7 +16,7 @@ Kartenverwaltung: Wörter und Sätze getrennt, Karten anlegen, bearbeiten und
 löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
 Lernstatus, Kategorien umbenennen und löschen.
 
-Build und Unit-Tests laufen grün: **389 Testfunktionen / 447 Einzelausführungen,
+Build und Unit-Tests laufen grün: **451 Testfunktionen / 509 Einzelausführungen,
 0 Fehlschläge, 0 Compilerwarnungen** auf einem Debug-Build von null (iPhone-17-Simulator, iOS
 26.5), Release-Build von null ebenso. Jede Phase ist auf einem echten iPhone
 bestätigt, die letzte am **2026-09-09**.
@@ -45,8 +45,8 @@ Bildschirmen: „üb beides" im Lernen, „zeig mir beides" in der Liste. In der
 Kartenliste verengen Typ, Suche und Lernstatus weiter, die Kategorien sind
 eine ODER-Gruppe darin. Keine Streaks, keine Punkte, keine Timer.
 
-Neu aus Phase 7: **Sprachausgabe.** Ein Lautsprecher in der aufgedeckten
-Lernkarte, in der Kartenliste und im Editor spricht das Chinesische — im
+Neu aus Phase 7: **Sprachausgabe.** Ein Lautsprecher in der Lernkarte, in der
+Kartenliste und im Editor spricht das Chinesische — im
 Editor den gerade eingegebenen, noch nicht gespeicherten Text. Gesprochen
 wird immer **Hanzi**, nie Pinyin. Die Stimme wird nach Qualität gewählt
 (`.premium` > `.enhanced` > `.default`); auf dem Testgerät ist das die
@@ -54,8 +54,9 @@ nachgeladene **Lili (Premium)**, ohne Premium- oder Enhanced-Stimme
 **Tingting**. Sprechrate `0.45`, verstellbar erst in Phase 10. Ein neuer Tap
 ersetzt die laufende Wiedergabe, es gibt keine Warteschlange und kein
 automatisches Abspielen. Fehlt jede chinesische Stimme, verschwindet der
-Knopf und die App erklärt einmal pro Lauf den Weg über die
-iOS-Einstellungen — die erreichbare Qualität hängt am Gerätebestand.
+Knopf — im Lernen tritt an seine Stelle ein Hinweis, weil dort ohne Ton keine
+Frage übrig bliebe — und die App erklärt einmal pro Lauf den Weg über die
+iOS-Einstellungen. Die erreichbare Qualität hängt am Gerätebestand.
 
 Nach Phase 7 kam ein UX-Schritt ohne eigene Phasennummer: Die Kartenliste ist
 ein **Akkordeon** — eingeklappt eine Zeile mit dem deutschen Text und dem
@@ -69,8 +70,17 @@ dem Setup-Bildschirm statt hinter einem Filterknopf, mit einem
 bleibt der Kategorienverwaltung vorbehalten; anlegen kann man sie dort — sie
 hat dafür jetzt ein `+` oben rechts — und weiterhin direkt im Karteneditor.
 
-Noch nicht vorhanden: **Spracherkennung** und der Lernmodus in umgekehrter
-Richtung.
+Neu aus Phase 8: **Lernmodus B, chinesisches Audio → Deutsch.** Die
+Abfragerichtung wird im Setup gewählt; Standard bleibt Deutsch → Chinesisch.
+In Modus B hört man zuerst nur — kein Hanzi, kein Pinyin, keine Bedeutung,
+und nichts spielt von selbst. Ein Zwischenschritt zeigt auf Wunsch das
+**Hanzi allein**, ohne die Bedeutung zu verraten; erst „Antwort zeigen"
+deckt alles auf und erst dann kann man sich einschätzen. Gewichtung, Queue
+und Statusübergänge sind dieselben wie in Modus A — es gibt keinen leichteren
+Weg durch die Lernstände, nur eine zweite Art zu fragen. Der vollständig
+aufgedeckte Zustand ist in beiden Richtungen dieselbe Ansicht.
+
+Noch nicht vorhanden: **Spracherkennung**.
 
 Neu aus Phase 4.5: Das Pinyin kommt nicht mehr aus reiner Transliteration,
 sondern aus einem gebündelten Lexikon — daher die neutralen Töne (`xièxie`,
@@ -99,7 +109,7 @@ Testcode und in
 allen vier fehlt die entscheidende Information in den Daten, nicht im
 Algorithmus.
 
-Nächster Schritt: **Phase 8 — Lernmodus B: Chinesisches Audio → Deutsch**.
+Nächster Schritt: **Phase 9 — Spracherkennung (Mandarin)**.
 
 ## Drittanbieter-Daten
 

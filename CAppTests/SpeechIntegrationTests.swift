@@ -31,10 +31,12 @@ struct SpeechIntegrationTests {
 
     @Test("A session starts unrevealed, so no answer and no speaker")
     func learnStartsUnrevealed() throws {
-        // The speaker lives inside the revealed answer, so this is the
-        // condition that keeps it away: before revealing, the learner is
+        // In mode A the speaker lives inside the revealed answer, so this is
+        // the condition that keeps it away: before revealing, the learner is
         // meant to produce the answer themselves, and sound would hand it
-        // over.
+        // over. Mode B, since phase 8, is the opposite case — there the audio
+        // *is* the question and the speaker is on screen from the first
+        // moment. This test is about mode A.
         let container = try makeInMemoryContainer()
         let context = container.mainContext
         context.insert(makeCard())

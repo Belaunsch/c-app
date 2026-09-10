@@ -42,6 +42,14 @@ struct LearnSessionView: View {
                     }
                 }
             }
+            // Die Karte wechselt, der Ton endet. In Modus A war ein Nachklang
+            // aus der vorigen Karte unschön; in Modus B **ist** das Audio die
+            // Frage, und ein Wort, das in die nächste Karte hineinläuft, ist
+            // dann die falsche Frage — der Lernende schätzt sich zu etwas ein,
+            // das er gar nicht gehört hat. Sichtbar wird es nicht: Der
+            // Lautsprecher der neuen Karte bleibt ungefüllt, weil
+            // `SpeakButton` den Text vergleicht.
+            .onChange(of: model.currentCard?.id) { _, _ in speech.stop() }
             // Die Session endet, der Ton endet. Auch der einzige Teardown, der
             // ohne Delegate-Callback auskommt.
             .onDisappear { speech.stop() }
@@ -66,24 +74,64 @@ struct LearnSessionView: View {
     private var content: some View {
         if let card = model.currentCard {
             VStack(spacing: 16) {
-                PromptGermanToChineseView(card: card, isRevealed: model.isRevealed)
-
-                if model.isRevealed {
-                    SelfAssessmentBar { assessment in
-                        model.submit(assessment, in: context)
-                    }
-                } else {
-                    Button("Antwort zeigen") {
-                        model.reveal()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity)
-                }
+                prompt(for: card)
+                controls
             }
             .padding()
         } else {
             emptyState
+        }
+    }
+
+    /// One direction, one prompt view.
+    ///
+    /// A `switch` over two small views rather than a shared superview with
+    /// options: the two modes show different things in a different order,
+    /// and the one thing they have in common — the self-assessment — is
+    /// already its own component. An abstraction over two cases would have
+    /// to be undone the moment they differ again.
+    @ViewBuilder
+    private func prompt(for card: Card) -> some View {
+        switch model.configuration.direction {
+        case .germanToChinese:
+            PromptGermanToChineseView(card: card, isRevealed: model.isRevealed)
+        case .audioToGerman:
+            PromptAudioToGermanView(card: card, stage: model.promptStage)
+        }
+    }
+
+    /// What can be done next.
+    ///
+    /// Mode A is unchanged: reveal, then rate. Mode B adds the middle step
+    /// in front of it, and the rule for whether that step is still on offer
+    /// lives in `AudioPrompt` with the visibility rules it belongs to.
+    @ViewBuilder
+    private var controls: some View {
+        if AudioPrompt.allowsAssessment(at: model.promptStage) {
+            SelfAssessmentBar { assessment in
+                model.submit(assessment, in: context)
+            }
+        } else {
+            VStack(spacing: 8) {
+                if AudioPrompt.offersHanziStep(
+                    at: model.promptStage,
+                    in: model.configuration.direction
+                ) {
+                    Button("Hanzi anzeigen") {
+                        model.showHanzi()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                }
+
+                Button("Antwort zeigen") {
+                    model.reveal()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+            }
         }
     }
 

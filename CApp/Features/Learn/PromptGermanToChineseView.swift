@@ -9,82 +9,62 @@ import SwiftUI
 /// asked for it.
 ///
 /// Before revealing, neither Hanzi nor Pinyin is on screen — the point of the
-/// mode is that the learner produces the answer themselves. Afterwards the
-/// German stays: it is the reference the answer belongs to, and having it
-/// vanish makes checking harder.
+/// mode is that the learner produces the answer themselves. Nothing listens,
+/// and nothing plays: sound before the reveal would hand over the answer, and
+/// recognition is phase 9.
 ///
-/// Since phase 7 the revealed answer carries a speaker. **Only** the
-/// revealed one: before that, sound would hand over the answer the learner
-/// is supposed to produce themselves. Nothing listens, and nothing plays on
-/// its own — recognition is phase 9, and autoplay is not planned.
+/// **The revealed state is `LearnRevealedAnswerView`, shared with mode B.**
+/// Until phase 8 this view had its own arrangement — the German shrank and
+/// stayed at the top, the answer appeared beneath it, and the speaker was a
+/// small icon at the bottom. The device test of mode B found the other
+/// arrangement clearer: a large speaker first, then Hanzi, Pinyin and the
+/// meaning. Both modes show those same four things once everything is
+/// uncovered, so they now show them through the same view rather than
+/// through two that agree today.
+///
+/// The German therefore moves from the top of the screen to the bottom on
+/// reveal. It is still there — it is the reference the answer belongs to and
+/// having it vanish makes checking harder — but it is now the last line
+/// rather than a shrunken headline.
 struct PromptGermanToChineseView: View {
     let card: Card
     let isRevealed: Bool
 
     var body: some View {
+        if isRevealed {
+            LearnRevealedAnswerView(card: card)
+        } else {
+            question
+        }
+    }
+
+    /// Unchanged: the German prominent and centred, with the instruction to
+    /// say the answer out loud, and nothing of the Chinese anywhere.
+    ///
+    /// The font no longer switches on `isRevealed`, and neither does the
+    /// animation that used to soften that switch — there is nothing left to
+    /// switch, because revealing now replaces the whole layout instead of
+    /// resizing this text.
+    private var question: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
 
             VStack(spacing: 12) {
                 Text(card.german)
-                    .font(isRevealed ? .title3 : .largeTitle)
-                    .fontWeight(isRevealed ? .regular : .semibold)
-                    .foregroundStyle(isRevealed ? .secondary : .primary)
+                    .font(.largeTitle)
+                    .fontWeight(.semibold)
                     .multilineTextAlignment(.center)
-                    .animation(.default, value: isRevealed)
 
-                if isRevealed {
-                    answer
-                } else {
-                    Text("Sprich die chinesische Antwort laut aus.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 8)
-                }
+                Text("Sprich die chinesische Antwort laut aus.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 8)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 24)
 
             Spacer(minLength: 0)
         }
-    }
-
-    /// Hanzi carries the weight, the Pinyin sits directly beneath it so the
-    /// two read as one answer.
-    ///
-    /// Both come from the card as stored. Nothing is generated here: a Pinyin
-    /// the user corrected by hand is what they want to learn, so the learning
-    /// mode never asks `PinyinService` again.
-    private var answer: some View {
-        VStack(spacing: 6) {
-            // The two texts stay one accessibility element with the curated
-            // label they had before phase 7. The speaker is a **sibling**,
-            // not a child: inside a `.combine` element it would lose its
-            // action, and its own label would be swallowed.
-            VStack(spacing: 6) {
-                Text(LearnAnswer.hanzi(for: card))
-                    .font(.system(size: 44, weight: .medium))
-                    .multilineTextAlignment(.center)
-
-                let pinyin = LearnAnswer.pinyin(for: card)
-                if pinyin.isEmpty == false {
-                    Text(pinyin)
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(LearnAnswer.accessibilityLabel(for: card))
-
-            // Speaks the card's Hanzi, never its Pinyin (A31). Sits with the
-            // answer because that is what it belongs to, and it disappears
-            // with the answer.
-            SpeakButton(hanzi: LearnAnswer.hanzi(for: card))
-                .font(.title3)
-                .padding(.top, 4)
-        }
-        .padding(.top, 4)
     }
 }

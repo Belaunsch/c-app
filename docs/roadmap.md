@@ -1183,6 +1183,54 @@ Modus B, Stimmenauswahl in den Einstellungen.
 
 ## Phase 8 — Lernmodus B: Chinesisches Audio → Deutsch
 
+**Status: abgeschlossen.** Der physische Gerätetest lief am **2026-09-10**
+vollständig durch, auf einem iPhone 16 Pro unter iOS 26.6. Bestätigt am
+Gerät: Modus B ist im Setup wählbar und startet; vor dem Aufdecken ist weder
+Hanzi noch Pinyin noch die Bedeutung sichtbar; nichts spielt von selbst; das
+Audio ist beliebig oft wiederholbar und erzeugt keine Warteschlange;
+„Hanzi anzeigen" zeigt **nur** das Hanzi; „Antwort zeigen" deckt Hanzi,
+Pinyin und Bedeutung auf und erst dann erscheint die Bewertungsleiste; die
+Bewertung führt zur nächsten, wieder vollständig verdeckten Karte; Wörter
+und Sätze bleiben getrennt und die Kategorienauswahl wird respektiert;
+Modus A verhält sich unverändert. Ebenfalls am Gerät bestätigt: **laufendes
+Audio stoppt beim Kartenwechsel**, und die nachgereichte UI-Angleichung
+(Modus A zeigt nach dem Aufdecken großer Lautsprecher → Hanzi → Pinyin →
+Deutsch, Modus B unverändert).
+
+### Umgesetzte Struktur
+
+| | |
+| --- | --- |
+| Richtung | `SessionDirection` in `SessionConfiguration`, Standard `.germanToChinese` |
+| Wirkung der Richtung | **reine Präsentation** — nichts unter `Learning/` liest die Konfiguration |
+| Wahl | Segment-Picker im Setup zwischen Wörter/Sätze und Kategorien, nicht persistiert |
+| Stufen Modus B | nur Audio → Hanzi allein → volle Antwort, in `PromptStage` |
+| Sichtbarkeit und Tore | `AudioPrompt`, plus ein erschöpfender `switch` über die Stufe |
+| Geteilter Endzustand | `LearnRevealedAnswerView` für **beide** Richtungen (A34) |
+| Audio | unverändert `SpeechSynthesisService`, `SpeakButton`, Rate 0.45, Hanzi als Text |
+| Pool | unverändert `LearnSessionModel.poolCards`, keine richtungsspezifische Filterung |
+| Tests | **451 Testfunktionen / 509 Einzelausführungen**, 0 Fehlschläge, 0 Compilerwarnungen, Debug und Release von null |
+
+Festgehalten, weil es die Grenzen der Phase sind: Deutsch → Chinesisch bleibt
+Modus A, Audio → Deutsch ist Modus B, es gibt **keine gemischten Sessions**
+über beide Richtungen, **kein Autoplay**, **keine Spracherkennung** und
+**keine Aussprachebewertung**. Audio → Hanzi als dritter Modus ist nicht
+gebaut.
+
+### Bekannte Grenze der Absicherung
+
+Dass der Zwischenschritt die Bedeutung nicht verrät, ist **strukturell**
+gesichert — die verdeckte Anordnung enthält weder Deutsch noch Pinyin — und
+durch den Gerätetest belegt, aber **nicht durch einen Test**. Gemessen:
+Verschiebt man `.hanziShown` in den aufgedeckten Zweig, bleibt die gesamte
+Suite grün. Kein Test in diesem Projekt erreicht ein SwiftUI-`body`, und eine
+Snapshot-Infrastruktur wurde bewusst nicht eingeführt. Umgekehrt ist belegt:
+Eine später hinzugefügte Stufe kompiliert nicht, bis der `switch` sie
+einordnet. Die Regeln, die einen Aufrufer haben — `showsHanzi`,
+`offersHanziStep`, `allowsAssessment` — sind vollständig falsifizierbar; drei
+weitere verloren durch die geteilte Endansicht ihren Aufrufer und wurden
+entfernt, statt als Spiegel stehenzubleiben (A34).
+
 ### Ziel
 Hörverstehen trainieren: Die App spielt Chinesisch ab, der Nutzer erschließt
 die Bedeutung.
@@ -1205,12 +1253,12 @@ Zweite Abfragerichtung, aufbauend auf derselben Engine.
   ausgeschlossen.
 
 ### Akzeptanzkriterien
-- [ ] Modus B lässt sich im Setup wählen und startet korrekt.
-- [ ] Vor dem Aufdecken sind Hanzi und Pinyin nicht sichtbar.
-- [ ] Das Audio lässt sich mehrfach abspielen.
-- [ ] „Hanzi anzeigen“ deckt die deutsche Bedeutung nicht mit auf.
-- [ ] Die Lernstatuslogik verhält sich identisch zu Modus A.
-- [ ] An der Learning Engine wurde für diese Phase nichts geändert.
+- [x] Modus B lässt sich im Setup wählen und startet korrekt.
+- [x] Vor dem Aufdecken sind Hanzi und Pinyin nicht sichtbar.
+- [x] Das Audio lässt sich mehrfach abspielen.
+- [x] „Hanzi anzeigen“ deckt die deutsche Bedeutung nicht mit auf.
+- [x] Die Lernstatuslogik verhält sich identisch zu Modus A.
+- [x] An der Learning Engine wurde für diese Phase nichts geändert.
 
 ### Abhängigkeiten
 Phase 7.

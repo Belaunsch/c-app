@@ -17,9 +17,8 @@ import SwiftUI
 /// "Was übe ich jetzt?" is the entire question this screen asks, and the
 /// answer belonged behind a funnel icon that says "something is hidden".
 ///
-/// So the order on screen is now the order of the decision: card type,
-/// categories, start. Nothing is behind a sheet, because there are only two
-/// things to decide.
+/// So the order on screen is the order of the decision: card type,
+/// direction, categories, start. Nothing is behind a sheet.
 ///
 /// Deliberately **not** here: creating, renaming or deleting a category, and
 /// any filter on learning status. The first belongs to the category
@@ -27,10 +26,10 @@ import SwiftUI
 /// let the user pick cards by how well they already know them, which is the
 /// weighting's job (`docs/learning-engine.md` §3).
 ///
-/// There is no direction control. Mode A, German to Chinese, is the only one
-/// that exists, and a picker with one option is a promise with nothing behind
-/// it. Phase 8 brings the second direction, and with it a reason for a
-/// picker.
+/// Since phase 8 there are two directions, so there is a picker for them —
+/// German to Chinese, and Chinese audio to German. Until then there was
+/// deliberately none: a picker with one option is a promise with nothing
+/// behind it.
 struct SessionSetupView: View {
     @Query(sort: [SortDescriptor(\Tag.name)]) private var allTags: [Tag]
 
@@ -42,6 +41,14 @@ struct SessionSetupView: View {
     @Query(sort: [SortDescriptor(\Card.german)]) private var allCards: [Card]
 
     @State private var cardType: CardType = .word
+
+    /// Mode A by default — the direction the app had before phase 8, so the
+    /// screen opens on what a returning user expects. Deliberately **not**
+    /// persisted: the roadmap does not ask for it, and unlike the card
+    /// list's sort order this is part of deciding what to practise now, not
+    /// a setting about how the app looks.
+    @State private var direction: SessionDirection = .germanToChinese
+
     @State private var tagKeys = LearnCategorySelection.everything
 
     /// A plain flag rather than `navigationDestination(item:)`, which would
@@ -54,7 +61,7 @@ struct SessionSetupView: View {
     @State private var isShowingNewCardSheet = false
 
     private var configuration: SessionConfiguration {
-        SessionConfiguration(cardType: cardType, tagKeys: activeTagKeys)
+        SessionConfiguration(cardType: cardType, tagKeys: activeTagKeys, direction: direction)
     }
 
     /// The selected keys that still have a category behind them — the rule
@@ -85,6 +92,8 @@ struct SessionSetupView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
 
+                    directionChoice
+
                     categories
                 }
                 .padding()
@@ -105,6 +114,52 @@ struct SessionSetupView: View {
                     CardEditorView(type: cardType)
                 }
             }
+        }
+    }
+
+    // MARK: - Direction
+
+    /// Which way round the cards are asked.
+    ///
+    /// Above the categories and below the type, because that is the order of
+    /// the decision: what kind of card, how it is asked, which of them — and
+    /// then start.
+    ///
+    /// Segmented like the type picker directly above it, so the two read as
+    /// one row of choices rather than two different kinds of control. The
+    /// labels are longer than "Wörter"/"Sätze", which is the risk this
+    /// carries: at large Dynamic Type sizes a segment can truncate. That is
+    /// a device question, and if it turns out badly the fix is another
+    /// native picker style — not a control built for this one screen.
+    private var directionChoice: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Abfragerichtung")
+                .font(.headline)
+
+            Picker("Abfragerichtung", selection: $direction) {
+                ForEach(SessionDirection.allCases, id: \.self) { candidate in
+                    Text(candidate.title)
+                        .tag(candidate)
+                        .accessibilityLabel(candidate.accessibilityLabel)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            Text(directionExplanation)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Says what the chosen direction actually does, because an arrow
+    /// between two words is a hint rather than an explanation.
+    private var directionExplanation: String {
+        switch direction {
+        case .germanToChinese:
+            "Die deutsche Bedeutung steht da, du sagst das Chinesische."
+        case .audioToGerman:
+            "Du hörst das Chinesische und erschließt die Bedeutung."
         }
     }
 

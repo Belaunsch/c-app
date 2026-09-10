@@ -38,6 +38,25 @@ extension SelfAssessment {
     }
 }
 
+extension SessionDirection {
+    /// Both halves named, with the arrow doing the explaining. "Modus A" and
+    /// "Modus B" would be shorter and would tell the user nothing.
+    var title: String {
+        switch self {
+        case .germanToChinese: "Deutsch → Chinesisch"
+        case .audioToGerman: "Audio → Deutsch"
+        }
+    }
+
+    /// Spoken by VoiceOver, where an arrow is not a word.
+    var accessibilityLabel: String {
+        switch self {
+        case .germanToChinese: "Deutsch nach Chinesisch"
+        case .audioToGerman: "Chinesisches Audio nach Deutsch"
+        }
+    }
+}
+
 /// What the reveal shows for one card.
 ///
 /// A pure function so the rule can be tested: the learning mode shows the
