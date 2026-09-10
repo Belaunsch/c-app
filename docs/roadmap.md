@@ -767,11 +767,15 @@ Session-Setup, Abfrage-UI, Anbindung der Engine an SwiftData.
 - **6.15** **Kategorienfilter im Lernen verknüpft mit ODER.** Zwei gewählte
   Kategorien üben die Vereinigung beider Mengen, nicht den Schnitt. Im
   Gerätetest leerte die Wahl einer zweiten Kategorie die Session, weil kaum
-  eine Karte in zwei Kategorien liegt. Die **Kartenliste behält UND**; die
-  beiden Bildschirme stellen verschiedene Fragen, Begründung in
+  eine Karte in zwei Kategorien liegt. Die Kartenliste behielt damals UND,
+  weil die beiden Bildschirme verschiedene Fragen zu stellen schienen —
+  Begründung in
   [architecture.md A26](architecture.md#anhang-entscheidungen-und-begründungen).
   Der Kartentyp bleibt außerhalb dieser Regel — Wörter und Sätze mischen sich
-  nie.
+  nie. **Nachtrag:** Der Satz „die Kartenliste behält UND" gilt nicht mehr.
+  Dasselbe Argument — kaum eine Karte liegt in zwei Kategorien — hat später
+  auch die Kartenliste auf ODER gebracht, siehe
+  [architecture.md A32](architecture.md#anhang-entscheidungen-und-begründungen).
 - **6.16** **Die Tastatur der Kategorieneingabe lässt sich wieder schließen.**
   Jeder Weg aus der Tastatur liegt **in der Aktion des Controls**, das der
   Nutzer angefasst hat: `Hinzufügen` legt die Kategorie an und gibt danach —
@@ -1072,9 +1076,13 @@ vollständig durch, auf einem iPhone 16 Pro unter iOS 26.6. Bestätigt am
 Gerät: Wiedergabe im Lernmodus erst nach dem Aufdecken; fünf schnelle Taps
 erzeugen **keine** Warteschlange; ein Kartenwechsel spricht den neuen Text;
 nur der gerade sprechende Knopf zeigt den aktiven Zustand, und er bleibt
-nicht hängen. In der Kartenliste öffnet der Lautsprecher-Tap den Editor
-**nicht**, der Zeilen-Tap öffnet ihn — das A27-Risiko ist am Gerät geprüft
-und tritt nicht ein. Im Editor spricht der Knopf das **ungespeicherte**
+nicht hängen. In der Kartenliste öffnete der Lautsprecher-Tap den Editor
+**nicht**, der Zeilen-Tap öffnete ihn — das A27-Risiko war für **diese**
+Struktur am Gerät geprüft und trat nicht ein. **Nachtrag:** Die geprüfte
+Struktur ist inzwischen ersetzt. Der Kartenlisten-Polish nach Phase 7 (A32)
+hat den `NavigationLink` durch einen Zeilen-Button ersetzt und den Editor
+hinter einen Stift gelegt; dieser Beleg trägt also nicht weiter und der
+Lautsprecher-gegen-Zeile-Fall steht auf der Checkliste jenes Schritts erneut. Im Editor spricht der Knopf das **ungespeicherte**
 Hanzi, und beide ↻, Kategorien, Tastatur, Cursor, Speichern und Abbrechen
 verhalten sich unverändert. Audio: bei aktivem Lautlos-Schalter weiterhin
 hörbar, über Lautsprecher und Kopfhörer, Lautstärketasten normal, im

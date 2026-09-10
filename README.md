@@ -40,9 +40,10 @@ optional Kategorien einschränken, Karte lesen, Lösung aufdecken, selbst
 einschätzen. Jede Antwort wird sofort gespeichert, der Lernstatus folgt der
 Übergangsmatrix, und nicht gewusste Karten kommen innerhalb derselben Session
 wieder — hinter allen Karten, die noch keinen ersten Versuch hatten. Der
-Kategorienfilter im Lernen verknüpft mit **ODER** („üb beides"), die
-Kartenliste mit **UND** („zeig mir genau die") — zwei Bildschirme, zwei
-Fragen. Keine Streaks, keine Punkte, keine Timer.
+Kategorienfilter verknüpft mehrere Kategorien mit **ODER** — in beiden
+Bildschirmen: „üb beides" im Lernen, „zeig mir beides" in der Liste. In der
+Kartenliste verengen Typ, Suche und Lernstatus weiter, die Kategorien sind
+eine ODER-Gruppe darin. Keine Streaks, keine Punkte, keine Timer.
 
 Neu aus Phase 7: **Sprachausgabe.** Ein Lautsprecher in der aufgedeckten
 Lernkarte, in der Kartenliste und im Editor spricht das Chinesische — im
@@ -55,6 +56,18 @@ ersetzt die laufende Wiedergabe, es gibt keine Warteschlange und kein
 automatisches Abspielen. Fehlt jede chinesische Stimme, verschwindet der
 Knopf und die App erklärt einmal pro Lauf den Weg über die
 iOS-Einstellungen — die erreichbare Qualität hängt am Gerätebestand.
+
+Nach Phase 7 kam ein UX-Schritt ohne eigene Phasennummer: Die Kartenliste ist
+ein **Akkordeon** — eingeklappt eine Zeile mit dem deutschen Text und dem
+Lautsprecher, aufgeklappt Hanzi, Pinyin, Kategorien und ein Stift, der als
+einziger den Editor öffnet. Höchstens eine Karte ist offen. Dazu fünf
+Sortierungen (Datum in beide Richtungen, Deutsch A–Z und Z–A, Kategorie mit
+echten Abschnitten), die gewählte bleibt über Neustarts erhalten. Mehrere
+Kategorien verknüpfen mit ODER. Im Lernen stehen die Kategorien direkt auf
+dem Setup-Bildschirm statt hinter einem Filterknopf, mit einem
+**Alle**-Eintrag für „keine Einschränkung". Umbenennen und Löschen von Kategorien
+bleibt der Kategorienverwaltung vorbehalten; anlegen kann man sie dort — sie
+hat dafür jetzt ein `+` oben rechts — und weiterhin direkt im Karteneditor.
 
 Noch nicht vorhanden: **Spracherkennung** und der Lernmodus in umgekehrter
 Richtung.

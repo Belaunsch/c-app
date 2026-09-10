@@ -21,9 +21,11 @@ enum TagNormalization {
 
     /// Longest accepted tag name.
     ///
-    /// Without a limit a pasted paragraph becomes a category and wrecks the
-    /// filter bar — and since the app has no way to delete a tag, that would
-    /// be permanent.
+    /// Without a limit a pasted paragraph becomes a category and wrecks
+    /// every list it appears in. Written in phase 2, when deleting a tag was
+    /// impossible and the damage would have been permanent; `TagManagement`
+    /// can delete one since, so the limit is now about legibility rather
+    /// than about being stuck with it.
     static let maximumLength = 40
 
     /// Characters that take up no space but are not whitespace either. Left
@@ -78,6 +80,25 @@ enum TagNormalization {
 
         let wanted = key(for: display)
         if let clash = tags.first(where: { $0 !== tag && key(for: $0.name) == wanted }) {
+            return .duplicate(existing: clash.name)
+        }
+        return nil
+    }
+
+    /// Checks a name before any tag exists. `nil` means it is allowed.
+    ///
+    /// The same three rules as ``renameProblem(renaming:to:among:)`` —
+    /// non-empty after normalisation, at most ``maximumLength``, and no
+    /// other tag holding the key — minus the exemption that lets a tag keep
+    /// its own name, which only means something once the tag exists. The
+    /// problem type is shared with renaming rather than duplicated: the
+    /// three ways a name can be refused are the same, and so are the
+    /// sentences the user reads.
+    static func creationProblem(name: String, among tags: [Tag]) -> RenameProblem? {
+        let display = displayName(for: name)
+        guard display.isEmpty == false else { return .invalid }
+        guard display.count <= maximumLength else { return .tooLong }
+        if let clash = existingTag(matching: display, in: tags) {
             return .duplicate(existing: clash.name)
         }
         return nil

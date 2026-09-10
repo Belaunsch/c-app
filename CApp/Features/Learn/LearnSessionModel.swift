@@ -159,10 +159,16 @@ final class LearnSessionModel {
     /// The selected keys that still have a category behind them.
     ///
     /// A category deleted in the management screen would otherwise stay
-    /// selected invisibly: counted in the filter badge, narrowing the pool,
-    /// and impossible to deselect because it no longer appears in the sheet —
-    /// and there is deliberately no "clear selection" button (A25). Dropping
-    /// it heals badge and pool in one place.
+    /// selected invisibly: narrowing the pool, and impossible to deselect
+    /// because it no longer has a control on the setup screen. Dropping it
+    /// heals the pool and the setup screen in one place.
+    ///
+    /// Written when the categories still sat behind a filter button, where
+    /// the stale key also inflated a badge. Since A33 they are chips on the
+    /// setup screen and the **Alle** chip is the clear-selection control that
+    /// A25 once ruled out — the reason this function exists is unchanged, but
+    /// the screen it heals looks different, and the chips must be asked about
+    /// *these* keys rather than the raw selection for it to work.
     ///
     /// Nothing left means no restriction, not an empty session: the state the
     /// user can see is "no category selected", and that is what they get.

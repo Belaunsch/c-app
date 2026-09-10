@@ -42,6 +42,96 @@ struct TagManagementTests {
 
     // MARK: - Renaming
 
+    // MARK: - Creating
+
+    @Test("The plus creates a category through the shared rules")
+    func creationUsesTheSharedRules() throws {
+        let created = try TagManagement.create(named: "  reisen abroad  ", among: try storedTags, in: context)
+
+        // Trimmed and squeezed by `TagNormalization.displayName`, the same
+        // step the editor and the rename path run.
+        #expect(created.name == "reisen abroad")
+        #expect(try storedTags.contains { $0 === created })
+    }
+
+    @Test("Creating a name another category already holds is refused, not merged")
+    func creationRefusesADuplicate() throws {
+        // Different spelling, same normalised key — A13 says there is only
+        // ever one category per key.
+        #expect(throws: AppError.self) {
+            try TagManagement.create(named: "  ESSEN ", among: try storedTags, in: context)
+        }
+        #expect(try storedTags.count == 2, "and nothing was inserted")
+    }
+
+    @Test("The refusal to create names the conflicting category")
+    func creationRefusalNamesTheClash() throws {
+        do {
+            try TagManagement.create(named: "essen", among: try storedTags, in: context)
+            Issue.record("expected the duplicate to be refused")
+        } catch let error as AppError {
+            guard case .tagNameRejected(.duplicate(let existing)) = error else {
+                Issue.record("wrong error: \(error)")
+                return
+            }
+            #expect(existing == "Essen", "the stored spelling, so the message is recognisable")
+        }
+    }
+
+    @Test("An empty or overlong name is refused on creation too")
+    func creationRefusesInvalidNames() throws {
+        #expect(throws: AppError.self) {
+            try TagManagement.create(named: "   ", among: try storedTags, in: context)
+        }
+        let overlong = String(repeating: "a", count: TagNormalization.maximumLength + 1)
+        #expect(throws: AppError.self) {
+            try TagManagement.create(named: overlong, among: try storedTags, in: context)
+        }
+        // Exactly the limit is still fine — the same boundary the rename
+        // path has.
+        let atLimit = String(repeating: "b", count: TagNormalization.maximumLength)
+        let created = try TagManagement.create(named: atLimit, among: try storedTags, in: context)
+        #expect(created.name.count == TagNormalization.maximumLength)
+        #expect(try storedTags.count == 3)
+    }
+
+    @Test("A created category survives reopening the store")
+    func creationIsPersisted() throws {
+        // A real store on disk, the same shape the other persistence tests
+        // use: the management screen is the one place a category is created
+        // without a card behind it, so nothing else would keep it alive.
+        let store = TemporaryStore()
+        defer { store.remove() }
+
+        do {
+            let container = try store.openContainer()
+            try TagManagement.create(named: "Büro", among: [], in: container.mainContext)
+        }
+
+        let reopened = try store.openContainer()
+        let tags = try reopened.mainContext.fetch(FetchDescriptor<Tag>())
+        #expect(tags.map(\.name) == ["Büro"])
+    }
+
+    @Test("Creation and renaming answer to the same rule")
+    func creationAndRenameAgree() throws {
+        // The point of `creationProblem` sharing `RenameProblem`: a name this
+        // screen accepts is exactly a name a rename would accept, so the two
+        // entries cannot drift into different notions of a valid category.
+        for name in ["Neu", "  Neu  ", "essen", "", String(repeating: "x", count: 41)] {
+            let creation = TagNormalization.creationProblem(name: name, among: [food, travel])
+            let rename = TagNormalization.renameProblem(renaming: apple.tags[0], to: name, among: [food, travel])
+            // Renaming "Essen" to "essen" is its own name and allowed, which
+            // is the single documented difference.
+            if name == "essen" {
+                #expect(creation == .duplicate(existing: "Essen"))
+                #expect(rename == nil, "a tag may re-spell its own name")
+            } else {
+                #expect(creation == rename, "disagreement on \(name.debugDescription)")
+            }
+        }
+    }
+
     @Test("Renaming keeps every card assignment")
     func renamingKeepsAssignments() throws {
         try TagManagement.rename(food, to: "Essen gehen", among: [food, travel], in: context)

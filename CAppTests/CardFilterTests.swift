@@ -133,18 +133,30 @@ struct CardFilterTests {
         #expect(germanTexts(result) == ["Apfel", "Wasser"])
     }
 
-    @Test("Several tags are combined with AND, not OR")
-    func severalTagsRequireAllOfThem() throws {
-        // The documented semantics: every filter narrows. Only "Wasser"
-        // carries both categories, so OR would wrongly return three cards.
+    @Test("Several tags are combined with OR, not AND")
+    func severalTagsNeedOnlyOneOfThem() throws {
+        // A32, replacing A12: ticking a second category **widens**. "Apfel"
+        // carries only Essen and "Wasser" carries both, so AND would return
+        // just "Wasser" — which was the old behaviour and the reason for the
+        // change.
         let result = CardFilter.apply(to: cards, type: .word, tagKeys: ["essen", "alltag"])
-        #expect(germanTexts(result) == ["Wasser"])
+        #expect(germanTexts(result) == ["Apfel", "Wasser"])
     }
 
-    @Test("A tag combination nothing carries returns nothing")
-    func impossibleTagCombinationReturnsNothing() throws {
+    @Test("Two categories no card shares still return the union")
+    func disjointTagsReturnTheUnion() throws {
+        // Under AND this was empty, because no word is both food and travel.
+        // That emptiness is exactly what made the old semantics unusable with
+        // a handful of cards per category.
         let result = CardFilter.apply(to: cards, type: .word, tagKeys: ["essen", "reisen"])
-        #expect(result.isEmpty)
+        #expect(germanTexts(result) == ["Apfel", "Wasser", "Flughafen"])
+    }
+
+    @Test("A category nothing carries returns nothing")
+    func unknownTagReturnsNothing() throws {
+        // The OR group still narrows against the *absence* of a match — it
+        // is not a filter that gives up when it finds nothing.
+        #expect(CardFilter.apply(to: cards, type: .word, tagKeys: ["gibtsnicht"]).isEmpty)
     }
 
     @Test("Tag filtering ignores casing, because it compares normalized keys")
@@ -206,6 +218,32 @@ struct CardFilterTests {
         )
 
         #expect(germanTexts(result) == ["Wasser"])
+    }
+
+    @Test("The OR category group still sits inside an AND chain")
+    func categoryGroupCombinesWithTheOtherDimensionsByAnd() throws {
+        // The half of A32 that is easy to get wrong: categories widen among
+        // themselves, and the result is then narrowed by everything else.
+        // Essen or Reisen alone gives Apfel, Wasser and Flughafen.
+        let widened = CardFilter.apply(to: cards, type: .word, tagKeys: ["essen", "reisen"])
+        #expect(germanTexts(widened) == ["Apfel", "Wasser", "Flughafen"])
+
+        // Status narrows it: only Wasser and Flughafen are weak.
+        let byStatus = CardFilter.apply(
+            to: cards, type: .word, tagKeys: ["essen", "reisen"], status: .weak
+        )
+        #expect(germanTexts(byStatus) == ["Wasser", "Flughafen"])
+
+        // Search narrows it further, down to one.
+        let bySearch = CardFilter.apply(
+            to: cards, type: .word, searchText: "flug", tagKeys: ["essen", "reisen"], status: .weak
+        )
+        #expect(germanTexts(bySearch) == ["Flughafen"])
+
+        // And the type still separates: the travel sentence is not pulled in
+        // by the widened category group.
+        let sentences = CardFilter.apply(to: cards, type: .sentence, tagKeys: ["essen", "reisen"])
+        #expect(germanTexts(sentences) == ["Wo ist der Bahnhof?"])
     }
 
     @Test("A single mismatching criterion empties the result")

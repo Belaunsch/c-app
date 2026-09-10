@@ -10,8 +10,7 @@ import Foundation
 /// A value type rather than three `@State` properties in the view, so the
 /// questions the toolbar asks — is anything filtered, how much — are
 /// answerable and testable without a view. The filter *semantics* live in
-/// `CardFilter` and are unchanged: one status, and categories combined with
-/// AND.
+/// `CardFilter`: one status, and categories combined with **OR** since A32.
 ///
 /// `nonisolated` like `CardType` and `LearningStatus`: the target defaults to
 /// main-actor isolation, and a value type with no behaviour beyond its own

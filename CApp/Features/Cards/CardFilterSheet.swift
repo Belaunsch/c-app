@@ -52,7 +52,7 @@ struct CardFilterSheet: View {
                         Text("Kategorien")
                     } footer: {
                         if selection.tagKeys.count > 1 {
-                            Text("Eine Karte muss **allen** ausgewählten Kategorien angehören.")
+                            Text("Eine Karte muss **mindestens einer** der ausgewählten Kategorien angehören.")
                         }
                     }
                 }

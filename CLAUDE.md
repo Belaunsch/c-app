@@ -42,8 +42,13 @@ einzeln `nonisolated`).
 
 Darüber liegt seit Phase 6 der Lernmodus A in `CApp/Features/Learn/`:
 Session-Setup, Abfrage, Selbsteinschätzung, Rückschreiben nach SwiftData nach
-**jeder** Antwort. Der Kategorienfilter im Lernen verknüpft mit **ODER**, die
-Kartenliste mit **UND** (A26 gegen A12) — zwei Bildschirme, zwei Fragen.
+**jeder** Antwort. Die Kategorien stehen im Setup seit A33 als direkte
+Auswahl statt hinter einem Filterknopf — mehrere ergeben die **Vereinigung**,
+keine Auswahl heißt „alle", dargestellt durch einen Alle-Eintrag. Die
+Kartenliste verknüpft seit A32 ebenfalls mit **ODER**; die frühere
+UND-Semantik der Liste (A12, A26) ist überholt. Dort verengen Typ, Suche und
+Status weiter, die Kategorien sind eine ODER-Gruppe innerhalb dieser
+UND-Kette.
 
 Seit Phase 7 gibt es **Sprachausgabe**: ein Lautsprecher in der aufgedeckten
 Lernkarte, in der Kartenliste und im Editor, dort auf dem noch nicht

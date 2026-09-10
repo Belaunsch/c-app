@@ -214,11 +214,12 @@ struct LearnSessionModelTests {
         #expect(try poolGermans(of: session) == ["Apfel"])
     }
 
-    @Test("The category rule is a pure function, and the two rules differ")
-    func categoryRulesDifferBetweenContexts() throws {
-        // Pinned side by side, because the whole point is that the two
-        // screens answer differently and a later reader will wonder whether
-        // that is a bug.
+    @Test("The category rule is a pure function, and both screens now agree")
+    func categoryRulesAgreeBetweenContexts() throws {
+        // Pinned side by side, because this used to be the place where the
+        // two screens deliberately disagreed (A26: list AND, session OR).
+        // A32 aligned them on OR, so the same pair of assertions now guards
+        // the agreement — if either screen drifts, this fails.
         let food = Tag(name: "Essen")
         let travel = Tag(name: "Reisen")
         context.insert(food)
@@ -237,9 +238,19 @@ struct LearnSessionModelTests {
         #expect(LearnSessionModel.matchesAnyCategory(both, tagKeys: keys))
         #expect(LearnSessionModel.matchesAnyCategory(onlyFood, tagKeys: []), "no selection, no restriction")
 
-        // Card list: every category has to apply.
-        #expect(CardFilter.matchesTags(onlyFood, tagKeys: keys) == false)
+        // Card list: since A32 the same answer. This test used to be the
+        // counter-probe for the *contrast* between the two screens (A26) —
+        // the list required every category, the session any of them. The
+        // contrast is gone on purpose, so what it pins now is the agreement:
+        // both screens widen, and one of them changing without the other
+        // makes this fail.
+        #expect(CardFilter.matchesTags(onlyFood, tagKeys: keys))
         #expect(CardFilter.matchesTags(both, tagKeys: keys))
+        #expect(CardFilter.matchesTags(onlyFood, tagKeys: []), "no selection, no restriction")
+
+        // What still differs is everything else: the list narrows by search
+        // and status, the session does not have them.
+        #expect(CardFilter.matchesStatus(onlyFood, status: .secure) == false)
     }
 
     @Test("A card without Chinese text is left out of the pool")

@@ -6,13 +6,26 @@
 import SwiftData
 import SwiftUI
 
-/// What to practise: words or sentences, and optionally only certain
-/// categories.
+/// What to practise: words or sentences, and which categories.
 ///
-/// Deliberately the same shape as the card list — a compact centred title
-/// with the controls in the toolbar — so the two tabs do not look like two
-/// different apps. The categories moved into that toolbar filter as well;
-/// they were a permanently visible list for a choice that is made rarely.
+/// ## Why the categories are on the screen and not behind a filter button
+///
+/// They used to sit in a toolbar sheet labelled "Filter", the same control
+/// the card list has. That framing was wrong in a way that showed on the
+/// device: in the card list a filter is administrative — it hides rows from
+/// a list that exists either way. Here the categories **are** the choice.
+/// "Was übe ich jetzt?" is the entire question this screen asks, and the
+/// answer belonged behind a funnel icon that says "something is hidden".
+///
+/// So the order on screen is now the order of the decision: card type,
+/// categories, start. Nothing is behind a sheet, because there are only two
+/// things to decide.
+///
+/// Deliberately **not** here: creating, renaming or deleting a category, and
+/// any filter on learning status. The first belongs to the category
+/// management screen — see `LearnCategorySelection` for why. The second would
+/// let the user pick cards by how well they already know them, which is the
+/// weighting's job (`docs/learning-engine.md` §3).
 ///
 /// There is no direction control. Mode A, German to Chinese, is the only one
 /// that exists, and a picker with one option is a promise with nothing behind
@@ -29,7 +42,7 @@ struct SessionSetupView: View {
     @Query(sort: [SortDescriptor(\Card.german)]) private var allCards: [Card]
 
     @State private var cardType: CardType = .word
-    @State private var tagKeys: Set<String> = []
+    @State private var tagKeys = LearnCategorySelection.everything
 
     /// A plain flag rather than `navigationDestination(item:)`, which would
     /// require `SessionConfiguration` to be `Hashable`. Adding a conformance
@@ -38,7 +51,6 @@ struct SessionSetupView: View {
     /// visible while the session is pushed, so the configuration cannot
     /// change underneath it.
     @State private var isSessionRunning = false
-    @State private var isShowingFilterSheet = false
     @State private var isShowingNewCardSheet = false
 
     private var configuration: SessionConfiguration {
@@ -63,41 +75,28 @@ struct SessionSetupView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Picker("Kartentyp", selection: $cardType) {
-                    ForEach(CardType.allCases, id: \.self) { candidate in
-                        Text(candidate.title).tag(candidate)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Picker("Kartentyp", selection: $cardType) {
+                        ForEach(CardType.allCases, id: \.self) { candidate in
+                            Text(candidate.title).tag(candidate)
+                        }
                     }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
 
-                if availableCount == 0 {
-                    emptyState
-                } else {
-                    start
+                    categories
                 }
-
-                Spacer()
+                .padding()
             }
-            .padding()
+            // Pinned, so the start button stays reachable however many
+            // categories there are — the grid scrolls, the decision does not
+            // move.
+            .safeAreaInset(edge: .bottom) { footer }
             .navigationTitle("Lernen")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        isShowingFilterSheet = true
-                    } label: {
-                        Label("Filter", systemImage: filterSymbol)
-                    }
-                    .accessibilityLabel(filterAccessibilityLabel)
-                }
-            }
             .navigationDestination(isPresented: $isSessionRunning) {
                 LearnSessionView(configuration: configuration)
-            }
-            .sheet(isPresented: $isShowingFilterSheet) {
-                SessionFilterSheet(allTags: allTags, tagKeys: $tagKeys)
             }
             .sheet(isPresented: $isShowingNewCardSheet) {
                 NavigationStack {
@@ -109,41 +108,146 @@ struct SessionSetupView: View {
         }
     }
 
-    private var start: some View {
-        VStack(spacing: 8) {
-            Button("Session starten") { isSessionRunning = true }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .frame(maxWidth: .infinity)
+    // MARK: - Categories
 
-            Text(
-                availableCount == 1
-                    ? "Eine Karte steht zur Auswahl. Die Session läuft, bis du sie beendest."
-                    : "\(availableCount) Karten stehen zur Auswahl. Die Session läuft, bis du sie beendest."
-            )
-            .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+    @ViewBuilder
+    private var categories: some View {
+        if allTags.isEmpty == false {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Kategorien")
+                    .font(.headline)
+
+                // An adaptive grid rather than a list: the names are short,
+                // a list of them would fill the screen for a choice made in
+                // two taps, and the grid keeps many categories readable by
+                // wrapping instead of by scrolling past the start button.
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 104), spacing: 8)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    // Every chip reads `activeTagKeys`, not `tagKeys`, and
+                    // that difference is the whole point. `tagKeys` can hold
+                    // a category the user deleted in the management screen
+                    // while this screen kept its `@State` across a tab
+                    // switch. The pool and the footer already ignore such a
+                    // key; asking the chips about the raw set instead would
+                    // light **nothing** — no Alle, and no chip for a
+                    // category that no longer exists — while the session
+                    // starts unrestricted. That is exactly the second
+                    // "nothing is chosen" state this design exists to
+                    // prevent, arriving through the view rather than the
+                    // model. One screen, one set.
+                    chip(
+                        title: "Alle",
+                        isSelected: LearnCategorySelection.isEverything(activeTagKeys)
+                    ) {
+                        tagKeys = LearnCategorySelection.everything
+                    }
+
+                    ForEach(allTags) { tag in
+                        let key = TagNormalization.key(for: tag.name)
+                        chip(title: tag.name, isSelected: activeTagKeys.contains(key)) {
+                            tagKeys = LearnCategorySelection.toggled(activeTagKeys, key: key)
+                        }
+                    }
+                }
+
+                Text(selectionExplanation)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label("Keine passenden Karten", systemImage: "rectangle.stack.badge.questionmark")
-        } description: {
-            // Blaming the filter is only honest if lifting it would help.
-            // With sentences only and "Wörter" chosen, the categories are
-            // not the reason and saying so would send the user looking in
-            // the wrong place.
-            Text(
-                isEmptyBecauseOfCategories
-                    ? "Keine Karte gehört zu einer der gewählten Kategorien."
-                    : "Zum Lernen braucht eine Karte deutschen und chinesischen Text."
-            )
-        } actions: {
-            Button("Karte anlegen") { isShowingNewCardSheet = true }
+    /// One category, selected or not.
+    ///
+    /// The two states are two button styles rather than a tint or a
+    /// checkmark: `.borderedProminent` against `.bordered` is the platform's
+    /// own "this one is chosen", it survives dark mode and Dynamic Type
+    /// without anything to maintain, and it stays visible at a glance across
+    /// a grid — which a checkmark at the trailing edge does not.
+    @ViewBuilder
+    private func chip(
+        title: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        // Two lines, not one: `TagNormalization.maximumLength` allows 40
+        // characters and a 104 pt column fits about ten, so "Redewendungen
+        // Essen" and "Redewendungen Reisen" would both read "Redewendun…" —
+        // two chips nobody can tell apart, one of them lit. The grid row
+        // grows instead.
+        let label = Text(title)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity)
+
+        if isSelected {
+            Button(action: action) { label }
                 .buttonStyle(.borderedProminent)
+                .accessibilityAddTraits(.isSelected)
+        } else {
+            Button(action: action) { label }
+                .buttonStyle(.bordered)
         }
+    }
+
+    /// Says what the current selection means, so the union is never
+    /// something the user has to infer from a card count.
+    ///
+    /// The plural case used to read "Geübt wird alles aus **einer** der
+    /// ausgewählten Kategorien" — accurate about the rule and misleading
+    /// about the outcome, because it sounds like only one of the ticked
+    /// categories is used. It is the union: every card from every selected
+    /// category, and a card in two of them still appears once.
+    private var selectionExplanation: String {
+        switch activeTagKeys.count {
+        case 0: "Alle Karten des gewählten Typs."
+        case 1: "Geübt wird alles aus dieser Kategorie."
+        default: "Geübt werden alle Karten aus den ausgewählten Kategorien."
+        }
+    }
+
+    // MARK: - Start
+
+    @ViewBuilder
+    private var footer: some View {
+        VStack(spacing: 8) {
+            if availableCount == 0 {
+                Text(emptyExplanation)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Button("Karte anlegen") { isShowingNewCardSheet = true }
+                    .buttonStyle(.borderedProminent)
+            } else {
+                Button("Session starten") { isSessionRunning = true }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+
+                Text(
+                    availableCount == 1
+                        ? "Eine Karte steht zur Auswahl. Die Session läuft, bis du sie beendest."
+                        : "\(availableCount) Karten stehen zur Auswahl. Die Session läuft, bis du sie beendest."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            }
+        }
+        .padding()
+        .background(.bar)
+    }
+
+    /// Blaming the categories is only honest if changing them would help.
+    /// With sentences only and "Wörter" chosen, they are not the reason, and
+    /// saying so would send the user looking in the wrong place.
+    private var emptyExplanation: String {
+        isEmptyBecauseOfCategories
+            ? "Keine Karte gehört zu einer der gewählten Kategorien."
+            : "Zum Lernen braucht eine Karte deutschen und chinesischen Text."
     }
 
     /// Whether the categories are what emptied the pool — as opposed to
@@ -154,90 +258,5 @@ struct SessionSetupView: View {
             from: allCards,
             configuration: SessionConfiguration(cardType: cardType)
         ).isEmpty == false
-    }
-
-    /// A filled icon while a category filter is active, the same signal the
-    /// card list uses.
-    private var filterSymbol: String {
-        activeTagKeys.isEmpty
-            ? "line.3.horizontal.decrease.circle"
-            : "line.3.horizontal.decrease.circle.fill"
-    }
-
-    private var filterAccessibilityLabel: String {
-        switch activeTagKeys.count {
-        case 0: "Filter"
-        case 1: "Filter, eine Kategorie aktiv"
-        case let count: "Filter, \(count) Kategorien aktiv"
-        }
-    }
-}
-
-/// The categories to practise, on a sheet behind the toolbar button.
-///
-/// Only categories: a learning-status filter would let the user pick which
-/// cards to see by how well they know them, and choosing what to practise is
-/// the weighting's job (`docs/learning-engine.md` §3).
-///
-/// A tap toggles, and that is the only interaction. There is no "clear
-/// selection" button — with one filter group, deselecting the last category
-/// *is* clearing it, and a second control for the same thing only raises the
-/// question of how the two differ.
-private struct SessionFilterSheet: View {
-    let allTags: [Tag]
-    @Binding var tagKeys: Set<String>
-
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                if allTags.isEmpty {
-                    ContentUnavailableView(
-                        "Keine Kategorien",
-                        systemImage: "tag",
-                        description: Text("Kategorien entstehen beim Anlegen einer Karte.")
-                    )
-                } else {
-                    Section {
-                        ForEach(allTags) { tag in
-                            let key = TagNormalization.key(for: tag.name)
-                            Button {
-                                if tagKeys.contains(key) {
-                                    tagKeys.remove(key)
-                                } else {
-                                    tagKeys.insert(key)
-                                }
-                            } label: {
-                                HStack {
-                                    Text(tag.name)
-                                        .foregroundStyle(.primary)
-                                    Spacer()
-                                    if tagKeys.contains(key) {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(.tint)
-                                    }
-                                }
-                            }
-                        }
-                    } header: {
-                        Text("Kategorien")
-                    } footer: {
-                        if tagKeys.count > 1 {
-                            Text("Geübt wird alles aus **einer** der ausgewählten Kategorien.")
-                        } else if tagKeys.isEmpty {
-                            Text("Ohne Auswahl werden alle Karten des gewählten Typs geübt.")
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Filter")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Fertig") { dismiss() }
-                }
-            }
-        }
     }
 }

@@ -6,14 +6,53 @@
 import Foundation
 import SwiftData
 
-/// Renaming and deleting stored categories.
+/// Creating, renaming and deleting stored categories.
 ///
-/// These two live outside the view because renaming carries real rules —
-/// normalization plus a duplicate check against every other tag — and both
+/// These live outside the view because each carries real rules —
+/// normalization plus a duplicate check against every other tag — and all
 /// touch the store irreversibly. Deleting a card, by contrast, is a plain
 /// `delete` plus `save` with nothing to decide, so it stays in `CardListView`
 /// rather than gaining an abstraction it does not need.
 enum TagManagement {
+
+    /// Creates a category from a typed name.
+    ///
+    /// The rules are not restated here: normalisation, the length limit and
+    /// the duplicate check all come from `TagNormalization`, the same source
+    /// the rename path and the card editor use. What differs between the two
+    /// creation call sites is only what happens **afterwards** — the editor
+    /// selects the new category for the card being written and therefore
+    /// treats an existing name as "select that one instead", while this
+    /// screen creates nothing but the category and says so when the name is
+    /// already taken. That is a difference in outcome, not in rules, which is
+    /// why the editor's `addNewTag` keeps its own path rather than being bent
+    /// into this one.
+    ///
+    /// - Throws: `AppError.tagNameRejected` when the name is empty, too long
+    ///   or already taken; `AppError.tagCreateFailed` when the store refuses
+    ///   the write.
+    @discardableResult
+    static func create(
+        named name: String,
+        among tags: [Tag],
+        in context: ModelContext
+    ) throws -> Tag {
+        if let problem = TagNormalization.creationProblem(name: name, among: tags) {
+            throw AppError.tagNameRejected(problem)
+        }
+
+        let tag = Tag(name: TagNormalization.displayName(for: name))
+        context.insert(tag)
+        do {
+            try context.save()
+        } catch {
+            // Nothing half-created: without the rollback the category would
+            // exist in memory, be assignable, and vanish on the next launch.
+            context.rollback()
+            throw AppError.tagCreateFailed(error)
+        }
+        return tag
+    }
 
     /// Renames the tag **in place**.
     ///

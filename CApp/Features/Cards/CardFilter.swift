@@ -28,7 +28,8 @@ enum CardFilter {
     ///   - searchText: matched against German, Hanzi and Pinyin. Empty means
     ///     no search.
     ///   - tagKeys: normalized tag keys, see `TagNormalization`. A card must
-    ///     carry **all** of them (AND). Empty means no tag filter.
+    ///     carry **at least one** of them (OR, A32). Empty means no tag
+    ///     filter.
     ///   - status: exact learning status, `nil` means every status.
     static func apply(
         to cards: [Card],
@@ -59,19 +60,23 @@ enum CardFilter {
             || card.pinyin.localizedStandardContains(term)
     }
 
-    /// A card must carry every selected tag, not just one of them.
+    /// A card must carry **at least one** of the selected tags.
     ///
-    /// AND was chosen over OR so that every filter in **this** screen behaves
-    /// the same way: adding one narrows the result. Type, search and status
-    /// all narrow, so tags do too (A12).
+    /// This was AND until A32, on the argument that every filter in this
+    /// screen narrows (A12). Measured against use, that argument was wrong
+    /// about what ticking a second category means: the answer to "show me
+    /// Essen **and** Reisen" is almost never "only cards that are both", and
+    /// with a handful of cards per category the intersection is usually
+    /// empty. Ticking two boxes now widens, which is also what the learning
+    /// session has always done — A32 replaces A12 and the card-list half of
+    /// A26.
     ///
-    /// The learning session deliberately does **not** use this: there several
-    /// categories mean "practise any of these", see
-    /// `LearnSessionModel.poolCards` and A26. The two contexts ask different
-    /// questions, so they get different answers rather than one compromise.
+    /// The other dimensions are untouched and still narrow: type, search and
+    /// status keep combining with AND, so the categories are one OR group
+    /// inside an AND chain.
     static func matchesTags(_ card: Card, tagKeys: Set<String>) -> Bool {
         guard tagKeys.isEmpty == false else { return true }
-        return tagKeys.isSubset(of: keys(of: card))
+        return tagKeys.isDisjoint(with: keys(of: card)) == false
     }
 
     /// The card's normalised category keys.
