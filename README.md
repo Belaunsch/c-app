@@ -6,7 +6,7 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 8 abgeschlossen.**
+**Phasen 0 bis 9 abgeschlossen.**
 
 Vorhanden sind die Architektur- und Planungsdokumentation, die
 Claude-Code-Entwicklungsinfrastruktur (`.claude/agents/`, `.claude/skills/`,
@@ -16,7 +16,7 @@ Kartenverwaltung: Wörter und Sätze getrennt, Karten anlegen, bearbeiten und
 löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
 Lernstatus, Kategorien umbenennen und löschen.
 
-Build und Unit-Tests laufen grün: **451 Testfunktionen / 509 Einzelausführungen,
+Build und Unit-Tests laufen grün: **470 Testfunktionen / 528 Einzelausführungen,
 0 Fehlschläge, 0 Compilerwarnungen** auf einem Debug-Build von null (iPhone-17-Simulator, iOS
 26.5), Release-Build von null ebenso. Jede Phase ist auf einem echten iPhone
 bestätigt, die letzte am **2026-09-09**.
@@ -80,7 +80,25 @@ und Statusübergänge sind dieselben wie in Modus A — es gibt keinen leichtere
 Weg durch die Lernstände, nur eine zweite Art zu fragen. Der vollständig
 aufgedeckte Zustand ist in beiden Richtungen dieselbe Ansicht.
 
-Noch nicht vorhanden: **Spracherkennung**.
+Neu aus Phase 9: **Spracherkennung.** In Modus A gibt es neben „Antwort
+zeigen" ein optionales Mikrofon. Was Apple erkennt, wird nach derselben
+Normalisierung wie überall mit dem gespeicherten Hanzi verglichen. Stimmt es
+überein, sagt die App **„Erkannt wie erwartet"** — eine Aussage über zwei
+Texte, nicht über die Aussprache. Weicht es ab, stehen Erkannt und Erwartet
+neutral nebeneinander, ohne Wertung. Es gibt keinen Score, keine Prozentzahl
+und kein Tonfeedback, und die Erkennung ändert **nie** den Lernstand: Die
+Selbsteinschätzung bleibt die einzige Bewertung. Alles läuft auf dem Gerät,
+nach dem einmaligen Modell-Download auch im Flugmodus. Ohne Mikrofon oder
+ohne Berechtigung funktioniert der Lernmodus unverändert weiter.
+
+Eine gemessene Grenze, die dazugehört: Bei einem Anfänger-Sprecher erkennt
+Apple häufig einen anderen chinesischen Text als den gemeinten — von 16 normal
+gesprochenen Zielantworten stimmten 8 exakt überein. Ein Treffer ist deshalb
+ein Hinweis, kein Urteil.
+
+Noch nicht vorhanden: automatische Statusvorschläge aus der Review-Historie
+und ein freihändiger Sprachmodus — beides ist als Phase 11 und 12 in der
+Roadmap vorgezeichnet.
 
 Neu aus Phase 4.5: Das Pinyin kommt nicht mehr aus reiner Transliteration,
 sondern aus einem gebündelten Lexikon — daher die neutralen Töne (`xièxie`,
@@ -109,7 +127,7 @@ Testcode und in
 allen vier fehlt die entscheidende Information in den Daten, nicht im
 Algorithmus.
 
-Nächster Schritt: **Phase 9 — Spracherkennung (Mandarin)**.
+Nächster Schritt: **Phase 10 — Einstellungen, Fehlerbehandlung, Device-Test & Polish**.
 
 ## Drittanbieter-Daten
 

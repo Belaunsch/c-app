@@ -15,10 +15,19 @@ import SwiftUI
 struct LearnSessionView: View {
     @Environment(\.modelContext) private var context
     @Environment(SpeechSynthesisService.self) private var speech
+    @Environment(SpeechRecognitionService.self) private var recognition
     @Environment(\.dismiss) private var dismiss
 
     @State private var model: LearnSessionModel
     @State private var isShowingNewCardSheet = false
+
+    /// Which card the running recording belongs to.
+    ///
+    /// Captured when recording starts, not when it ends: by the time the
+    /// analyzer finalises, the session may have moved on, and the id is what
+    /// lets `applyRecognition` drop a result that no longer belongs
+    /// anywhere.
+    @State private var recordingCardID: UUID?
 
     init(configuration: SessionConfiguration) {
         _model = State(initialValue: LearnSessionModel(configuration: configuration))
@@ -49,10 +58,16 @@ struct LearnSessionView: View {
             // das er gar nicht gehört hat. Sichtbar wird es nicht: Der
             // Lautsprecher der neuen Karte bleibt ungefüllt, weil
             // `SpeakButton` den Text vergleicht.
-            .onChange(of: model.currentCard?.id) { _, _ in speech.stop() }
+            .onChange(of: model.currentCard?.id) { _, _ in
+                speech.stop()
+                abandonRecording()
+            }
             // Die Session endet, der Ton endet. Auch der einzige Teardown, der
             // ohne Delegate-Callback auskommt.
-            .onDisappear { speech.stop() }
+            .onDisappear {
+                speech.stop()
+                abandonRecording()
+            }
             .task {
                 model.start(in: context)
             }
@@ -94,10 +109,47 @@ struct LearnSessionView: View {
     private func prompt(for card: Card) -> some View {
         switch model.configuration.direction {
         case .germanToChinese:
-            PromptGermanToChineseView(card: card, isRevealed: model.isRevealed)
+            PromptGermanToChineseView(
+                card: card,
+                isRevealed: model.isRevealed,
+                speechCheck: model.speechCheck
+            )
         case .audioToGerman:
             PromptAudioToGermanView(card: card, stage: model.promptStage)
         }
+    }
+
+    /// Starts a recording for the card currently on screen.
+    ///
+    /// Speech output stops first. The app never records and speaks at once —
+    /// they want different audio session categories, and a card talking into
+    /// its own recording would be recognised along with the learner.
+    private func startRecording(for card: Card) {
+        speech.stop()
+        recordingCardID = card.id
+        Task { await recognition.startRecording() }
+    }
+
+    /// Stops, and hands the result to the card it started on.
+    private func stopRecording() {
+        Task {
+            let text = await recognition.stopAndFinalize()
+            // No text is not a silent no-op: the service moves to
+            // `.noSpeechDetected` and the button says so. The card stays
+            // covered, because nothing was checked.
+            guard let text, let id = recordingCardID else { return }
+            model.applyRecognition(text, forCardWith: id)
+        }
+    }
+
+    /// Throws away a running recording.
+    ///
+    /// Used wherever the answer stops being a question: revealing by hand,
+    /// changing card, leaving the session. Nothing that was being recognised
+    /// may surface afterwards.
+    private func abandonRecording() {
+        recordingCardID = nil
+        Task { await recognition.cancelRecording() }
     }
 
     /// What can be done next.
@@ -109,6 +161,8 @@ struct LearnSessionView: View {
     private var controls: some View {
         if AudioPrompt.allowsAssessment(at: model.promptStage) {
             SelfAssessmentBar { assessment in
+                // A rating can only follow a finished recording: the card is
+                // revealed here, and revealing always ends one.
                 model.submit(assessment, in: context)
             }
         } else {
@@ -125,7 +179,25 @@ struct LearnSessionView: View {
                     .frame(maxWidth: .infinity)
                 }
 
+                if let card = model.currentCard,
+                   RecordAnswerButton.isOffered(
+                       in: model.configuration.direction,
+                       revealed: model.isRevealed
+                   ) {
+                    RecordAnswerButton(
+                        phase: recognition.phase,
+                        progress: recognition.downloadProgress,
+                        failure: recognition.failure,
+                        start: { startRecording(for: card) },
+                        stop: stopRecording
+                    )
+                }
+
                 Button("Antwort zeigen") {
+                    // Revealing by hand ends a running recording rather than
+                    // racing it: a result arriving afterwards would attach
+                    // itself to a card the learner has already given up on.
+                    abandonRecording()
                     model.reveal()
                 }
                 .buttonStyle(.borderedProminent)

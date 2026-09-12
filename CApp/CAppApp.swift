@@ -25,6 +25,11 @@ struct CAppApp: App {
     /// zweites Muster und keinen DI-Container.
     @State private var speech = SpeechSynthesisService()
 
+    /// Wie der Synthesizer genau **eine** Instanz für die Laufzeit: Sie hält
+    /// die AudioEngine, den Analyzer und den Zustand der Sprachmodelle. Nichts
+    /// davon verträgt zwei Besitzer.
+    @State private var recognition = SpeechRecognitionService()
+
     init() {
         container = Result { try Self.makeModelContainer() }
     }
@@ -36,6 +41,7 @@ struct CAppApp: App {
                 RootView()
                     .modelContainer(container)
                     .environment(speech)
+                    .environment(recognition)
             case .failure(let error):
                 PersistenceErrorView(error: error)
             }

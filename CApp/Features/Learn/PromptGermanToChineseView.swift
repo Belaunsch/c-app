@@ -9,9 +9,11 @@ import SwiftUI
 /// asked for it.
 ///
 /// Before revealing, neither Hanzi nor Pinyin is on screen — the point of the
-/// mode is that the learner produces the answer themselves. Nothing listens,
-/// and nothing plays: sound before the reveal would hand over the answer, and
-/// recognition is phase 9.
+/// mode is that the learner produces the answer themselves, and sound before
+/// the reveal would hand the answer over. Since phase 9 something **does**
+/// listen, but only when asked: the microphone is an optional second control
+/// beside "Antwort zeigen", it starts nothing on its own, and a recognised
+/// answer changes no learning status.
 ///
 /// **The revealed state is `LearnRevealedAnswerView`, shared with mode B.**
 /// Until phase 8 this view had its own arrangement — the German shrank and
@@ -30,9 +32,13 @@ struct PromptGermanToChineseView: View {
     let card: Card
     let isRevealed: Bool
 
+    /// What a spoken answer came to, if there was one. `nil` whenever the
+    /// learner did not use the microphone, which is most of the time.
+    var speechCheck: SpeechCheck? = nil
+
     var body: some View {
         if isRevealed {
-            LearnRevealedAnswerView(card: card)
+            LearnRevealedAnswerView(card: card, speechCheck: speechCheck)
         } else {
             question
         }

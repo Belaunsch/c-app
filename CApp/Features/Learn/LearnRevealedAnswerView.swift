@@ -25,6 +25,13 @@ import SwiftUI
 struct LearnRevealedAnswerView: View {
     let card: Card
 
+    /// What the spoken answer came to, if the learner used the microphone.
+    ///
+    /// Defaults to `nil`, which is what mode B always passes — there is no
+    /// recording there, and this parameter exists so the two modes can keep
+    /// sharing one revealed state instead of growing a second one.
+    var speechCheck: SpeechCheck? = nil
+
     var body: some View {
         VStack(spacing: 20) {
             LearnPromptSpeaker(card: card)
@@ -53,6 +60,10 @@ struct LearnRevealedAnswerView: View {
                 .font(.title2)
                 .multilineTextAlignment(.center)
                 .accessibilityLabel("Bedeutung: \(card.german)")
+
+            if let speechCheck {
+                SpeechCheckNote(check: speechCheck)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 8)
@@ -97,5 +108,70 @@ struct LearnPromptSpeaker: View {
                     .multilineTextAlignment(.center)
             }
         }
+    }
+}
+
+/// What the recognition found, stated as carefully as it deserves.
+///
+/// ## The wording is the feature
+///
+/// A match says **„Erkannt wie erwartet"** — a statement about two texts, not
+/// about the person who spoke. The chain that produced it is: spoken Mandarin
+/// → Apple's recognition → recognised Hanzi → normalisation → string
+/// comparison. Nothing in it measured pronunciation, and a recogniser with a
+/// good language model guesses the right sentence out of poor pronunciation
+/// routinely. Claiming otherwise is the one thing `CLAUDE.md` forbids
+/// outright (rule 7).
+///
+/// It used to say „Antwort wahrscheinlich korrekt", which was a claim about
+/// the **answer**. The phase-9 benchmark withdrew the ground under it: in the
+/// first positive pass the transcriber returned a different Chinese text for
+/// 8 of 16 normally spoken target answers. The response was not to loosen the
+/// measurement but to narrow the claim — see `SpeechCheck.matchTitle`.
+///
+/// A mismatch shows both texts and passes no verdict. Deliberately not red
+/// and not marked wrong: the recognition can be wrong, the card can be wrong,
+/// and the learner is the one who knows which. The self-assessment below is
+/// untouched — Nochmal, Schwer, Gut and Sicher stay theirs.
+private struct SpeechCheckNote: View {
+    let check: SpeechCheck
+
+    var body: some View {
+        VStack(spacing: 6) {
+            switch check {
+            case .match:
+                Label(SpeechCheck.matchTitle, systemImage: "checkmark.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+            case .mismatch(let recognized, let expected):
+                VStack(spacing: 10) {
+                    line(SpeechCheck.recognizedLabel, recognized)
+                    line(SpeechCheck.expectedLabel, expected)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 4)
+    }
+
+    /// One labelled line, centred like everything else on this screen.
+    ///
+    /// It used to be a label column and a left-aligned value, which read as a
+    /// form pasted into a centred layout — the device test called it out. The
+    /// label now sits above its text, both centred, so a long sentence wraps
+    /// under its own heading instead of pushing the row wide.
+    private func line(_ label: String, _ text: String) -> some View {
+        VStack(spacing: 2) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(text)")
     }
 }

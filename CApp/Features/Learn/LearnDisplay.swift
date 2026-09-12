@@ -57,6 +57,29 @@ extension SessionDirection {
     }
 }
 
+extension SpeechCheck {
+    /// What a match is allowed to say — and the whole sentence is the point.
+    ///
+    /// It used to read „Antwort wahrscheinlich korrekt". The phase-9 benchmark
+    /// took that claim apart: over the first positive pass the transcriber
+    /// produced a different Chinese text in 8 of 16 normally spoken target
+    /// answers. A wording that says the *answer* was probably right therefore
+    /// promised something the measurement does not support — it would have
+    /// been a statement about the learner, made on evidence about a
+    /// transcriber.
+    ///
+    /// „Erkannt wie erwartet" says exactly what happened and nothing more:
+    /// Apple's final text, normalised, equals the stored Hanzi. It claims
+    /// nothing about pronunciation, nothing about tones, nothing about
+    /// linguistic correctness and nothing about what the learner knows.
+    static let matchTitle = "Erkannt wie erwartet"
+
+    /// The two labels of the mismatch view. Here rather than in the view so
+    /// the forbidden-wording test can actually reach every visible string.
+    static let recognizedLabel = "Erkannt"
+    static let expectedLabel = "Erwartet"
+}
+
 /// What the reveal shows for one card.
 ///
 /// A pure function so the rule can be tested: the learning mode shows the

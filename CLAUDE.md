@@ -6,9 +6,9 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phasen 0–8 abgeschlossen.** Gerätetest der Phase 8 am
-**2026-09-10** vollständig bestanden. Stand des Gates: **451 Testfunktionen /
-509 Einzelausführungen grün** — parametrisierte Tests machen daraus zwei
+**Aktueller Stand: Phasen 0–9 abgeschlossen.** Gerätetests der Phase 9 am
+**2026-09-11** und **2026-09-12** vollständig bestanden. Stand des Gates:
+**470 Testfunktionen / 528 Einzelausführungen grün** — parametrisierte Tests machen daraus zwei
 Zahlen, also immer mit Einheit nennen —, 0 fehlgeschlagen, 0
 Compilerwarnungen auf einem Debug-Build von null, Release-Build von null
 ebenso.
@@ -76,11 +76,32 @@ Phase-7-TTS-Service wird unverändert wiederverwendet; laufende Sprache stoppt
 beim Kartenwechsel. Der vollständig aufgedeckte Zustand ist in beiden
 Richtungen dieselbe `LearnRevealedAnswerView` (A34).
 
-**Nächster Schritt ist Phase 9 — Spracherkennung (Mandarin).**
-Spracherkennung und Aussprachebewertung existieren weiterhin nicht. Für
-Phase 9 ist vorab festgehalten: Ein Treffer der Spracherkennung heißt „der
-erkannte Text stimmt wahrscheinlich mit dem Zieltext überein" — nie „richtig
-ausgesprochen" (harte Regel 7).
+Seit Phase 9 gibt es **Spracherkennung**, ausschließlich in Modus A und
+ausschließlich optional. `SpeechRecognitionService` kapselt die gesamte
+Apple-Integration: Locale-Auflösung mit **Validierung** auf `zh`/`Hans`/`CN`
+(Apples Near-Equivalence-Regel nennt Script nicht und darf ein `zh_TW`
+liefern), Asset-Bereitschaft über `AssetInventory.status(forModules:)` für
+genau die benutzte Modulkonfiguration — nie über `installedLocales` und nie
+gecacht —, Mikrofon über `AVAudioEngine`, Konvertierung auf das zur Laufzeit
+gelesene `bestAvailableAudioFormat`, dann `SpeechAnalyzer`. Verglichen wird
+allein über `AnswerNormalization`.
+
+**Der Wortlaut ist die Regel:** Ein Treffer heißt **„Erkannt wie erwartet"** —
+Apples finaler Text entspricht nach der Normalisierung dem gespeicherten
+Hanzi. Nie „richtig ausgesprochen", nie „Töne korrekt", kein Score, kein
+Prozentwert, keine Konfidenz (harte Regel 7). Ursprünglich stand dort „Antwort
+wahrscheinlich korrekt"; der Phase-9-Benchmark hat dieser Aussage den Boden
+entzogen — 8 von 16 normal gesprochenen Zielantworten wurden als anderer Text
+erkannt. Die Schwelle wurde **nicht** gelockert, die Behauptung reduziert.
+Erkennung verändert **niemals** den Lernstand; die Selbsteinschätzung bleibt
+die einzige Bewertung. `CApp/Learning/` ist in dieser Phase vollständig
+unverändert geblieben.
+
+**Nächster Schritt ist Phase 10 — Einstellungen, Fehlerbehandlung,
+Device-Test & Polish.** Für Phase 11 ist vorgemerkt, dass mehrere wiederholte
+Treffer als *potenzielle* positive Evidenz in eine Statusschätzung eingehen
+könnten — ein Mismatch dagegen ist **keine** sichere negative Evidenz, und
+die False-Accept-Eigenschaft ist nicht gemessen.
 
 Drittanbieter-Daten liegen ausschließlich in
 `CApp/Resources/ThirdParty/CC-CEDICT/` und stehen unter CC BY-SA 4.0; die

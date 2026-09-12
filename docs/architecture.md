@@ -104,7 +104,8 @@ c-app/
 │   │   ├── TranslationService.swift        Verfügbarkeit + Konfiguration (Phase 4)
 │   │   ├── MandarinVoice.swift             reine Stimmenauswahl (Phase 7)
 │   │   ├── SpeechSynthesisService.swift    AVSpeechSynthesizer (Phase 7)
-│   │   └── SpeechRecognitionService.swift  SpeechAnalyzer/SpeechTranscriber
+│   │   ├── SpeechRecognitionService.swift  SpeechAnalyzer/SpeechTranscriber
+│   │   └── MandarinRecognitionLocale.swift reine Locale-Prüfung, testbar
 │   │
 │   ├── Features/
 │   │   ├── Speech/
@@ -117,6 +118,8 @@ c-app/
 │   │   │   ├── PromptGermanToChineseView.swift
 │   │   │   ├── PromptStage.swift          Stufen und Sichtbarkeit Modus B
 │   │   │   ├── LearnRevealedAnswerView.swift  geteilter Endzustand beider Modi
+│   │   │   ├── SpeechCheck.swift          Vergleichsergebnis, rein und testbar
+│   │   │   ├── RecordAnswerButton.swift   Mikrofonknopf, Zustandstabelle testbar
 │   │   │   ├── PromptAudioToGermanView.swift
 │   │   │   └── SelfAssessmentBar.swift
 │   │   ├── Cards/

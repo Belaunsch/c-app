@@ -53,6 +53,14 @@ final class LearnSessionModel {
     /// mode A, where nothing ever sets it.
     private(set) var hasShownHanzi = false
 
+    /// What the spoken answer came to, if the learner used the microphone.
+    ///
+    /// `nil` means they did not — which is the normal case, because the
+    /// recording is optional and everything works without it. Never set by
+    /// anything but `applyRecognition(_:forCardWith:)`, so a late result
+    /// cannot reach it by another route.
+    private(set) var speechCheck: SpeechCheck?
+
     /// How much of the card is uncovered, as one value.
     ///
     /// Derived rather than stored — two flags that can disagree is how a
@@ -220,6 +228,31 @@ final class LearnSessionModel {
         hasShownHanzi = true
     }
 
+    /// Records what the spoken answer came to, and reveals the card.
+    ///
+    /// **The card id is the point of this signature.** Recognition is
+    /// asynchronous: the learner can tap "Antwort zeigen", rate, and be two
+    /// cards further on before a finalising analyzer returns. The id the
+    /// recording started with is compared against the card on screen, and a
+    /// result that belongs to a card the session has left is dropped. Without
+    /// that, a late transcription would attach itself to whatever card
+    /// happened to be showing — and it would look like the app had recognised
+    /// something the learner never said.
+    ///
+    /// Revealing here is what makes the spoken answer part of the normal
+    /// flow rather than a second answer display beside it: speaking checks
+    /// the card, so the card opens, and the one revealed state shows the
+    /// result next to the answer. The self-assessment stays untouched and
+    /// manual — recognition never rates anything.
+    func applyRecognition(_ recognized: String, forCardWith id: UUID) {
+        guard let card = currentCard, card.id == id else {
+            Self.logger.info("recognition result dropped: the session moved on")
+            return
+        }
+        speechCheck = SpeechCheck.compare(recognized: recognized, expected: card.hanzi)
+        isRevealed = true
+    }
+
     /// Records one self-assessment: engine first, then the store, then the
     /// session state.
     ///
@@ -269,6 +302,7 @@ final class LearnSessionModel {
         // card to the next — and because a failed save above returns before
         // it, leaving the user on the same card exactly as they left it.
         hasShownHanzi = false
+        speechCheck = nil
         advanceToNextAnswerableCard(in: context)
     }
 

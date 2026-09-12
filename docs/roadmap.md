@@ -1271,6 +1271,47 @@ gemischte Sessions über beide Richtungen.
 
 ## Phase 9 — Spracherkennung (Mandarin)
 
+**Status: abgeschlossen.** Die physischen Gerätetests liefen am **2026-09-11**
+und **2026-09-12** auf einem iPhone 16 Pro unter iOS 26.6. Bestätigt am Gerät:
+Erkennung startet, nimmt auf, finalisiert und liefert einen finalen
+Mandarin-Text; ein Exact-Match zeigt **„Erkannt wie erwartet"**, eine
+Abweichung zeigt Erkannt und Erwartet neutral nebeneinander; nirgends
+erscheint ein Score, ein Prozentwert oder ein Ausspracheurteil; die
+Selbsteinschätzung bleibt die einzige Bewertung. Ebenfalls bestätigt:
+Erkennung im **Flugmodus**, verweigerte und danach erneut erteilte
+Mikrofonberechtigung, der AudioSession-Handoff zwischen Erkennung und
+Sprachausgabe in beide Richtungen, Hintergrund und Rückkehr, der
+Zustands-Reset zwischen Karten und „Nichts erkannt" samt erneutem Versuch.
+
+### Was diese Phase gebaut hat
+
+| | |
+| --- | --- |
+| Erkennung | `SpeechAnalyzer` + `SpeechTranscriber`, kein `DictationTranscriber`, kein zweiter Pfad |
+| Locale | über `supportedLocale(equivalentTo:)`, danach **validiert** auf `zh`/`Hans`/`CN` |
+| Assets | Bereitschaft über `AssetInventory.status(forModules:)` für genau die benutzte Konfiguration, nie über `installedLocales`, nie gecacht |
+| Audio | `AVAudioEngine` mit Tap, eigener `AVAudioConverter` auf `bestAvailableAudioFormat`, Format zur Laufzeit gelesen |
+| Vergleich | ausschließlich `AnswerNormalization` — kein Fuzzy, keine Ähnlichkeit, keine Script-Konvertierung |
+| Berechtigung | nur `NSMicrophoneUsageDescription`, angefragt beim ersten Mikrofontipp |
+| Engine | `CApp/Learning/` **vollständig unverändert** |
+| Tests | **470 Testfunktionen / 528 Einzelausführungen**, 0 Fehlschläge, 0 Compilerwarnungen, Debug und Release von null |
+
+### Bekannte Grenzen
+
+- **Die Erkennungsgenauigkeit ist eine gemessene Produktgrenze, kein
+  Qualitätsversprechen.** Der Benchmark unten wurde nach dem ersten
+  Positivdurchgang abgebrochen; 8 von 16 normal gesprochenen Zielantworten
+  wurden als anderer Text erkannt. Ein Exact-Match taugt deshalb **nicht** als
+  Correctness-Rückmeldung, und der Produkttext sagt das auch nicht mehr.
+- **Task 9.9 ist nicht umgesetzt** und nach Phase 10 verschoben — Begründung
+  beim Task.
+- **Der Service ist nicht unit-getestet.** Mikrofon, Audiokonvertierung und
+  Analyzer brauchen Hardware; ein Protokoll drumherum ergäbe nur ein Mock,
+  das sich selbst recht gibt. Was ohne Gerät prüfbar ist — Locale-Regel,
+  Vergleich, Kartenzuordnung, Wortlaut, Zustandstabelle des Knopfes — ist
+  falsifizierbar abgedeckt und durch Mutationen gegengeprobt. Der Rest steht
+  im Gerätetestprotokoll.
+
 ### Ziel
 In Modus A laut sprechen und eine einfache, ehrliche Rückmeldung erhalten,
 ob das Gesagte zum Sollwert passt.
@@ -1283,9 +1324,15 @@ ob das Gesagte zum Sollwert passt.
   `installedLocales` auf dem Zielgerät ausgeben; prüfen, ob `zh_CN` enthalten
   ist und ob das Gerät die Hardware-Anforderungen erfüllt. Ergebnis unter
   Q2 und Q3 dokumentieren. Bei leerem Array: `DictationTranscriber` prüfen.
-- **9.2** `NSMicrophoneUsageDescription` und
-  `NSSpeechRecognitionUsageDescription` in der Info.plist setzen (beide, siehe
-  Q4) und die tatsächlich angezeigten Dialoge protokollieren.
+- **9.2** `NSMicrophoneUsageDescription` setzen und die tatsächlich
+  angezeigten Dialoge protokollieren. *(Korrigiert am 2026-09-12: Ursprünglich
+  verlangte dieser Task **beide** Schlüssel „vorsorglich, siehe Q4". Q4 ist
+  inzwischen aus Apples Primärquelle geklärt — `NSSpeechRecognitionUsageDescription`
+  ist an den Serverpfad gebunden, den `SpeechAnalyzer` nach Apples eigener
+  Aussage nicht benutzt. Der Schlüssel wird deshalb **nicht** gesetzt, und
+  `SFSpeechRecognizer.requestAuthorization` wird nicht aufgerufen. Die
+  vorsorgliche Planung ist damit überholt, nicht stillschweigend übergangen;
+  Belege in `apple-frameworks.md` §7.)*
 - **9.3** Locale über `AssetInventory` reservieren und die Modelle
   herunterladen; Fortschritt und Fehler in der UI sichtbar machen.
 - **9.4** `SpeechRecognitionService` mit `SpeechAnalyzer` und
@@ -1293,13 +1340,23 @@ ob das Gesagte zum Sollwert passt.
 - **9.5** Aufnahme-Button in Modus A; Aufnahme ist immer optional — die
   Selbsteinschätzung funktioniert auch ohne Mikrofon vollständig.
 - **9.6** Vergleich mit der in Phase 5 gebauten Normalisierungsfunktion:
-  bei Gleichheit „Antwort wahrscheinlich korrekt“, sonst beide Varianten
-  nebeneinander anzeigen.
+  bei Gleichheit **„Erkannt wie erwartet"**, sonst beide Varianten
+  nebeneinander anzeigen. *(Wortlaut korrigiert am 2026-09-12: Ursprünglich
+  stand hier „Antwort wahrscheinlich korrekt" — eine Aussage über die
+  **Antwort**, die der Benchmark nicht trägt. Der neue Wortlaut sagt, was
+  tatsächlich geprüft wurde: zwei Texte stimmen überein.)*
 - **9.7** **Keine** Score-Anzeige, **keine** Prozentangabe, **keine**
   Ton-Bewertung. Die Selbsteinschätzung bleibt die maßgebliche Bewertung.
 - **9.8** Verweigerte Berechtigung sauber behandeln: Mikrofonteil entfällt,
   der Rest der App bleibt uneingeschränkt nutzbar.
-- **9.9** Nicht mehr benötigte Locale-Reservierungen wieder freigeben.
+- **9.9** ~~Nicht mehr benötigte Locale-Reservierungen wieder freigeben.~~
+  **In Phase 9 bewusst nicht umgesetzt, verschoben nach Phase 10.** Apple
+  dokumentiert, dass das System die Assets nach einem
+  `release(reservedLocale:)` später entfernt — ein routinemäßiger Aufruf beim
+  App- oder Sessionende erzwänge also einen erneuten Download und widerspräche
+  der Offline-Nutzung, die diese Phase gerade erreicht hat. Die Freigabe
+  gehört an eine ausdrückliche Nutzeraktion und damit in die Verwaltung der
+  Sprachmodelle in Phase 10, wo sie vorgemerkt ist.
 
 ### Qualitätsanforderung, festgelegt in Phase 6.5
 
@@ -1331,7 +1388,14 @@ Aussprache.
 einzelnen ASR-Treffers. Die Selbsteinschätzung bleibt die Quelle des
 Lernstands (§6.1 in [learning-engine.md](learning-engine.md)).
 
-### Gerätebenchmark, Voraussetzung für READY
+### Gerätebenchmark — ehemalige Voraussetzung für READY, überholt am 2026-09-12
+
+> **Diese Spezifikation wird nicht umgeschrieben.** Sie stand vor der
+> Messung fest und bleibt im Wortlaut erhalten, samt Schwellen, die nicht
+> erreicht wurden. Was sich geändert hat, ist nicht das Kriterium, sondern
+> die Produktannahme dahinter — die Begründung steht unter „Warum die
+> Schwelle nicht gelockert wird". Das neue READY-Gate steht bei den
+> Akzeptanzkriterien.
 
 Vor dem Phasenabschluss ein eigener Benchmark auf echter Hardware, mindestens:
 
@@ -1348,15 +1412,222 @@ Character Error Rate, False Accepts, False Rejects. Die letzten zwei sind die
 wichtigen — sie sagen, wie oft die App eine falsche Äußerung durchwinkt und
 wie oft sie eine richtige ablehnt.
 
+#### Messsatz und Schwellen — festgelegt am 2026-09-11, **vor** jeder Messung
+
+Der obige Abschnitt nennt Dimensionen und Metriken, aber weder einen
+konkreten Messsatz noch eine Schwelle. Damit wäre „Voraussetzung für READY"
+nicht erfüllbar gewesen: Zahlen ließen sich erheben, aber jedes Urteil
+„bestanden" wäre ein Kriterium, das hinterher entsteht — in Kenntnis des
+Ergebnisses, also zum denkbar schlechtesten Zeitpunkt. Das Folgende ist
+deshalb **vor** dem ersten Versuch fixiert worden.
+
+##### Fester Messsatz
+
+Aus dem realen Kartenbestand werden vor Beginn genau **16 Karten** ausgewählt
+und **namentlich protokolliert**:
+
+| Gruppe | Anzahl |
+| --- | --- |
+| einsilbige Wörter | 4 |
+| mehrsilbige Wörter | 4 |
+| kurze Sätze | 4 |
+| längere Sätze | 4 |
+
+**Während des Benchmarks wird keine Karte ausgetauscht**, insbesondere nicht,
+weil sie schlecht erkannt wird. Ein Messsatz, der sich dem Ergebnis anpasst,
+misst nichts.
+
+Jede der 16 Zielkarten wird **dreimal normal gesprochen** — 16 × 3 = **48
+positive Versuche**.
+
+Dazu **12 negative Gegenproben**:
+
+- 6 klar falsche Wörter oder Antworten
+- 6 ähnlich klingende, aber tatsächlich anders ausgesprochene Wörter
+
+**Keine echten Homophone** als Negativprobe. Bei identischem akustischem
+Signal kann ein Erkenner nicht sinnvoll zwischen zwei geschriebenen
+Bedeutungen unterscheiden; ein solcher „Fehler" wäre keiner der App,
+sondern eine Eigenschaft der Sprache.
+
+**Keine absichtlich falschen Töne** als eigene Gegenprobe. Phase 9 bewertet
+weder Aussprache noch Töne (harte Regel 7) — eine Tonprobe würde eine Frage
+stellen, die dieser Phase nicht zusteht.
+
+Gesamt: **60 Erkennungsversuche.**
+
+Sobald das Mandarin-Asset für die verwendete Modulkonfiguration bereit ist,
+wird der Benchmark **vollständig im Flugmodus** durchgeführt.
+
+##### Metriken
+
+Für die **48 positiven** Versuche:
+
+- exakte Übereinstimmung nach `AnswerNormalization`
+- Character Error Rate
+- False Rejects
+- alle drei zusätzlich **getrennt** nach einsilbigen Wörtern, mehrsilbigen
+  Wörtern, kurzen Sätzen und langen Sätzen
+
+Für die **12 negativen** Versuche:
+
+- False Accepts
+- der tatsächlich erkannte Text
+- das erwartete Ziel
+
+**Definitionen:**
+
+> **False Reject** — eine normal und als korrekt beabsichtigt gesprochene
+> Zielantwort, deren normalisiertes Erkennungsergebnis **nicht** dem
+> Ziel-Hanzi entspricht.
+>
+> **False Accept** — eine bewusst andere Äußerung, deren normalisiertes
+> Erkennungsergebnis **trotzdem** dem Ziel-Hanzi entspricht und deshalb den
+> Zustand „Antwort wahrscheinlich korrekt" auslösen würde.
+
+Klassifiziert wird **nach dem vorher festgelegten Testtyp**, nicht nach der
+subjektiven Aussprachequalität des Sprechenden. Letztere zu beurteilen ist
+genau das, was diese Phase nicht tut.
+
+##### READY-Schwellen
+
+Der Benchmark ist bestanden, wenn **alle vier gleichzeitig** zutreffen:
+
+| Metrik | Schwelle |
+| --- | --- |
+| False Accepts | **0 von 12** |
+| False Reject Rate | **≤ 20 %** der 48 positiven Versuche |
+| Gesamt-CER | **≤ 15 %** |
+| exakte normalisierte Treffer **je Längengruppe** | **≥ 60 %** |
+
+Die Null bei den False Accepts ist die strengste Zahl und die wichtigste: Ein
+durchgewunkener Fehler bestätigt dem Lernenden ausgerechnet das, was er
+falsch gemacht hat. Ein False Reject ist ärgerlich, aber die
+Selbsteinschätzung fängt ihn auf.
+
+**Geltungsbereich.** Die Schwellen sind ein Engineering- und Produkt-Gate für
+**diese** private App, auf **dem getesteten Gerät**, mit **diesem festen
+Corpus**. Daraus folgt keine Aussage über Mandarin-Spracherkennung im
+Allgemeinen und erst recht keine über Aussprachequalität.
+
+##### Wenn das Gate nicht besteht
+
+- Messwerte werden **nicht** verändert.
+- Testkarten werden **nicht** nachträglich ausgetauscht.
+- Schwellen werden **nicht** nachträglich verschoben.
+- Zuerst wird das **Fehlerbild** analysiert, nicht die Produktlogik geändert.
+
+Bei einem False Accept wird **zuerst der konkrete Fall angesehen**. Konnte
+Apples Transkription zwischen Ziel und Gegenprobe objektiv nicht
+unterscheiden — akustisch oder semantisch —, ist das ein **Designproblem des
+Messsatzes** und wird als solches gemeldet und gemeinsam entschieden. Der
+Messsatz wird in diesem Fall nicht still geändert.
+
+#### Durchführung — Stand 2026-09-12
+
+**Funktionaler Retest: bestanden.** Der korrigierte Build wurde auf dem
+iPhone 16 Pro unter iOS 26.6 vollständig nachgetestet. Bestätigt: Erkennung
+funktioniert; Match-Reveal und die Mismatch-Darstellung Erkannt/Erwartet
+funktionieren; „Nichts erkannt" samt zweitem Versuch funktioniert; der
+irreführende Downloadtext ist weg; das Mismatch-Layout stimmt; **der erste
+Lautsprecher-Tap nach einer Erkennung ist hörbar** (der behobene
+Session-Handoff); wiederholtes Wechseln zwischen Erkennung und Sprachausgabe
+funktioniert in beide Richtungen; Hintergrund und Rückkehr funktionieren;
+**Erkennung im Flugmodus funktioniert**; eine verweigerte Mikrofonberechtigung
+blockiert den Lernmodus nicht, und nach erneuter Freigabe funktioniert die
+Aufnahme wieder.
+
+**Benchmark: begonnen und bewusst abgebrochen.** Der erste von drei geplanten
+Positivdurchgängen über die 16 vorher festgelegten Karten wurde durchgeführt:
+
+| Gruppe | exakte Treffer |
+| --- | --- |
+| einsilbige Wörter | 2 / 4 = 50 % |
+| mehrsilbige Wörter | 3 / 4 = 75 % |
+| kurze Sätze | 2 / 4 = 50 % |
+| lange Sätze | 1 / 4 = 25 % |
+| **gesamt** | **8 / 16 = 50 %** |
+
+Damit standen nach dem ersten Drittel bereits **8 False Rejects**. Das
+vorab festgelegte Gate erlaubt bei 48 positiven Versuchen höchstens 20 %,
+also **maximal 9** — von den verbleibenden 32 Versuchen hätte höchstens ein
+einziger weiterer scheitern dürfen. Angesichts dieses eindeutigen Signals
+wurde die Erhebung aus Effizienzgründen gestoppt.
+
+**Was damit ausdrücklich nicht vorliegt:** Die 12 Negativversuche wurden
+**nicht** durchgeführt, es gibt also **keine gemessenen False Accepts**. Die
+Gesamt-CER wurde **nicht** vollständig erhoben. **Der Benchmark ist nicht
+vollständig durchgeführt, und das Gate ist nicht bestanden.**
+
+#### Was das Ergebnis zeigt — und was nicht
+
+Nicht gemessen wurden: Tonqualität, Aussprache, sprachliche Richtigkeit. Über
+keines davon sagt dieser Durchgang etwas.
+
+Die belastbare Aussage lautet:
+
+> Auf diesem Gerät und mit diesem Anfänger-Sprecher produziert der
+> `SpeechTranscriber` bei normal gemeinten Zielantworten häufig einen **anderen
+> chinesischen Text**. Ein Exact-Match gegen das Karten-Hanzi erzeugt deshalb
+> zu viele False Rejects, um als robuste **Correctness-Bewertung** der
+> gesprochenen Antwort zu dienen.
+
+#### Warum die Schwelle nicht gelockert wird
+
+Das vorab festgelegte Gate gehörte zu einer **stärkeren Produktannahme**:
+dass ein ASR-Exact-Match als brauchbare Correctness-Rückmeldung dienen kann.
+Diese Annahme hat der reale Test **nicht bestätigt**.
+
+Die Konsequenz ist deshalb **nicht**, die Schwelle nachträglich zu senken —
+das wäre genau das Verschieben eines vorab festgelegten Kriteriums, das die
+Spezifikation oben ausschließt. Die Konsequenz ist, die **Produktbehauptung zu
+reduzieren**: von einer Correctness-Rückmeldung auf eine neutrale
+Transkriptionsübereinstimmung. Ein Gate, das zu einer aufgegebenen Annahme
+gehört, wird nicht bestanden erklärt, sondern als überholt gekennzeichnet —
+mitsamt dem Grund.
+
+**Diese Messung bleibt als Evidenz erhalten und wird nicht gelöscht**, auch
+wenn das Kriterium, gegen das sie gemessen wurde, nicht weitergilt. Sie ist
+der Beleg dafür, warum die Produktsemantik enger wurde.
+
 ### Akzeptanzkriterien
-- [ ] Q2, Q3 und Q4 sind mit Messergebnissen vom Gerät dokumentiert.
-- [ ] Nach Aussprache von „苹果“ erkennt die App „苹果“ und meldet
-      „wahrscheinlich korrekt“.
-- [ ] Bei abweichender Erkennung werden Soll und Ist nebeneinander gezeigt,
-      ohne Wertung.
-- [ ] Es erscheint nirgends ein Aussprache-Score.
-- [ ] Bei verweigerter Mikrofonberechtigung bleibt die App voll bedienbar.
-- [ ] Nach dem Modell-Download funktioniert die Erkennung im Flugmodus.
+
+**Neu gefasst am 2026-09-12.** Das ursprüngliche Kriterium „Nach Aussprache
+von 苹果 erkennt die App 苹果 und meldet „wahrscheinlich korrekt"" hing von
+zwei Dingen zugleich ab: von Apples Erkennungsleistung bei einem bestimmten
+Sprecher **und** von einem Wortlaut. Das Erste ist keine Eigenschaft dieser
+App, und der Benchmark hat gezeigt, dass es keine verlässliche ist. Die
+Kriterien prüfen deshalb jetzt, was die App selbst leistet und behauptet.
+
+- [x] `SpeechTranscriber` startet, nimmt auf, finalisiert und liefert auf dem
+      physischen Zielgerät einen finalen Mandarin-Text.
+- [x] Der von Apple gelieferte finale Text wird **als solcher** dargestellt —
+      die App korrigiert, ersetzt, übersetzt und fuzzy-matcht ihn nicht.
+- [x] Der Vergleich mit dem Karten-Hanzi läuft **ausschließlich** über die
+      bestehende `AnswerNormalization`.
+- [x] Liefert der Transcriber einen finalen Text, der nach
+      `AnswerNormalization` dem erwarteten Hanzi entspricht, zeigt die App
+      **„Erkannt wie erwartet"** — und nichts anderes. Das Kriterium ist damit
+      deterministisch und hängt nicht davon ab, ob Apple einen bestimmten
+      Sprecher bei einem bestimmten Versuch richtig transkribiert.
+- [x] Bei Abweichung werden **Erkannt** und **Erwartet** neutral gezeigt, ohne
+      Bewertung der Aussprache oder des Wissensstands.
+- [x] Spracherkennung bleibt vollständig optional: verweigerte Berechtigung,
+      fehlendes Erkennungsergebnis und Nichtbenutzung des Mikrofons blockieren
+      den normalen Lernablauf nicht.
+- [x] Es erscheint nirgends ein Score, ein Prozentwert, eine Konfidenz, eine
+      Tonbewertung oder ein Ausspracheurteil.
+- [x] Spracherkennung verändert **niemals** automatisch den `LearningStatus`;
+      die Selbsteinschätzung bleibt in Phase 9 die einzige Bewertung des
+      Versuchs.
+- [x] Die Systempfade funktionieren auf dem Gerät: offline, verweigerte und
+      danach erneut erteilte Berechtigung, der AudioSession-Handoff zwischen
+      Erkennung und Sprachausgabe, Hintergrund und Rückkehr, Zustands-Reset
+      zwischen Karten, „Nichts erkannt" samt erneutem Versuch.
+- [x] **Dokumentations-Gate:** Der begonnene Accuracy-Benchmark bleibt
+      vollständig und unverfälscht als gemessene Produktgrenze dokumentiert —
+      einschließlich der nicht erreichten Schwellen und der Tatsache, dass er
+      abgebrochen wurde.
 
 ### Abhängigkeiten
 Phase 6 (Phase 7 empfohlen, damit Soll und Ist direkt hörbar vergleichbar sind).
@@ -1369,6 +1640,19 @@ kontinuierliche Erkennung ohne Knopfdruck.
 ---
 
 ## Phase 10 — Einstellungen, Fehlerbehandlung, Device-Test & Polish
+
+### Vorgemerkt aus dem Phase-9-Gerätetest
+
+- **`rectangle.stack.badge.questionmark` existiert nicht.** Die Konsole meldet
+  „No symbol named 'rectangle.stack.badge.questionmark' found in system symbol
+  set". Der Name steht seit Phase 6 im Leerzustand von `LearnSessionView` und
+  hat mit Phase 9 nichts zu tun; er blockiert nichts und wurde deshalb dort
+  nicht nebenbei geändert. Beim Durchgehen der Leerzustände mitkorrigieren.
+- **Freigabe von Sprachmodellen (Task 9.9).** Phase 9 hat bewusst **kein**
+  routinemäßiges `AssetInventory.release(reservedLocale:)` eingebaut: Apple
+  entfernt die Assets danach, was einen erneuten Download erzwänge und der
+  Offline-Anforderung widerspricht. Die Freigabe gehört an eine ausdrückliche
+  Nutzeraktion — also in die Verwaltung der Sprachmodelle in dieser Phase.
 
 ### Ziel
 Ein Zustand, den man täglich benutzen möchte.
@@ -1418,6 +1702,215 @@ Phasen 0–9.
 
 ### Ausdrücklich nicht in dieser Phase
 Alles aus dem Backlog. App Store, TestFlight, iCloud-Sync, iPad-Layout.
+
+---
+
+## Post-v1 / Weiterentwicklung
+
+Zwei Produktphasen nach v1. **Noch nichts davon ist entschieden oder
+implementiert.** Sie stehen hier, damit die Richtung festgehalten ist und
+damit spätere Entscheidungen nicht rückwirkend so aussehen, als wären sie
+immer geplant gewesen. Phase 9 und Phase 10 bleiben in ihrer Reihenfolge
+unberührt.
+
+### Randbedingung aus dem Phase-9-Gerätetest
+
+Der erste Positivdurchgang des Phase-9-Benchmarks hat am **2026-09-12** auf
+dem iPhone 16 Pro unter iOS 26.6 ergeben:
+
+> Auf diesem Gerät und mit diesem Anfänger-Sprecher produziert der
+> `SpeechTranscriber` bei normal gemeinten Zielantworten häufig einen
+> **anderen chinesischen Text**. Ein Exact-Match gegen das Karten-Hanzi
+> erzeugt deshalb zu viele False Rejects, um als robuste
+> **Correctness-Bewertung** der gesprochenen Antwort zu dienen.
+
+Gemessen: **8 von 16** exakten Treffern über die vier Längengruppen, also
+**8 False Rejects** im ersten von drei geplanten Durchgängen. Die Erhebung
+wurde danach abgebrochen; die Zahlen und ihre Grenzen stehen vollständig bei
+Phase 9 unter „Durchführung".
+
+**Was damit nicht gesagt ist:** nichts über Tonqualität, nichts über
+Aussprache, nichts über sprachliche Richtigkeit. Das wurde nicht gemessen —
+gemessen wurde die Übereinstimmung zweier Texte.
+
+Das ist die **zentrale Randbedingung für Phase 11** und der Grund, warum ein
+Speech-Mismatch dort ausdrücklich **keine** hinreichende negative Evidenz
+ist. Ein Exact-Match bleibt umgekehrt brauchbare **positive** Evidenz: Dass
+der Erkenner ausgerechnet den Zieltext produziert hat, passiert nicht
+versehentlich.
+
+---
+
+## Phase 11 — Review History & Assisted Assessment
+
+### Ziel
+
+Die App soll nicht dauerhaft nach **jeder einzelnen Karte** eine manuelle
+Selbsteinschätzung verlangen. Stattdessen sammelt sie über mehrere Reviews
+Evidenz über den Kenntnisstand einer Karte und **schlägt** an geeigneten
+Stellen einen neuen `LearningStatus` vor.
+
+### Grundlage: der zurückgestellte ReviewLog
+
+Seit Phase 1 ist festgehalten, dass es **keine** Antwort-Historie gibt und ein
+`ReviewLog` additiv nachrüstbar wäre. Phase 11 ist der Punkt, an dem er
+gebraucht wird: Ohne Historie gibt es keine Evidenz, und ohne Evidenz keinen
+Vorschlag.
+
+Pro Review sollen mindestens die für die Lernentscheidung relevanten Fakten
+rekonstruierbar sein:
+
+| Feld | Wofür |
+| --- | --- |
+| Karte | worauf sich der Eintrag bezieht |
+| Zeitpunkt | zeitliche Alterung der Evidenz |
+| Lernrichtung | Modus A und Modus B stellen verschiedene Fragen |
+| vorheriger Status | Ausgangslage der Bewertung |
+| Speech verwendet | ob überhaupt eine automatische Evidenz vorlag |
+| ASR Exact Match | die Evidenz selbst, soweit vorhanden |
+| manueller Reveal | Aufdecken ohne Versuch ist kein Wissensbeleg |
+| Retry | mehrfache Anläufe an derselben Karte |
+| SelfAssessment | die tatsächliche Bewertung, **falls** eine abgegeben wurde |
+
+Der genaue Zuschnitt des Modells wird zu Beginn von Phase 11 entschieden,
+nicht hier.
+
+### Produktregeln
+
+- **`LearningStatus` und Versuchsergebnis bleiben getrennte Konzepte.** Ein
+  einzelner Versuch ist eine Beobachtung, der Status ist eine Bewertung.
+- **Mehrere wiederholte exakte Speech-Matches können als *potenzielle*
+  positive Evidenz** in die Statusschätzung eingehen — aber weiterhin nie als
+  Aussprache- oder Tonbewertung (harte Regel 7 gilt unverändert).
+  **[OPEN]:** welche Stärke diese Evidenz bekommt und ob sie allein überhaupt
+  genügt. Zu kalibrieren an realer Review-Historie **und insbesondere an den
+  noch unbekannten False-Accept-Eigenschaften**: Der Phase-9-Benchmark wurde
+  nach dem ersten Positivdurchgang abgebrochen, die 12 Negativversuche wurden
+  nicht durchgeführt. Wie oft der Transcriber eine *andere* Äußerung
+  ausgerechnet als den Zieltext erkennt, ist damit **nicht gemessen** — und
+  genau das entscheidet, wie viel ein Match wert ist.
+- Ein **Speech-Mismatch ist keine hinreichende negative Evidenz.** Grund:
+  die oben festgehaltene Empfindlichkeit des exakten Vergleichs.
+- **Keine automatische Verschlechterung** einer Karte allein aufgrund von ASR.
+- **Die manuelle Bewertung des Nutzers hat Vorrang** — immer.
+
+### Die Inferenz
+
+Über ein **rollendes Fenster** mehrerer verwertbarer Reviews berechnet eine
+**reine, testbare** Funktion einen
+
+```text
+SuggestedLearningStatus
+```
+
+Ausgangsidee sind ungefähr die letzten zehn verwertbaren Versuche.
+
+**[OPEN] — bewusst nicht jetzt festgelegt:** Fenstergröße, Gewichtung der
+Evidenzarten, zeitliche Alterung und Schwellen. Diese Werte willkürlich
+vorwegzunehmen wäre dasselbe Muster, das beim Phase-9-Benchmark vermieden
+wurde: ein Kriterium erfinden, bevor Daten vorliegen. Konkretisiert wird die
+Formel zu Beginn von Phase 11, **nachdem reale Review-Historie existiert**.
+
+### UX-Ziel
+
+Bei ausreichend sicherer Evidenz soll nach einem erfolgreichen Versuch **kein**
+Nochmal / Schwer / Gut / Sicher mehr nötig sein:
+
+```text
+eindeutiger erfolgreicher Versuch
+  → ReviewLog aktualisieren
+  → keine Neubewertung nötig
+  → automatisch nächste Karte
+```
+
+Ist eine Neubewertung fällig oder die Evidenz unsicher:
+
+```text
+Review abschließen
+  → Nochmal / Schwer / Gut / Sicher anzeigen
+  → vorgeschlagene Stufe visuell hervorheben
+  → Nutzer bestätigt oder wählt eine andere
+```
+
+**Sofort manuell bewerten lassen**, wo keine belastbare automatische Evidenz
+besteht — insbesondere bei Speech-Mismatch, manuellem Aufdecken und fehlender
+Spracherkennung.
+
+**Der Vorschlag darf den Status niemals stillschweigend gegen die Entscheidung
+des Nutzers ändern.** Ein Vorschlag ist eine Hervorhebung, kein Ergebnis.
+
+Kein Gamification-Score, keine Streaks, keine Prozent-Mastery-Anzeige (harte
+Regel 6 gilt unverändert).
+
+### Akzeptanzkriterien
+
+Erst zu Beginn von Phase 11 zu konkretisieren — zusammen mit der Inferenzformel
+und auf Basis realer Review-Historie.
+
+---
+
+## Phase 12 — Hands-free Speech Sessions
+
+### Ziel
+
+Spracherkennung soll während einer Lernsession nicht für **jede einzelne
+Karte** erneut manuell gestartet werden müssen. Ein Tap auf „Antwort
+sprechen" kann einen **Session-Sprachmodus** aktivieren:
+
+```text
+neue unrevealed Karte
+  → Aufnahme automatisch starten
+  → Nutzer spricht
+  → Erkennung, finaler Text
+  → Reveal und Auswertung
+  → nächste Karte
+  → Aufnahme automatisch wieder starten
+```
+
+### Was das ausdrücklich nicht ist
+
+**Kein dauerhaftes, ununterbrochenes Recording.** Die App hält einen
+*Sessionmodus* aktiv und startet und stoppt die eigentliche Mikrofonaufnahme
+passend zum Karten-Lebenszyklus.
+
+Die Aufnahme pausiert oder endet bei:
+
+- Reveal und finaler Verarbeitung
+- Sprachausgabe über den Lautsprecher
+- Sessionende
+- App im Hintergrund
+- Audio-Unterbrechung
+- technischem Fehler
+
+### Produktentscheidung: TTS beendet den Sprachmodus
+
+Benutzt der Nutzer bewusst den Lautsprecher, wird der automatische
+Sprachmodus **deaktiviert**. Ihn wieder zu aktivieren erfordert erneut einen
+Mikrofon-Tap.
+
+Der Grund ist derselbe, aus dem Phase 9 vor jeder Aufnahme die Sprachausgabe
+stoppt: **keine parallele Sprachausgabe und Mikrofonaufnahme.** Wer zuhört,
+spricht gerade nicht — und ein Modus, der nach dem Anhören sofort wieder
+mitschneidet, nähme die Entscheidung darüber weg.
+
+Ebenfalls ausgeschlossen: **keine Aufnahme im Hintergrund**, **keine
+Speicherung von Roh-Audio**.
+
+### Offen, erst in Phase 12 über Apple-APIs zu klären
+
+- zuverlässige Erkennung des **Äußerungsendes** (Endpointing)
+- ob `SpeechAnalyzer` dafür eine ausreichende Finalisierung liefert oder eine
+  zusätzliche Silence-Regel nötig ist
+- UX bei „Nichts erkannt" im Hands-free-Modus
+- Retry-Verhalten im Hands-free-Modus
+
+Wie in Phase 9 gilt: erst Spike und Dokumentation, dann Produktcode.
+
+### Abhängigkeiten
+
+Phase 9 (Erkennungspfad) und Phase 11 (Review- und Bewertungsverhalten). Ohne
+Phase 11 würde ein Hands-free-Modus nach jeder Karte weiterhin eine manuelle
+Bewertung verlangen und damit seinen eigenen Zweck verfehlen.
 
 ---
 
