@@ -58,7 +58,7 @@ struct CardWeightingTests {
         #expect(LearningParameters.weightGood == 1.0)
         #expect(LearningParameters.weightSecure == 0.3)
 
-        #expect(LearningParameters.minimumPoolSizeForRecency == 14, "two batches' worth")
+        #expect(LearningParameters.minimumPoolSizeForRecency() == 14, "two batches' worth")
     }
 
     // §10, test 1
@@ -83,7 +83,7 @@ struct CardWeightingTests {
     @Test("A card from the previous batch is damped by the recency factor")
     func recencyFactorApplies() {
         // Pool large enough for recency to be active at all.
-        let poolSize = LearningParameters.minimumPoolSizeForRecency
+        let poolSize = LearningParameters.minimumPoolSizeForRecency()
 
         let damped = CardWeighting.effectiveWeight(for: .weak, wasInPreviousBatch: true, poolSize: poolSize)
         let undamped = CardWeighting.effectiveWeight(for: .weak, wasInPreviousBatch: false, poolSize: poolSize)
@@ -96,10 +96,10 @@ struct CardWeightingTests {
     // §10, test 3
     @Test("The recency factor is off while the pool is smaller than two batches")
     func recencyFactorIsDisabledForSmallPools() {
-        let tooSmall = LearningParameters.minimumPoolSizeForRecency - 1
+        let tooSmall = LearningParameters.minimumPoolSizeForRecency() - 1
 
         #expect(CardWeighting.isRecencyActive(poolSize: tooSmall) == false)
-        #expect(CardWeighting.isRecencyActive(poolSize: LearningParameters.minimumPoolSizeForRecency))
+        #expect(CardWeighting.isRecencyActive(poolSize: LearningParameters.minimumPoolSizeForRecency()))
 
         // Same card, same "was in the previous batch" — only the pool size
         // differs, and that alone decides whether the damping happens.
@@ -107,7 +107,7 @@ struct CardWeightingTests {
         let large = CardWeighting.effectiveWeight(
             for: .weak,
             wasInPreviousBatch: true,
-            poolSize: LearningParameters.minimumPoolSizeForRecency
+            poolSize: LearningParameters.minimumPoolSizeForRecency()
         )
         #expect(small == LearningParameters.weightWeak, "undamped below the threshold")
         #expect(large < small, "damped from the threshold upwards")

@@ -48,7 +48,11 @@ final class SpeechRecognitionService {
 
     /// Where the feature stands. Drives the button, and nothing else reads
     /// into it.
-    enum Phase: Equatable {
+    ///
+    /// `CaseIterable` purely so tests can walk every state — the button's
+    /// label, note and symbol are switched over this type, and a new case
+    /// must not be able to slip in with a symbol name nobody checked.
+    enum Phase: Equatable, CaseIterable {
         /// Nothing has been asked yet.
         case idle
         /// This device cannot do it: no transcriber, or no Mainland
@@ -100,6 +104,148 @@ final class SpeechRecognitionService {
     /// The resolved locale, once validated. `nil` until `prepare()` has run.
     private(set) var locale: Locale?
 
+    /// What the settings screen knows about the Mandarin model.
+    ///
+    /// Read fresh every time rather than remembered — Apple documents that
+    /// the system may unsubscribe an app from assets it has not used in a
+    /// while, so a cached "installed" is a claim that expires without telling
+    /// anyone.
+    ///
+    /// A state rather than an `AssetInventory.Status?`, because the optional
+    /// had to mean three different things at once: not asked yet, no
+    /// transcriber on this device, and no Mainland Simplified locale. The
+    /// review found what that costs — a device without a usable locale showed
+    /// „Wird geprüft …" forever next to a button that did nothing and said
+    /// nothing.
+    ///
+    /// Read-only from outside **and** from inside: every write goes through
+    /// `applyModelState(_:for:)`, which refuses writes from a run that has
+    /// been superseded. A stored property anyone could assign to is how the
+    /// download window stayed open in the first place.
+    var modelState: SpeechModelState { storedModelState }
+
+    private var storedModelState: SpeechModelState = .unknown
+
+    /// The last failure of the **model management** — preparing or removing.
+    ///
+    /// Separate from `failure`, which belongs to the recording path, because
+    /// the two are read in different places and mean different things. The
+    /// review found a recognition error from a learning session standing
+    /// under „Sprachmodelle" in the settings, telling the reader that „die
+    /// Selbsteinschätzung geht weiterhin" — true, and about a screen they
+    /// were not on. One property per audience is the smallest fix that keeps
+    /// both errors visible where they belong.
+    private(set) var modelFailure: AppError?
+
+    /// Counts model-management runs, so a suspended one can tell it has been
+    /// replaced.
+    ///
+    /// The same device the recording path uses (`epoch`), for the same
+    /// reason and now for a second sequence: `prepare()` holds the state
+    /// across a download that takes minutes, and in that window a release —
+    /// or a later prepare — may take over. A stale run comes back, finds a
+    /// newer generation and touches nothing.
+    private var modelEpoch = 0
+
+    // MARK: - Who may write the model state
+    //
+    // These four are `internal` rather than `private` so the tests can drive
+    // them directly. That is deliberate and worth naming: `prepare()` itself
+    // cannot run in a test — it talks to `SpeechTranscriber` and
+    // `AssetInventory` — so the rules it depends on are only checkable here.
+    // What the tests therefore prove is the **machinery**: who may start, who
+    // may write, and what a superseded run is allowed to do. That `prepare()`
+    // uses it is structural and was read, not measured.
+
+    /// Claims the model state for a new run, or refuses because one is
+    /// already in flight.
+    ///
+    /// Returns the run's generation, which every later write has to present.
+    /// `nil` means somebody else is working and this caller must do nothing
+    /// at all — not wait, not retry, not force. That is the whole guard
+    /// against a second download: it sits in the state, not on the button.
+    func beginModelWork() -> Int? {
+        guard storedModelState.isBusy == false else { return nil }
+        modelEpoch += 1
+        storedModelState = .preparing
+        return modelEpoch
+    }
+
+    /// Invalidates whatever run is in flight and claims the next generation.
+    ///
+    /// For work that must proceed even though something else is running —
+    /// releasing the model is the user's explicit decision and outranks a
+    /// preparation nobody asked for twice.
+    ///
+    /// **It claims the state as well, and that is not a detail.** The first
+    /// version only moved the generation: the superseded run was then barred
+    /// from writing its own ending, so a `.preparing` or `.downloading` it had
+    /// left behind belonged to nobody — and `refreshModelStatus()` refuses to
+    /// correct a busy state on purpose. The settings screen froze on „Wird
+    /// geladen …" until the app was restarted. Whoever takes over inherits
+    /// the duty to end the state.
+    func takeOverModelWork(claiming state: SpeechModelState) -> Int {
+        modelEpoch += 1
+        storedModelState = state
+        return modelEpoch
+    }
+
+    /// Sets the model failure. Tests only.
+    ///
+    /// `modelFailure` is `private(set)` because only a run may write it, and
+    /// the one state a test cannot otherwise produce is „a run has just
+    /// failed" — reaching it for real needs a failing `AssetInventory`.
+    func setModelFailureForTesting(_ error: AppError?) {
+        modelFailure = error
+    }
+
+    /// Whether `run` still owns the model state.
+    func isCurrentModelWork(_ run: Int) -> Bool {
+        run == modelEpoch
+    }
+
+    /// Announces a download that is **about to** start.
+    ///
+    /// One operation rather than three assignments at the call site, because
+    /// the three have to agree: the state, the progress bar and the phase all
+    /// describe the same thing, and the defect this round fixed was exactly
+    /// them drifting apart. `false` means a newer run owns the screen and
+    /// this one must not start anything.
+    @discardableResult
+    func beginDownload(_ progress: Progress, for run: Int) -> Bool {
+        guard applyModelState(.downloading, for: run) else { return false }
+        downloadProgress = progress
+        phase = .downloading
+        return true
+    }
+
+    /// Takes the progress bar away again once the download has returned.
+    ///
+    /// Guarded, because a run that lost ownership while downloading must not
+    /// clear the bar of the one that took over.
+    func finishDownload(for run: Int) {
+        guard isCurrentModelWork(run) else {
+            Self.logger.info("stale download \(run, privacy: .public) kept its hands off the progress")
+            return
+        }
+        downloadProgress = nil
+    }
+
+    /// Writes the state on behalf of `run`, or refuses if it is stale.
+    ///
+    /// The return value is the caller's cue to stop: `false` means a newer
+    /// run owns the screen now, and continuing would overwrite its truth
+    /// with an older one.
+    @discardableResult
+    func applyModelState(_ state: SpeechModelState, for run: Int) -> Bool {
+        guard isCurrentModelWork(run) else {
+            Self.logger.info("stale model run \(run, privacy: .public) dropped")
+            return false
+        }
+        storedModelState = state
+        return true
+    }
+
     // MARK: - Live session state
 
     private var analyzer: SpeechAnalyzer?
@@ -135,9 +281,29 @@ final class SpeechRecognitionService {
     /// Apple may unsubscribe an app from assets that have not been used in a
     /// while, so "we downloaded it once" is never an answer.
     func prepare() async {
+        await prepare(forRecording: false)
+    }
+
+    /// - Parameter forRecording: whether the run was started by the
+    ///   microphone. Only then does a failure reach `failure` and with it the
+    ///   note under the microphone button — a preparation the learner started
+    ///   in the settings has no business explaining itself on the learning
+    ///   card, which is the mirror image of the defect this round fixed.
+    private func prepare(forRecording: Bool) async {
         guard phase != .recording, phase != .finalizing else { return }
 
-        failure = nil
+        // The second tap, refused at its source. `beginModelWork()` says no
+        // while a run of ours is in flight, so a second press cannot reserve,
+        // request and install a second time beside the first. The button is
+        // hidden as well (`canPrepare`), but a hidden button is a courtesy —
+        // this is the rule.
+        guard let run = beginModelWork() else {
+            Self.logger.info("prepare ignored: a model run is already in flight")
+            return
+        }
+
+        if forRecording { failure = nil }
+        modelFailure = nil
         phase = .preparing
 
         // 1. Does this device support the transcriber at all? Apple's own
@@ -145,6 +311,7 @@ final class SpeechRecognitionService {
         //    support".
         guard SpeechTranscriber.isAvailable else {
             Self.logger.info("SpeechTranscriber.isAvailable == false")
+            guard applyModelState(.deviceUnsupported, for: run) else { return }
             phase = .unavailable
             return
         }
@@ -159,9 +326,18 @@ final class SpeechRecognitionService {
             Self.logger.info(
                 "no Mainland Simplified locale; system offered \(resolved?.identifier ?? "nil", privacy: .public)"
             )
+            // Named rather than left at `.preparing`: `refreshModelStatus()`
+            // has told these two apart since the first review, and `prepare()`
+            // used to leave the state untouched here — the same answer given
+            // two different ways depending on which function got there first.
+            guard applyModelState(.localeUnsupported, for: run) else { return }
             phase = .unavailable
             return
         }
+        // Checked before the first write of this branch too, so a run that
+        // was superseded while resolving the locale changes nothing at all —
+        // not even a value that happens to be the same one.
+        guard isCurrentModelWork(run) else { return }
         self.locale = locale
 
         // 3. The module, configured exactly as it will be used. That matters:
@@ -209,11 +385,16 @@ final class SpeechRecognitionService {
                 // `.preparing` stays unless the measured status says work is
                 // outstanding.
                 if statusAfter != .installed {
-                    downloadProgress = request.progress
-                    phase = .downloading
+                    // **Before** the download, not after it. This line is the
+                    // fix for the hole the second review measured:
+                    // `downloadAndInstall()` takes minutes, and until it
+                    // existed the state said „noch nicht geladen" for every
+                    // one of them — next to a button offering to start what
+                    // was already running.
+                    guard beginDownload(request.progress, for: run) else { return }
                 }
                 try await request.downloadAndInstall()
-                downloadProgress = nil
+                finishDownload(for: run)
             }
 
             // 6. Never trust "it did not throw". Apple documents that a
@@ -226,26 +407,201 @@ final class SpeechRecognitionService {
             // finish on its own — Apple documents that a failed attempt is
             // retried later. Calling that a failure would send the learner
             // away from a feature that is about to work.
+            // Every exit from here on leaves `.preparing`/`.downloading`
+            // behind — deterministically, and only if this run still owns the
+            // state. A run that returns without doing so would leave the
+            // screen claiming work that nobody is doing any more.
+            guard applyModelState(.assets(finalStatus), for: run) else { return }
+
             if finalStatus == .downloading {
+                // The system took the download over and will finish it on its
+                // own; Apple documents that a failed attempt is retried later.
+                // Calling that a failure would send the learner away from a
+                // feature that is about to work.
                 phase = .downloading
-                failure = nil
+                if forRecording { failure = nil }
                 return
             }
             guard finalStatus == .installed else {
                 phase = .failed
-                failure = .speechAssetsUnavailable(String(describing: finalStatus))
+                modelFailure = .speechAssetsUnavailable(String(describing: finalStatus))
+                if forRecording { failure = modelFailure }
                 return
             }
         } catch {
+            guard isCurrentModelWork(run) else { return }
             downloadProgress = nil
+            // `.failed` rather than the last measured status: after a throw
+            // the app does not know what is on the device, and guessing would
+            // be the kind of claim this project does not make. It is also the
+            // one state that offers another try, so the screen does not end
+            // here.
+            applyModelState(.failed, for: run)
             phase = .failed
-            failure = .speechAssetsFailed(error)
+            modelFailure = .speechAssetsFailed(error)
+            if forRecording { failure = modelFailure }
             Self.logger.error("asset preparation failed: \(error.localizedDescription, privacy: .public)")
             return
         }
 
         phase = .ready
     }
+
+    // MARK: - Model management (settings)
+
+    /// Re-reads the model status without changing anything.
+    ///
+    /// Read-only on purpose: it neither reserves nor downloads. The settings
+    /// screen calls it when it appears, so the line it shows is current
+    /// rather than left over from the last session.
+    func refreshModelStatus() async {
+        // A run of ours knows more than a measurement taken beside it. Without
+        // this line, re-opening the settings while a download runs would
+        // overwrite „Wird geladen …" with Apple's older answer and put the
+        // prepare button back on screen.
+        guard storedModelState.isBusy == false else { return }
+
+        // Opening the screen drops a **stale** message — and only a stale one.
+        // The first version dropped every message, and the review found what
+        // that costs: a preparation started from the learning screen fails,
+        // the learner goes to the settings to find out why, and the screen
+        // deletes the explanation on the way in. `.failed` is the state whose
+        // whole purpose is to carry that explanation, so its message stays.
+        // The recording path's `failure` is left alone either way; it belongs
+        // to the learning screen and is none of this screen's business.
+        if storedModelState != .failed {
+            modelFailure = nil
+        }
+
+        // The generation is borrowed, not claimed: this is a measurement, not
+        // a piece of work, and it must not invalidate anybody. Borrowing has
+        // exactly the right effect — should a real run start while the status
+        // is being read, the write below is refused.
+        await measureModelStatus(for: modelEpoch)
+    }
+
+    /// Reads the status and writes it on behalf of `run`.
+    ///
+    /// Split out from `refreshModelStatus()` so a run that already owns the
+    /// state can end it: the public entry refuses while anything is busy,
+    /// which is right for a visitor and wrong for the owner.
+    private func measureModelStatus(for run: Int) async {
+        guard isCurrentModelWork(run) else { return }
+        guard SpeechTranscriber.isAvailable else {
+            applyModelState(.deviceUnsupported, for: run)
+            return
+        }
+        let resolved = await SpeechTranscriber.supportedLocale(
+            equivalentTo: MandarinRecognitionLocale.requested
+        )
+        // Told apart from the case above, because they are different answers
+        // to the user: the device cannot do speech recognition at all, or it
+        // can but not for Mainland Simplified Chinese. Both are permanent,
+        // and neither is something a button can fix.
+        guard let locale = MandarinRecognitionLocale.accepted(resolved) else {
+            applyModelState(.localeUnsupported, for: run)
+            return
+        }
+        guard isCurrentModelWork(run) else { return }
+        self.locale = locale
+        let module = SpeechTranscriber(locale: locale, preset: .transcription)
+        let status = await AssetInventory.status(forModules: [module])
+        guard applyModelState(.assets(status), for: run) else { return }
+
+        // And the phase, when this measurement contradicts it. A download the
+        // system took over ends `prepare()` with `phase = .downloading` and no
+        // path back: the settings button is gone (correctly — nothing to
+        // start), and `startRecording()` refuses while `.downloading`. The
+        // microphone then said „Sprachmodell wird geladen …" for the rest of
+        // the app's life, long after the settings said „Bereit". Older than
+        // this round; this is the only place that can see both.
+        guard phase == .downloading else { return }
+        phase = status == .installed ? .ready : .idle
+    }
+
+    /// Gives the locale reservation back, on the user's explicit say-so.
+    ///
+    /// **The only release path in the app, and it is never automatic.**
+    /// Apple: „When your app no longer needs assets for a particular locale,
+    /// call `release(reservedLocale:)` … The system will remove the assets at
+    /// a later time." Calling that routinely — on session end, on app exit —
+    /// would force a fresh download afterwards and quietly undo the offline
+    /// capability phase 9 achieved. So it happens here, once, after a
+    /// confirmation that says what it costs.
+    func releaseModel() async {
+        // The same guard `prepare()` has, for the same reason: the settings
+        // sheet is reachable while a recording is still finishing, and
+        // resetting the state machine underneath it would leave the engine
+        // running with nothing left that knows about it. Logged rather than
+        // shown: the path needs the microphone to be live in the learning tab
+        // while the settings sheet is open over the cards tab, which the
+        // navigation does not offer — and inventing a user-facing sentence
+        // for it would mean inventing the situation too.
+        guard phase != .recording, phase != .finalizing else {
+            Self.logger.info("release ignored: a recording is in flight")
+            return
+        }
+        guard let locale else {
+            // Not silent: the user just confirmed a destructive dialog, and
+            // the sentence is literally true — nothing was given back.
+            Self.logger.info("release ignored: no locale resolved")
+            modelFailure = .speechModelNotReleased
+            return
+        }
+
+        // Outranks a preparation in flight: removing is what the user just
+        // asked for, twice. The generation moves, so the older run comes back
+        // to a state it no longer owns and writes nothing — and the state is
+        // claimed at the same time, so the screen says what is happening and
+        // the ending is somebody's duty again.
+        let run = takeOverModelWork(claiming: .releasing)
+        let released = await AssetInventory.release(reservedLocale: locale)
+        // The check the rest of this file has made after every suspension
+        // since phase 9, and the one place that did not. A release that lost
+        // the race must not reset the phase of whatever took over.
+        guard isCurrentModelWork(run) else {
+            Self.logger.info("release result dropped: superseded while releasing")
+            return
+        }
+        Self.logger.info("released \(locale.identifier, privacy: .public): \(released, privacy: .public)")
+
+        phase = .idle
+
+        guard released else {
+            // `false` is not an exception — it means this app held no
+            // reservation, so there was nothing to give back and the model
+            // stays where it is. Silence after an explicit confirmation would
+            // look like the removal worked, so the state is measured again
+            // and the sentence says what happened.
+            await measureModelStatus(for: run)
+            guard isCurrentModelWork(run) else { return }
+            modelFailure = .speechModelNotReleased
+            return
+        }
+
+        // Success does **not** get the measured status. Apple removes the
+        // assets „at a later time", so the read right afterwards still says
+        // „installed" — and „Bereit" next to a remove button is how a second
+        // tap produced „es gab keine Reservierung zurückzugeben" after a
+        // removal that had worked. `.released` says what is true: given back,
+        // deletion pending, and fetchable again.
+        applyModelState(.released, for: run)
+        modelFailure = nil
+    }
+
+    // The settings screen reads these three. They forward to `SpeechModelState`
+    // rather than deciding anything themselves, so the rules can be tested
+    // without a device — the same split `RecordAnswerButton` uses for the
+    // recording phase.
+
+    /// What the settings screen shows for the model.
+    var modelStatusText: String { modelState.text }
+
+    /// Whether preparing would do anything.
+    var canPrepareModel: Bool { modelState.canPrepare }
+
+    /// Whether there is a reservation to give back.
+    var canRemoveModel: Bool { modelState.canRemove }
 
     /// Whether the microphone is already granted, without asking.
     var hasMicrophonePermission: Bool {
@@ -293,7 +649,7 @@ final class SpeechRecognitionService {
         // `prepare()` may not have run, or may have run long enough ago that
         // the system unsubscribed us. Cheap to re-check, expensive to assume.
         if phase != .ready {
-            await prepare()
+            await prepare(forRecording: true)
             guard phase == .ready else { return }
         }
 
@@ -526,7 +882,21 @@ final class SpeechRecognitionService {
     private func stopEngine() {
         engine?.inputNode.removeTap(onBus: 0)
         engine?.stop()
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        do {
+            try AVAudioSession.sharedInstance().setActive(
+                false,
+                options: .notifyOthersOnDeactivation
+            )
+        } catch {
+            // Nothing to recover and nothing to tell the user: the recording
+            // is over either way, and the next tap configures the session
+            // again from scratch. Worth a line, because a `.record` session
+            // that stays active keeps other apps ducked — and this was the
+            // one `try?` in the app that swallowed its error without a trace.
+            Self.logger.error(
+                "audio session stayed active: \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
     /// Releases everything and hands the audio session back.
@@ -548,7 +918,14 @@ final class SpeechRecognitionService {
         converter = nil
         analyzerFormat = nil
         engine = nil
-        downloadProgress = nil
+        // Only when no model run owns it. The recording lifecycle clearing
+        // the model lifecycle's progress bar is exactly the cross-talk this
+        // round set out to remove — unreachable today, because the phase
+        // guard in `startRecording()` refuses while a model run is busy, but
+        // the next change to either path would not know that.
+        if storedModelState.isBusy == false {
+            downloadProgress = nil
+        }
         // No session release here — see `stopEngine()`, which does it
         // synchronously and is called from the first line of this method.
     }

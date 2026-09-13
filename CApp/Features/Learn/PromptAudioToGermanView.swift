@@ -42,6 +42,12 @@ struct PromptAudioToGermanView: View {
     let card: Card
     let stage: PromptStage
 
+    /// Kept in step with `LearnRevealedAnswerView`: the middle step shows the
+    /// same characters at the same size, so they must also follow Dynamic
+    /// Type the same way. 44 at the default setting, as before.
+    @ScaledMetric(relativeTo: .largeTitle) private var hanziSize: CGFloat = 44
+
+
     /// A `switch` over the stage, not a boolean.
     ///
     /// The branch decides whether `LearnRevealedAnswerView` — the view that
@@ -78,8 +84,11 @@ struct PromptAudioToGermanView: View {
             LearnPromptSpeaker(card: card)
 
             if AudioPrompt.showsHanzi(at: stage) {
-                Text(LearnAnswer.hanzi(for: card))
-                    .font(.system(size: 44, weight: .medium))
+                // The one step that shows Chinese without the answer beside
+                // it, and the one place VoiceOver would otherwise read the
+                // characters in German.
+                Text(ChineseText.spoken(LearnAnswer.hanzi(for: card)))
+                    .font(.system(size: hanziSize, weight: .medium))
                     .multilineTextAlignment(.center)
             }
         }

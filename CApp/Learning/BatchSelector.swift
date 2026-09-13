@@ -32,28 +32,35 @@ nonisolated enum BatchSelector {
     ///     the feature layer.
     ///   - previousBatchIDs: the ids of the batch just finished, for the
     ///     recency damping. Empty for the first batch.
+    ///   - batchSize: how many cards to draw. Defaults to
+    ///     `LearningParameters.batchSize`; the app passes the learner's
+    ///     setting (§8, 5 to 10, clamped in `Preferences`).
     ///   - generator: injected, never created here.
     ///
-    /// The batch size is not a parameter. §8 foresees making it configurable
-    /// between 5 and 10 later, and when that happens it has to reach **two**
-    /// places: this selection and the recency threshold in
-    /// `LearningParameters.minimumPoolSizeForRecency`, which is two batches'
-    /// worth. A size passed in here alone would silently leave that threshold
-    /// at the old value, and pools between the two would lose the damping
-    /// §3.2 asks for.
+    /// **The size reaches two places, not one.** It decides how many cards
+    /// are drawn *and* the recency threshold in
+    /// `LearningParameters.minimumPoolSizeForRecency(batchSize:)`, which is
+    /// two batches' worth. Passing it to the draw alone would leave that
+    /// threshold at the default, and every pool between the two numbers would
+    /// silently lose the damping §3.2 asks for. This warning stood here from
+    /// phase 5 as a prediction; phase 10 made it real, and the second place
+    /// is the `effectiveWeight` call below.
     static func selectBatch(
         from pool: [CardSnapshot],
         previousBatchIDs: Set<UUID> = [],
+        batchSize: Int = LearningParameters.batchSize,
         using generator: inout some RandomNumberGenerator
     ) -> [CardSnapshot] {
         guard pool.isEmpty == false else { return [] }
-        let batchSize = LearningParameters.batchSize
 
         let keyed = pool.enumerated().map { index, card in
             let weight = CardWeighting.effectiveWeight(
                 for: card,
                 wasInPreviousBatch: previousBatchIDs.contains(card.id),
-                poolSize: pool.count
+                poolSize: pool.count,
+                // Passed on, not defaulted: the recency threshold is two
+                // batches' worth, so it has to move with the size.
+                batchSize: batchSize
             )
             return (card: card, index: index, key: selectionKey(weight: weight, using: &generator))
         }

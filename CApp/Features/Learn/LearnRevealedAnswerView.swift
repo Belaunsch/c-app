@@ -32,6 +32,16 @@ struct LearnRevealedAnswerView: View {
     /// sharing one revealed state instead of growing a second one.
     var speechCheck: SpeechCheck? = nil
 
+    /// The Hanzi size, and the reason it is not a plain `44`.
+    ///
+    /// `Font.system(size:)` ignores Dynamic Type entirely. Everything else on
+    /// this card uses a text style and grows with the setting, so a fixed
+    /// number would leave the **characters** — the one thing that has to be
+    /// legible — as the only part that stays small. `@ScaledMetric` returns
+    /// exactly 44 at the default size, so the layout the device test approved
+    /// is unchanged; it only moves when the user asks for larger text.
+    @ScaledMetric(relativeTo: .largeTitle) private var hanziSize: CGFloat = 44
+
     var body: some View {
         VStack(spacing: 20) {
             LearnPromptSpeaker(card: card)
@@ -43,9 +53,11 @@ struct LearnRevealedAnswerView: View {
             // would change the spacing and this layout has to stay exactly
             // what the device test approved.
             Text(LearnAnswer.hanzi(for: card))
-                .font(.system(size: 44, weight: .medium))
+                .font(.system(size: hanziSize, weight: .medium))
                 .multilineTextAlignment(.center)
-                .accessibilityLabel(LearnAnswer.accessibilityLabel(for: card))
+                // Marked as Chinese so VoiceOver switches voices for the
+                // characters instead of reading them in German.
+                .accessibilityLabel(Text(LearnAnswer.accessibilityAttributedLabel(for: card)))
 
             let pinyin = LearnAnswer.pinyin(for: card)
             if pinyin.isEmpty == false {
@@ -87,6 +99,12 @@ struct LearnPromptSpeaker: View {
 
     @Environment(SpeechSynthesisService.self) private var speech
 
+    /// Same reasoning as the Hanzi above, with a second effect that matters
+    /// more here: this symbol *is* the button, so its tap target grows with
+    /// the type size instead of staying a fixed square.
+    @ScaledMetric(relativeTo: .largeTitle) private var speakerSize: CGFloat = 64
+    @ScaledMetric(relativeTo: .largeTitle) private var mutedSize: CGFloat = 44
+
     var body: some View {
         // The same question `SpeakButton` asks itself, so the two cannot
         // disagree and leave an empty space: a voice can be installed while
@@ -94,12 +112,12 @@ struct LearnPromptSpeaker: View {
         // cards tab can produce. `SpeakButton` carries its own label.
         if SpeakButton.isVisible(isAvailable: speech.isAvailable, hanzi: LearnAnswer.hanzi(for: card)) {
             SpeakButton(hanzi: LearnAnswer.hanzi(for: card))
-                .font(.system(size: 64))
+                .font(.system(size: speakerSize))
                 .foregroundStyle(.tint)
         } else {
             VStack(spacing: 8) {
                 Image(systemName: "speaker.slash")
-                    .font(.system(size: 44))
+                    .font(.system(size: mutedSize))
                     .foregroundStyle(.secondary)
 
                 Text(MissingVoiceNotice.message)

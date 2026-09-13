@@ -88,6 +88,15 @@ final class LearnSessionModel {
 
     private var queue: SessionQueue?
 
+    /// How many cards the current batch was built with.
+    ///
+    /// Recorded rather than derived, and honestly: no view shows it — it
+    /// exists so the promise the settings make („gilt ab der nächsten Runde,
+    /// eine laufende Runde wird nicht umgebaut") is a checkable fact instead
+    /// of a claim about where a line of code sits. `0` before the first
+    /// batch.
+    private(set) var currentBatchSize = 0
+
     /// The previous batch's ids, for the recency damping in `CardWeighting`.
     private var previousBatchIDs: Set<UUID> = []
 
@@ -100,14 +109,25 @@ final class LearnSessionModel {
     /// the real clock; `Learning/` itself has no clock at all.
     private let now: () -> Date
 
+    /// Where the batch size is read from.
+    ///
+    /// Injected for the same reason as the clock and the generator: the
+    /// promise in the settings — „gilt ab der nächsten Runde, eine laufende
+    /// Runde wird nicht umgebaut" — is a statement about *when* this is
+    /// read, and without a seam that statement could only be re-read in the
+    /// code, never checked.
+    private let defaults: UserDefaults
+
     init(
         configuration: SessionConfiguration,
         generator: AnyRandomNumberGenerator = AnyRandomNumberGenerator(),
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        defaults: UserDefaults = .standard
     ) {
         self.configuration = configuration
         self.generator = generator
         self.now = now
+        self.defaults = defaults
     }
 
     // MARK: - Starting
@@ -383,11 +403,18 @@ final class LearnSessionModel {
             return
         }
 
+        // Read here, at the start of a batch — never mid-batch. Changing the
+        // size in the settings while a session runs must not rebuild the
+        // window the learner is currently working through; the next batch
+        // picks it up, which is the first moment it means anything.
+        let size = Preferences.currentBatchSize(defaults)
         let batch = BatchSelector.selectBatch(
             from: pool,
             previousBatchIDs: previousBatchIDs,
+            batchSize: size,
             using: &generator
         )
+        currentBatchSize = size
         queue = SessionQueue(cards: batch)
         state = .asking
     }

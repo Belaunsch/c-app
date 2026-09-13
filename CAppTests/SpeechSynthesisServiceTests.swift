@@ -64,14 +64,91 @@ struct SpeechSynthesisServiceTests {
 
     // MARK: - Rate
 
+    /// A defaults database of its own, so no test depends on what the
+    /// simulator happens to have stored — and so none of them can leave
+    /// something behind for the next one.
+    /// A service on its own settings suite, which is removed again afterwards.
+    ///
+    /// The name is fixed rather than a fresh `UUID` per call: the first
+    /// version left one new preference domain per test run lying around in
+    /// the host's container, growing without bound. Emptied on the way in and
+    /// removed on the way out, so a run leaves nothing behind.
+    ///
+    /// What is isolated is **this suite** — not the app's whole defaults
+    /// database. Every test below writes the value it then reads, or reads a
+    /// key none of them ever writes, so nothing here depends on that
+    /// distinction.
+    private func withService(
+        _ name: String,
+        voices: [VoiceCandidate] = [],
+        settings: (UserDefaults) -> Void = { _ in },
+        _ body: (SpeechSynthesisService) throws -> Void
+    ) throws {
+        let suite = "SpeechSynthesisServiceTests.\(name)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        settings(defaults)
+        try body(SpeechSynthesisService(installedVoices: { voices }, defaults: defaults))
+    }
+
     @Test("The rate is the one the listening test settled on")
-    func rateIsTheChosenOne() {
+    func rateIsTheChosenOne() throws {
         // Not a round number and not Apple's default: `0.45` came out of a
         // physical comparison of 0.40, 0.45 and 0.50 (Q5). Pinned so a later
         // tidy-up cannot quietly return it to the default.
-        #expect(SpeechSynthesisService.rate == 0.45)
-        #expect(SpeechSynthesisService.rate < AVSpeechUtteranceDefaultSpeechRate)
-        #expect(SpeechSynthesisService.rate > AVSpeechUtteranceMinimumSpeechRate)
+        //
+        // Read through a suite of this test's own rather than the shared
+        // database. To be precise about what that buys: nothing is stored
+        // under this key here, so the assertion holds if nothing is inherited
+        // from elsewhere either. Should something be inherited, this test goes
+        // **red**, not quietly green — which is the direction that keeps a
+        // wrong default from shipping.
+        try withService("default") { speech in
+            #expect(speech.rate == 0.45)
+            #expect(speech.rate < AVSpeechUtteranceDefaultSpeechRate)
+            #expect(speech.rate > AVSpeechUtteranceMinimumSpeechRate)
+        }
+    }
+
+    @Test("A stored speed reaches the utterance")
+    func storedRateIsUsed() throws {
+        // The wiring, not the parsing: `Preferences` turning "fast" into 0.50
+        // is tested elsewhere. What this covers is that the service asks at
+        // all — dropping the lookup and returning the old constant would
+        // leave the setting visible, persistent and completely ineffective.
+        try withService("slow", settings: {
+            $0.set(SpeechRate.slow.rawValue, forKey: Preferences.speechRateKey)
+        }) { #expect($0.rate == 0.40) }
+
+        try withService("fast", settings: {
+            $0.set(SpeechRate.fast.rawValue, forKey: Preferences.speechRateKey)
+        }) { #expect($0.rate == 0.50) }
+    }
+
+    @Test("A stored voice choice reaches the synthesizer")
+    func storedVoiceIsUsed() throws {
+        let premium = VoiceCandidate(
+            identifier: "com.apple.voice.premium.zh-CN.Lili",
+            language: "zh-CN", quality: .premium, name: "Lili"
+        )
+        let compact = VoiceCandidate(
+            identifier: "com.apple.voice.super-compact.zh-CN.Tingting",
+            language: "zh-CN", quality: .default, name: "Tingting"
+        )
+
+        // Left alone, quality decides.
+        try withService("automatic", voices: [compact, premium]) {
+            #expect($0.voice?.identifier == premium.identifier)
+        }
+
+        // Chosen, the choice decides — including against the better voice,
+        // which is the whole point of offering the setting.
+        try withService("chosen", voices: [compact, premium], settings: {
+            $0.set(compact.identifier, forKey: Preferences.voiceIdentifierKey)
+        }) {
+            #expect($0.voice?.identifier == compact.identifier)
+        }
     }
 
     // MARK: - Availability

@@ -73,6 +73,7 @@ struct CardListView: View {
 
     @State private var isShowingFilterSheet = false
     @State private var isShowingNewCardSheet = false
+    @State private var isShowingSettings = false
     @State private var cardBeingEdited: Card?
     @State private var cardPendingDeletion: Card?
     @State private var deleteFailure: AppError?
@@ -117,13 +118,23 @@ struct CardListView: View {
                 prompt: "Deutsch, Hanzi oder Pinyin"
             )
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                // Both leading items manage something rather than create
+                // something; the plus keeps the trailing corner to itself
+                // (A32).
+                ToolbarItemGroup(placement: .topBarLeading) {
                     NavigationLink {
                         TagListView()
                     } label: {
                         Label("Kategorien verwalten", systemImage: "tag")
                     }
                     .accessibilityLabel("Kategorien verwalten")
+
+                    Button {
+                        isShowingSettings = true
+                    } label: {
+                        Label("Einstellungen", systemImage: "gearshape")
+                    }
+                    .accessibilityLabel("Einstellungen")
                 }
                 // Filter and sorting moved down to the control bar, so this
                 // placement now holds one thing and the plus keeps the corner
@@ -140,6 +151,9 @@ struct CardListView: View {
             // in; what happens after is the editor's business and unchanged.
             .navigationDestination(item: $cardBeingEdited) { card in
                 CardEditorView(card: card)
+            }
+            .sheet(isPresented: $isShowingSettings) {
+                SettingsView()
             }
             .sheet(isPresented: $isShowingFilterSheet) {
                 CardFilterSheet(allTags: allTags, selection: $filter)
@@ -373,7 +387,9 @@ struct CardListView: View {
                     .truncationMode(.tail)
 
                 if isExpanded {
-                    Text(card.hanzi)
+                    // Marked as Chinese so VoiceOver reads the characters
+                    // with a Mandarin voice instead of the German one.
+                    Text(ChineseText.spoken(card.hanzi))
                         .font(.title3)
 
                     if card.pinyin.isEmpty == false {

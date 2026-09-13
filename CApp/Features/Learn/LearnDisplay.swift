@@ -95,11 +95,31 @@ enum LearnAnswer {
         card.pinyin
     }
 
-    /// Spoken as one unit, because the two halves are one answer.
-    static func accessibilityLabel(for card: Card) -> String {
+    /// The same label, with the Chinese marked as Chinese.
+    ///
+    /// Without this VoiceOver reads `苹果` with the German voice, because the
+    /// surrounding label is German — the characters come out as a stream of
+    /// mispronounced syllables or nothing at all. Marking only the Hanzi run
+    /// with `languageIdentifier` lets the system switch voices mid-sentence
+    /// and read „Antwort" in German and the characters in Mandarin.
+    ///
+    /// The Pinyin stays unmarked: it is Latin script and a *reading aid*, and
+    /// forcing it through a Mandarin voice would have VoiceOver spell out
+    /// tone marks. Marking it German is equally wrong, so it is left alone —
+    /// the system's own heuristic does better than either choice.
+    ///
+    /// `zh-Hans-CN`, the same locale the recognition validates against, so
+    /// the whole app means one thing by "Chinese".
+    static func accessibilityAttributedLabel(for card: Card) -> AttributedString {
+        var label = AttributedString("Antwort: ")
+
+        label.append(ChineseText.spoken(hanzi(for: card)))
+
         let pinyin = pinyin(for: card)
-        return pinyin.isEmpty
-            ? "Antwort: \(hanzi(for: card))"
-            : "Antwort: \(hanzi(for: card)), \(pinyin)"
+        if pinyin.isEmpty == false {
+            label.append(AttributedString(", \(pinyin)"))
+        }
+        return label
     }
+
 }

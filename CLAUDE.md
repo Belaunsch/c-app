@@ -6,12 +6,29 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phasen 0–9 abgeschlossen.** Gerätetests der Phase 9 am
-**2026-09-11** und **2026-09-12** vollständig bestanden. Stand des Gates:
-**470 Testfunktionen / 528 Einzelausführungen grün** — parametrisierte Tests machen daraus zwei
-Zahlen, also immer mit Einheit nennen —, 0 fehlgeschlagen, 0
+**Aktueller Stand: Phasen 0–10 implementiert.** Stand des Gates: **537
+Testfunktionen / 595 Einzelausführungen grün** — parametrisierte Tests machen
+daraus zwei Zahlen, also immer mit Einheit nennen —, 0 fehlgeschlagen, 0
 Compilerwarnungen auf einem Debug-Build von null, Release-Build von null
-ebenso.
+ebenso, dazu zwei unabhängige Code Reviews, zwei Testaudits und zehn
+Gegenmutationen.
+
+**Die vollständige Geräteprüfung und der mehrtägige Alltagstest sind seit dem
+2026-09-13 kein Gate der einzelnen Phase mehr**, sondern ein gemeinsames Gate
+am Ende der Roadmap: `docs/roadmap.md` § *Finale Geräte- und
+Release-Abnahme*. Ein offener Punkt „Phase-10-Gerätetest" oder
+„Phase-10-Soak-Test" existiert nicht. Gezielte Gerätetests innerhalb einer
+Phase bleiben erlaubt, wo sich ein hardwareabhängiger Pfad sonst nicht
+belegen lässt — sie sind dann **Entwicklungsbelege**. Die Testhistorie steht
+vollständig in der Roadmap und wird nicht hierher kopiert.
+
+**Projektstatus: `Finale Roadmap-Abnahme: ausstehend`.** Das Produkt ist nicht
+abgenommen, solange dieses Gate offene Punkte hat.
+
+**Nächster Schritt: Phase 11 — Review History & Assisted Assessment.** Sie darf
+normal auf `main` implementiert, verifiziert und committet werden; das
+Phase-Gate gilt unverändert für Tests, Builds, Review, Testaudit und
+Gegenmutationen.
 
 Die Kette `Deutsch → Hanzi → Pinyin` läuft mit Return oder beim Verlassen des
 Feldes automatisch, beide Werte bleiben editierbar, und ein von Hand gesetzter
@@ -97,8 +114,18 @@ Erkennung verändert **niemals** den Lernstand; die Selbsteinschätzung bleibt
 die einzige Bewertung. `CApp/Learning/` ist in dieser Phase vollständig
 unverändert geblieben.
 
-**Nächster Schritt ist Phase 10 — Einstellungen, Fehlerbehandlung,
-Device-Test & Polish.** Für Phase 11 ist vorgemerkt, dass mehrere wiederholte
+Seit Phase 10 gibt es **Einstellungen** hinter dem Zahnrad der
+Kartenübersicht: Sprechtempo in drei gemessenen Stufen, Stimmenauswahl ab
+zwei installierten Mandarin-Stimmen, Kartenzahl je Runde zwischen 5 und 10,
+Verwaltung des Erkennungsmodells und die Kartenzahl je Lernstand. Gespeicherte
+Werte werden **beim Lesen** geklemmt, nicht am Bedienelement (`Preferences`);
+die Batchgröße erreicht Auswahl **und** Recency-Schwelle und wird nur am
+Batchstart gelesen. Dazu App-Icon, Fehler-Audit als Matrix in
+[architecture.md §7](docs/architecture.md#7-fehlerbehandlung), Leer- und
+Ladezustände, VoiceOver-Sprachauszeichnung über `ChineseText` und Dynamic Type
+für die chinesischen Texte.
+
+Für Phase 11 ist vorgemerkt, dass mehrere wiederholte
 Treffer als *potenzielle* positive Evidenz in eine Statusschätzung eingehen
 könnten — ein Mismatch dagegen ist **keine** sichere negative Evidenz, und
 die False-Accept-Eigenschaft ist nicht gemessen.

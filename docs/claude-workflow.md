@@ -167,7 +167,8 @@ Eine Phase ist abgeschlossen, wenn **alle** Punkte zutreffen:
 - [ ] Code Review abgeschlossen, Blocker und relevante Fehler behoben
 - [ ] Testaudit abgeschlossen, geforderte Tests vorhanden und aussagekräftig
 - [ ] alle Akzeptanzkriterien der Phase erfüllt
-- [ ] erforderliche Gerätetests auf dem echten iPhone durchgeführt
+- [ ] **die Gerätetests, die diese Phase ausdrücklich verlangt**, auf dem
+      echten iPhone durchgeführt — siehe die Einschränkung unten
 - [ ] betroffene Dokumentation aktualisiert (`apple-frameworks.md`,
       `architecture.md`, `README.md`)
 
@@ -178,8 +179,29 @@ Gerätetests kann nur der Nutzer durchführen. Solange welche offen sind, wird
 die Phase nicht als fertig gemeldet, sondern die offenen Punkte werden
 namentlich benannt.
 
+**Seit dem 2026-09-13 gilt dabei eine Einschränkung, die das Gate kleiner
+macht.** Die **vollständige** Geräteprüfung und der mehrtägige Alltagstest
+sind kein Gate der einzelnen Phase mehr, sondern ein gemeinsames Gate am Ende
+der Roadmap: `docs/roadmap.md` § *Finale Geräte- und Release-Abnahme*. Für die
+laufende Phase gilt nur noch:
+
+- Ein Gerätetest ist **erforderlich**, wenn ein hardwareabhängiger Pfad oder
+  eine neue Apple-API sich sonst überhaupt nicht sinnvoll verifizieren lässt —
+  Mikrofon, Stimmenbestand, Modell-Downloads, Flugmodus-Verhalten. Dann ist er
+  ein **Entwicklungsbeleg** für genau diesen Pfad und Teil des Phase-Gates.
+- Alles andere — Regression über die ganze App, Dynamic Type, VoiceOver, Dark
+  Mode, Performance, Migration, Alltagsstabilität — wird **nicht** zwischen
+  den Phasen wiederholt, sondern einmal am Ende geprüft.
+
+Der Grund: Die Phasen nach einer Prüfung verändern das Produkt erneut. Ein
+Stabilitätsbeleg für einen Zwischenstand wäre am Ende kein Beleg für das
+ausgelieferte Produkt, und die Dokumentation stünde auf Sätzen wie „Phase 12
+implementiert, Phase-10-Gerätetest noch offen".
+
 `/verify-phase` gibt `READY` nur aus, wenn dieses Gate vollständig erfüllt
 ist. **Ein ausstehender erforderlicher Gerätetest bedeutet `NOT READY`** —
+wobei „erforderlich" seit dem 2026-09-13 nur noch die oben beschriebenen
+Entwicklungsbelege meint, nicht die finale Produktabnahme —
 auch dann, wenn es der einzige noch offene Punkt ist. Der Bericht muss dabei
 erkennbar trennen, ob echte Implementierungs- oder Testprobleme bestehen oder
 ausschließlich Nutzer-Gerätetests ausstehen.

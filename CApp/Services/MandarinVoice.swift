@@ -96,11 +96,45 @@ nonisolated enum MandarinVoiceSelection {
     /// the phase-7 device test did not validate.
     static let preferredIdentifiers = ["com.apple.voice.super-compact.zh-CN.Tingting"]
 
+    /// Every Mainland Mandarin voice the device offers, for the settings
+    /// screen to list.
+    ///
+    /// Sorted the way the automatic rule ranks them — best quality first,
+    /// then by identifier — so the list reads as an ordering rather than as
+    /// whatever `speechVoices()` happened to return.
+    static func mandarinVoices(from candidates: [VoiceCandidate]) -> [VoiceCandidate] {
+        candidates
+            .filter { isMainlandMandarin($0.language) }
+            .sorted {
+                $0.quality == $1.quality
+                    ? $0.identifier < $1.identifier
+                    : $0.quality > $1.quality
+            }
+    }
+
+    /// The voice to speak with.
+    ///
+    /// **A chosen identifier wins, but only while it exists.** Since phase 10
+    /// the settings screen can name one; if that voice has since been deleted
+    /// in the iOS settings, the automatic rule takes over instead of the app
+    /// falling silent. Honouring a stale choice would be the worse failure —
+    /// it is invisible, and the learner would think speech had broken.
+    ///
+    /// A chosen voice is still checked against `isMainlandMandarin`: a stored
+    /// identifier from another language would otherwise read a German card
+    /// aloud in Chinese, or worse, a Chinese card in German.
     static func best(
         from candidates: [VoiceCandidate],
+        chosenIdentifier: String? = nil,
         preferring preferred: [String] = preferredIdentifiers
     ) -> VoiceCandidate? {
         let mandarin = candidates.filter { isMainlandMandarin($0.language) }
+
+        if let chosenIdentifier,
+           let chosen = mandarin.first(where: { $0.identifier == chosenIdentifier }) {
+            return chosen
+        }
+
         guard let bestQuality = mandarin.map(\.quality).max() else { return nil }
         let contenders = mandarin.filter { $0.quality == bestQuality }
 

@@ -98,13 +98,20 @@ final class SpeechSynthesisService {
     private var current: AVSpeechUtterance?
     private var currentIdentity: ObjectIdentifier?
 
-    /// The rate a learner hears. `0.45` against Apple's default of `0.5`,
-    /// chosen in a physical listening test on 2026-09-09 that compared
-    /// `0.40`, `0.45` and `0.50`: the fastest was intelligible but too quick
-    /// for the learning mode, the slowest a useful option but not the
-    /// default, and `0.45` kept the sentence rhythm natural. Q5 records it.
-    /// A three-step setting comes in phase 10.
-    static let rate: Float = 0.45
+    /// The rate a learner hears, read fresh for every utterance.
+    ///
+    /// Not cached: the settings screen writes `UserDefaults` directly, so
+    /// reading at the moment of speaking is what makes a change audible on
+    /// the very next tap — without a restart and without a notification of
+    /// our own.
+    ///
+    /// All three values come from a physical listening test on 2026-09-09
+    /// that compared `0.40`, `0.45` and `0.50` (Q5): the fastest was
+    /// intelligible but too quick for the learning mode, the slowest a useful
+    /// option but not the default, and `0.45` kept the sentence rhythm
+    /// natural. Phase 10 made the choice the learner's; it did not invent the
+    /// numbers.
+    var rate: Float { Preferences.currentSpeechRate(defaults).value }
 
     /// Where the installed voices come from.
     ///
@@ -116,11 +123,22 @@ final class SpeechSynthesisService {
     /// reasoned about. The audit found exactly that gap.
     private let installedVoices: @MainActor () -> [VoiceCandidate]
 
+    /// Where the settings are read from.
+    ///
+    /// Injected for the same reason as the voice list, and it closes the same
+    /// kind of gap: that `Preferences` parses a stored value correctly is one
+    /// question, that this service actually *asks* it is another. Without the
+    /// seam the second one could only be read, not tested — and reading the
+    /// wiring is exactly how a setting ends up silently doing nothing.
+    private let defaults: UserDefaults
+
     init(
         installedVoices: @escaping @MainActor () -> [VoiceCandidate]
-            = SpeechSynthesisService.systemVoices
+            = SpeechSynthesisService.systemVoices,
+        defaults: UserDefaults = .standard
     ) {
         self.installedVoices = installedVoices
+        self.defaults = defaults
         observer = SpeechObserver()
         // The callback is wired **before** the delegate is set, so "written
         // before the synthesizer can call back" holds by construction rather
@@ -135,14 +153,33 @@ final class SpeechSynthesisService {
 
     // MARK: - Voices
 
-    /// Looks the voice up again.
+    /// Re-reads which voice to use.
     ///
-    /// Called on init, whenever the system reports a change, and before
-    /// speaking. The last one matters: a voice the user installs in Settings
-    /// must work when they come back, without reinstalling the app. Caching
-    /// `nil` once at launch and giving up forever would be the bug here.
+    /// Called at launch, whenever the system reports a change, before
+    /// speaking, and whenever the settings screen changes the choice. The
+    /// third one matters: a voice the user installs in the iOS settings must
+    /// work when they come back, without reinstalling the app — caching `nil`
+    /// once at launch and giving up forever would be the bug here.
+    ///
+    /// The chosen identifier is
+    /// consulted first; if it names a voice that is no longer installed, the
+    /// automatic rule takes over rather than leaving the app silent — a voice
+    /// the user deleted must not turn speech off.
     func refreshVoice() {
-        voice = MandarinVoiceSelection.best(from: installedVoices())
+        voice = MandarinVoiceSelection.best(
+            from: installedVoices(),
+            chosenIdentifier: Preferences.currentVoiceIdentifier(defaults)
+        )
+    }
+
+    /// The Mandarin voices this service can actually choose from, best first.
+    ///
+    /// Asked of the same seam the service uses itself, rather than of
+    /// `systemVoices()` directly: otherwise the settings screen could offer a
+    /// list that has nothing to do with what gets spoken — and in a preview
+    /// or a test with an injected list, it would.
+    func offeredVoices() -> [VoiceCandidate] {
+        MandarinVoiceSelection.mandarinVoices(from: installedVoices())
     }
 
     /// The voices actually installed on this device.
@@ -231,7 +268,7 @@ final class SpeechSynthesisService {
         // and `rate` has no effect once it is enqueued.
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = systemVoice
-        utterance.rate = Self.rate
+        utterance.rate = rate
 
         // Claim the slot *before* cancelling, so the old utterance's callback
         // cannot tear down the session under the new one.

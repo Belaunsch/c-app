@@ -92,6 +92,8 @@ c-app/
 │   │   ├── BatchSelector.swift     gewichtete Auswahl ohne Zurücklegen
 │   │   ├── SessionQueue.swift      Reihenfolge + Wiedereinstreuung
 │   │   ├── StatusTransition.swift  Antwort → neuer Lernstatus
+│   │   ├── LearningParameters.swift Gewichte, Batchgröße (Default 7), Schwellen
+│   │   ├── AnswerNormalization.swift Vergleichsform für Antworten
 │   │   ├── SessionConfiguration.swift
 │   │   └── SelfAssessment.swift    enum: again | hard | good | secure
 │   │
@@ -105,6 +107,7 @@ c-app/
 │   │   ├── MandarinVoice.swift             reine Stimmenauswahl (Phase 7)
 │   │   ├── SpeechSynthesisService.swift    AVSpeechSynthesizer (Phase 7)
 │   │   ├── SpeechRecognitionService.swift  SpeechAnalyzer/SpeechTranscriber
+│   │   ├── SpeechModelState.swift          Modellzustand → Text und Knöpfe (Phase 10)
 │   │   └── MandarinRecognitionLocale.swift reine Locale-Prüfung, testbar
 │   │
 │   ├── Features/
@@ -118,6 +121,7 @@ c-app/
 │   │   │   ├── PromptGermanToChineseView.swift
 │   │   │   ├── PromptStage.swift          Stufen und Sichtbarkeit Modus B
 │   │   │   ├── LearnRevealedAnswerView.swift  geteilter Endzustand beider Modi
+│   │   │   ├── LearnDisplay.swift         deutsche Texte und Antwort-Labels
 │   │   │   ├── SpeechCheck.swift          Vergleichsergebnis, rein und testbar
 │   │   │   ├── RecordAnswerButton.swift   Mikrofonknopf, Zustandstabelle testbar
 │   │   │   ├── PromptAudioToGermanView.swift
@@ -136,11 +140,13 @@ c-app/
 │   │   │   ├── CardDisplay.swift           deutsche Anzeigenamen der Enums
 │   │   │   └── (kein TranslationHostView — siehe §5)
 │   │   └── Settings/
-│   │       └── SettingsView.swift
+│   │       ├── SettingsView.swift          Sheet hinter dem Zahnrad (Phase 10)
+│   │       └── SettingsDisplay.swift       deutsche Namen der Einstellungen
 │   │
 │   └── Support/
 │       ├── AppError.swift              nutzersichtbare Fehler (Phase 2)
-│       └── String+Normalization.swift  Phase 5
+│       ├── Preferences.swift           Einstellungen, rein und testbar (Phase 10)
+│       └── ChineseText.swift           Sprachauszeichnung für VoiceOver (Phase 10)
 │
 ├── CAppTests/
 │   ├── TestSupport.swift               Container-Helfer, Tag-Typealias
@@ -546,6 +552,39 @@ der die Einstellungen als Sheet öffnet.
 Diese Entscheidung ist billig revidierbar — falls die Einstellungen wachsen,
 kostet ein dritter Tab wenige Zeilen. Neu bewerten am Ende von Phase 10.
 
+**Neu bewertet am 2026-09-12 (Task 10.11): die Entscheidung bleibt.** Jetzt
+nicht mehr gegen eine Schätzung, sondern gegen den gebauten Bildschirm —
+`SettingsView` hat fünf Abschnitte:
+
+| Abschnitt | Einträge | oben vorhergesagt? |
+| --- | --- | --- |
+| Sprechtempo | ein segmentierter Picker mit drei Stufen | ja |
+| Stimme | ein Picker, **nur wenn mehr als eine Mandarin-Stimme installiert ist** | ja |
+| Lernen | ein Stepper für die Kartenzahl je Runde (5–10) | ja |
+| Sprachmodelle | Status, „Vorbereiten", „Entfernen" mit Rückfrage | ja |
+| Karten je Lernstand | fünf Zahlen, nur Anzeige | nein |
+
+Drei bis vier bedienbare Stellen also, auf einem Gerät oft nur drei. Die
+vorhergesagte Datenzurücksetzung ist **nicht** gebaut worden — sie stand in
+keinem Task und wird auch nicht nachgereicht; eine Sammlung zu löschen ist
+nichts, was hinter einem Zahnrad wohnen sollte. Dazugekommen sind allein die
+Zahlen je Lernstand, und die sind keine Einstellung, sondern der Blick auf den
+eigenen Bestand.
+
+Das einzige Argument, das für einen Tab spricht, kommt von genau diesen
+Zahlen: Sie sind die einzige Stelle der App, die den Gesamtbestand zeigt, und
+sie liegen hinter einem Zahnrad in **einem** der beiden Tabs. Es wiegt nicht
+schwer genug. Ein Drittel der Tab-Leiste würde dauerhaft für einen Bildschirm
+belegt, den man nach dem Einrichten selten wieder öffnet, und die Alternative
+ist nicht ein Tab, sondern — falls die Zahlen je öfter gebraucht werden — ihr
+Platz in der Kartenübersicht, wo der Bestand ohnehin steht.
+
+**Was die Entscheidung umstoßen würde:** mehr als etwa acht bedienbare
+Einträge, eine zweite Ebene unterhalb der Einstellungen, oder eine Einstellung,
+die man mitten in einer Session ändern will. Nichts davon ist in Sicht; die
+beiden Post-v1-Phasen fügen Lernverhalten hinzu, keine Bedienknöpfe. Fällt
+eines davon doch an, kostet der dritte Tab weiterhin wenige Zeilen.
+
 Navigation innerhalb der Tabs:
 
 - **Lernen:** `SessionSetupView` → `LearnSessionView` (per `NavigationStack`).
@@ -582,6 +621,126 @@ die Änderung im Kontext liegen, die Liste zeigt eine gelöschte Karte schon als
 verschwunden, und der nächste erfolgreiche Save an beliebiger Stelle committet
 die angeblich fehlgeschlagene Aktion doch noch. Ein Alert, der die Unwahrheit
 sagt, ist schlimmer als kein Alert.
+
+### Audit in Phase 10 (Task 10.3, 2026-09-12)
+
+Die Tabelle oben ist die **Entscheidung**. Dies hier ist der **Befund**: jede
+Fehlerquelle im Code aufgesucht, nicht aus dem Gedächtnis aufgezählt. Gesucht
+wurde nach `catch`, `throw`, `try` und `AppError` in allen Dateien außerhalb
+von `Learning/` — die Lernschicht wirft nicht und kennt keine Fehler.
+
+**Ergebnis nach der Nacharbeit: kein einziges stilles `catch`.** Jeder
+Fehlerpfad endet entweder in einem Alert, in einem sichtbaren Zustand oder
+mindestens in einem `os.Logger`-Eintrag mit Begründung, warum der Nutzer davon
+nichts erfahren muss. `try!` kommt im Projekt nicht vor, leere `catch {}`
+ebenso wenig.
+
+Beim ersten Durchgang stand hier dieselbe Aussage — und sie war falsch: Das
+Review fand ein `try?` in `SpeechRecognitionService.stopEngine()`, das den
+Fehler beim Freigeben der Aufnahme-Session spurlos verwarf (jetzt Zeile 10a).
+Der einzige verbliebene `try?` steht in einem `#if DEBUG`-Preview und hat
+seinen sichtbaren Ersatzzustand daneben.
+
+Spalte *Prüfbar*: **Test** heißt, die Suite deckt es ab; **Gerät** heißt, nur
+am Gerät auslösbar; **beides** heißt, die Logik hängt im Test, das Auslösen
+gehört auf die Geräteliste; **Log** heißt, es gibt keine sichtbare Folge,
+sondern nur einen `os.Logger`-Eintrag; **nicht getestet** steht da, wo weder
+das eine noch das andere zutrifft — mit Begründung in derselben Zelle.
+
+| # | Auslöser | Konkreter Fehler | Was der Nutzer sieht | Was er dann tun kann | Prüfbar |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Übersetzung | `TranslationSession.translate` wirft (Modell fehlt, offline, Abbruch) | Fußnote im Editor: „Übersetzung nicht möglich. Hanzi kann manuell eingetragen werden." Kein Alert, kein `AppError` | Hanzi selbst eintippen; Speichern bleibt möglich | beides — `finishTranslationRun` im Test, der Wurf nur im Flugmodus |
+| 2 | Übersetzung | Antwort ist leer | Fußnote: „Die Übersetzung war leer. Hanzi bitte manuell eintragen." | wie 1 | Test (`completeTranslation`) |
+| 3 | Übersetzung | Antwort trifft ein, nachdem der Nutzer selbst Hanzi getippt hat | nichts — der getippte Wert bleibt, das Pinyin wird nachgezogen | nichts nötig | Test |
+| 4 | Pinyin | Wort im Lexikon mehrdeutig, ICU rät | Hinweis unter dem Feld: Pinyin konnte nicht eindeutig bestimmt werden | Wert prüfen und überschreiben | Test (`PinyinCorpusTests`) |
+| 5 | Pinyin | kein Hanzi, oder ICU liefert nichts | Feld bleibt leer, kein Dialog | von Hand ausfüllen | Test |
+| 6 | Pinyin | gebündelte Lexikondatei fehlt oder ist unlesbar | nichts Unmittelbares — jedes Wort fällt auf ICU und wird als prüfbedürftig markiert | Werte prüfen; die App bleibt benutzbar | **nicht getestet** — strukturell: leere `readings` führen denselben Weg wie ein unbekanntes Wort, und die gebündelte Datei ist im Testbundle immer vorhanden; ein Injektionspunkt allein dafür wäre Produktivcode für einen Fall, den nur ein beschädigtes App-Bundle auslöst. Log vorhanden |
+| 7 | TTS | keine Mandarin-Stimme installiert | Lautsprecher-Knöpfe **verschwinden**, dazu einmalig der Hinweis, wie Stimmen nachgeladen werden | Stimme in den iOS-Einstellungen laden — die App merkt es beim nächsten Start und im Betrieb | beides (`shouldNotice`, `MissingVoiceNotice` im Test) |
+| 8 | TTS | gewählte Stimme wurde entfernt | nichts — die Automatik übernimmt die beste verbliebene | nichts nötig | Test (`PreferencesTests`) |
+| 9 | TTS | `AVAudioSession` verweigert Kategorie oder Aktivierung | Alert „Aussprache nicht möglich" + Systemtext; `AppError.speechUnavailable` | OK, weiterlernen; Ton fehlt nur hier | Gerät (Session-Konflikt) |
+| 10 | TTS | Deaktivieren der Session schlägt fehl | nichts — gesprochen wurde bereits | nichts nötig; nur Log, weil sonst fremde Apps gedämpft blieben | Log |
+| 10a | Erkennung | Freigeben der Aufnahme-Session schlägt fehl | nichts — die Aufnahme ist ohnehin vorbei, der nächste Tipp konfiguriert neu | nichts nötig | Log — bis zum Phase-10-Review war das die **einzige** Stelle mit einem stummen `try?` |
+| 10b | Erkennung | „Sprachmodell entfernen" gibt nichts frei, weil keine Reservierung gehalten wurde | `modelFailure = speechModelNotReleased`: „Es gab keine Reservierung zurückzugeben. Das Sprachmodell bleibt auf dem Gerät." | nichts — der Zustand ist unverändert, und das steht jetzt da | Test (`SpeechModelStateTests`, `SpeechModelWorkTests`) |
+| 10c | Erkennung | Ein zweiter Tipp auf „Vorbereiten", während schon geladen wird | nichts — der Knopf ist weg, und der Lauf wird an der Quelle abgewiesen (`beginModelWork`) | warten; der Fortschritt steht daneben | Test (`SpeechModelWorkTests`) für die Regel, Gerät für den sichtbaren Ablauf |
+| 10d | Erkennung | Ein überholter Modellauf kehrt aus seinem `await` zurück | nichts — er schreibt weder Zustand noch Fortschritt; der übernehmende Lauf beansprucht den Zustand beim Übernehmen und beendet ihn | nichts nötig | Test (`SpeechModelWorkTests`) |
+| 10e | Erkennung | „Entfernen" hat erfolgreich freigegeben, Apple löscht erst später | „Freigegeben — das System löscht die Daten später"; der Entfernen-Knopf verschwindet | später erneut vorbereiten | Test (`SpeechModelStateTests`) |
+| 10f | Erkennung | Das System hat einen Download selbst übernommen und beendet | die Statuszeile stimmt, **und** das Mikrofon wird wieder bedienbar: `refreshModelStatus()` zieht die Phase nach | normal weiterlernen | Gerät |
+| 11 | Erkennung | Gerät oder Locale können kein Mandarin | Mikrofonknopf **ausgeblendet**, Satz darunter: „Dieses Gerät kann kein Mandarin erkennen. Alles andere funktioniert weiter." | normal weiterlernen, Selbsteinschätzung unberührt | beides (`RecordAnswerButton.note`) |
+| 12 | Erkennung | Mikrofon nicht freigegeben | Knopf sichtbar aber tot, Satz: „Ohne Mikrofon geht alles andere weiter …" | Freigabe in den iOS-Einstellungen nachholen | beides |
+| 13 | Erkennung | Modelle nach dem Versuch weiterhin nicht installiert | `AppError.speechAssetsUnavailable` mit dem **gemessenen** `AssetInventory`-Status im technischen Teil | später erneut versuchen, in den Einstellungen vorbereiten | Gerät |
+| 14 | Erkennung | Reservierung oder Download scheitern (offline beim ersten Mal) | `AppError.speechAssetsFailed` + Systemtext | online gehen, erneut vorbereiten | Gerät (Flugmodus vor dem ersten Download) |
+| 15 | Erkennung | Aufnahme oder Analyse brechen ab | `AppError.speechRecognitionFailed`, Knopf geht zurück auf „Antwort sprechen", Meldung darunter | erneut sprechen oder die Antwort zeigen | Gerät |
+| 16 | Erkennung | nichts gesprochen | „Nichts erkannt. Noch einmal versuchen, oder die Antwort zeigen." — ausdrücklich **kein** Fehler und **kein** Urteil über die Aussprache | wiederholen | beides |
+| 17 | SwiftData | Container lässt sich nicht öffnen | ganzseitige `PersistenceErrorView` statt Absturz | App neu starten; der Grund steht da | Gerät |
+| 18 | SwiftData | `save()` beim Anlegen/Bearbeiten einer Karte scheitert | Alert `cardSaveFailed` **und** `rollback()` | erneut versuchen; nichts wurde halb geschrieben | **Gerät** — siehe Kasten unten |
+| 19 | SwiftData | `save()` beim Löschen scheitert | Alert `cardDeleteFailed` + `rollback()`, die Karte bleibt sichtbar | erneut versuchen | **Gerät** |
+| 20 | SwiftData | `save()` **während einer Session** scheitert | Alert, `rollback()`, die Karte bleibt aufgedeckt und unbewertet in der Queue | dieselbe Karte erneut bewerten | **Gerät** |
+| 21 | SwiftData | Kategorie anlegen/umbenennen/löschen scheitert | `tagCreateFailed` / `tagRenameFailed` / `tagDeleteFailed`, jeweils mit Systemtext | erneut versuchen; der alte Zustand steht noch | **Gerät** |
+| 22 | Eingabe | Kategoriename leer, zu lang oder doppelt | `tagNameRejected` mit dem konkreten Grund, **bevor** geschrieben wird | Namen ändern | Test |
+| 23 | Eingabe | Karte ohne Deutsch oder ohne chinesisches Zeichen | `cardIncomplete` — der Speichern-Knopf ist ohnehin aus | Felder füllen | Test |
+| 24 | SwiftData | `fetch` der Kategorien im Editor scheitert | nichts Sichtbares; es gilt die Liste der Ansicht, im schlechtesten Fall entsteht eine Kategorie doppelt (A13) | Kategorien in der Verwaltung zusammenführen | Log |
+| 25 | SwiftData | `fetch` des Pools scheitert | Leerzustand „Keine passenden Karten" | Karte anlegen, Auswahl ändern | Log |
+| 26 | Datenlage | Karte ohne chinesischen Text | wird beim Aufbau des Pools übersprungen — sie taucht in keiner Session auf | Hanzi ergänzen | Test |
+| 27 | Datenlage | Karte wird gelöscht, während sie in der laufenden Session steckt | die Session überspringt sie beim nächsten Zugriff; ein eintreffendes Erkennungsergebnis wird verworfen und protokolliert | weiterlernen | Test |
+
+**Warum die vier SwiftData-Schreibfehler nicht im Test stehen.** Der
+Fehlerpfad ist nicht provozierbar: Ein `ModelContext`, der beim Speichern
+wirft, lässt sich im Testbundle nicht herstellen — `allowsSave: false` wird im
+vollen Suite-Lauf nicht geehrt, das steht seit Phase 2 in
+`CardEditorModelTests` und `LearnSessionModelTests` mit Begründung. Die
+Audit-Fassung dieser Tabelle hat hier zunächst **Test** behauptet; das war
+falsch und ist korrigiert. Was tatsächlich getestet ist, sind die
+*Vorbedingungen* — `canSave`, `TagNormalization.RenameProblem` und die
+Statusübergänge; der Alert samt `rollback()` gehört auf die Geräteliste.
+
+**Fehler haben seit dem 2026-09-13 zwei Adressaten.** `failure` gehört dem
+Aufnahmepfad und wird auf der Lernkarte gelesen, `modelFailure` der
+Modellverwaltung und wird in den Einstellungen gelesen. Vorher gab es nur
+`failure`, und das Review fand die Folge: ein Erkennungsfehler aus einer
+Lernsession stand unter „Sprachmodelle" und erklärte dort, die
+Selbsteinschätzung gehe weiterhin — wahr, und über einen Bildschirm, auf dem
+der Leser nicht war. Die Trennung gilt in beide Richtungen: Ein Lauf, den der
+Nutzer in den Einstellungen startet, schreibt **nur** `modelFailure`; nur ein
+Lauf aus dem Mikrofonpfad schreibt zusätzlich `failure`, weil nur dort eine
+Meldung unter dem Mikrofonknopf hingehört.
+
+`refreshModelStatus()` räumt beim Öffnen der Einstellungen `modelFailure` weg
+— aber **nicht**, wenn der Zustand `.failed` ist. Die erste Fassung löschte
+bedingungslos, und das Review fand, was das kostet: Eine vom Lernbildschirm
+gestartete Vorbereitung scheitert, der Nutzer geht in die Einstellungen, um
+nachzusehen, und der Bildschirm löscht die Erklärung beim Betreten. `.failed`
+ist genau der Zustand, dessen Zweck diese Erklärung ist. Der Aufnahmefehler
+bleibt in jedem Fall unangetastet.
+
+**Zwei Stellen sind bewusst leise** — Zeile 24 und 25. Beide könnten dem
+Nutzer nichts anbieten, was er nicht ohnehin sieht: Bei 25 ist der Leerzustand
+die Aussage, bei 24 wäre ein Alert über einen fehlgeschlagenen internen
+Lesevorgang genau die Art Meldung, die man wegtippt. Beide stehen im Log mit
+Begründung im Code.
+
+**Was hier nicht behauptet wird:** Die Zeilen mit *Gerät* sind damit **nicht**
+geprüft. Sie stehen auf der Geräteliste dieser Phase, und erst deren Ergebnis
+entscheidet über das Akzeptanzkriterium „Kein Fehlerfall führt zu einem
+Absturz oder einem stillen Verschlucken".
+
+### Leer- und Ladezustände (Task 10.4)
+
+| Ort | Leer | Lädt |
+| --- | --- | --- |
+| Kartenliste, gar keine Karten | „Noch keine Wörter/Sätze" + Knopf „Karte anlegen" | — |
+| Kartenliste, Suche/Filter ohne Treffer | „Keine Treffer", bei mehreren Kategorien mit dem Hinweis, dass **eine** genügt (A32) | — |
+| Kategorienverwaltung | „Noch keine Kategorien" + Knopf | — |
+| Lern-Setup | Erklärung, **warum** leer: Kategorien oder fehlender chinesischer Text — getrennt, weil das Kategorien-Beschuldigen nur bei Kategorien ehrlich ist | — |
+| Laufende Session | „Keine passenden Karten" + „Karte anlegen" (Karte während der Session gelöscht) | — |
+| Editor | — | Übersetzung: Spinner am Feld; Lexikon: lädt im `task` beim Erscheinen des Sheets (gemessen 46 ms auf dem Mac, Gerätewert steht auf der Liste) |
+| Einstellungen | Kartenzahlen zeigen Nullen statt zu verschwinden | Sprachmodell: Statuszeile in jedem Zustand („Wird geprüft …", „Wird vorbereitet …", „Wird geladen …", „Noch nicht geladen", „Nicht geladen", „Bereit"), dazu ein `ProgressView`, solange Apples eigenes `Progress`-Objekt läuft. Vom ersten Tippen bis zum Ergebnis gehört der Zustand dem laufenden Vorgang: Der Vorbereiten-Knopf ist in dieser Zeit weg, und ein zweiter Lauf wird abgewiesen. Übergibt das System den Download an sich selbst, bleibt „Wird geladen …" stehen |
+| Spracherkennung | — | „Wird vorbereitet …", „Sprachmodell wird geladen …", „Wird ausgewertet …" — jede Phase mit eigenem Text und Symbol |
+| Datenspeicher defekt | `PersistenceErrorView` statt leerer App | — |
+
+Kein Bereich zeigt im Leerfall eine leere Fläche, und kein Ladezustand ist
+stumm. Was **nicht** existiert, ist ein Skelett-Layout oder ein Ladebalken beim
+App-Start: Der Start liest nichts nach, und ein Platzhalter für etwas, das
+sofort da ist, wäre eine erfundene Wartezeit.
 
 Kein Crash-Reporting, kein Logging-Framework. `os.Logger` reicht.
 
@@ -705,7 +864,7 @@ würde entfallen.
 | A3 | Kein Repository-Layer, kein DI, kein Coordinator | SwiftData/SwiftUI decken den Bedarf ab |
 | A4 | Gewicht und Fehlerzahl abgeleitet, nicht persistiert | vermeidet inkonsistente Zustände |
 | A5 | Keine Antwort-Historie im MVP | für keine MVP-Funktion nötig, später additiv nachrüstbar |
-| A6 | Zwei Tabs, Einstellungen per Sheet | Einstellungen sind selten benutzt; billig revidierbar |
+| A6 | Zwei Tabs, Einstellungen per Sheet | Einstellungen sind selten benutzt; billig revidierbar. **In Phase 10 gegen den gebauten Bildschirm neu bewertet und bestätigt** (§6): drei bis vier bedienbare Stellen, davon eine nur bei mehreren Stimmen sichtbar |
 | A7 | `TranslationHostView` nur für den Download-Pfad | Framework-bedingt; hält den Rest der Übersetzungslogik View-frei |
 | A8 | Manuelle Bearbeitung schlägt Automatik immer | fachliche Kernanforderung, im Modell durch Merker abgesichert |
 | A9 | Keine externen Dependencies | Wartbarkeit, kein Update-Zwang, kleinere Angriffsfläche |

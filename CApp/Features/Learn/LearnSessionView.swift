@@ -211,7 +211,7 @@ struct LearnSessionView: View {
     /// where the last one was deleted while the session was running.
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("Keine passenden Karten", systemImage: "rectangle.stack.badge.questionmark")
+            Label("Keine passenden Karten", systemImage: "rectangle.stack")
         } description: {
             Text("Für diese Auswahl gibt es keine Karten mit chinesischem Text.")
         } actions: {

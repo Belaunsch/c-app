@@ -42,6 +42,14 @@ enum AppError: Error {
     /// bleibt davon unberührt benutzbar.
     case speechRecognitionFailed(any Error)
 
+    /// Das Freigeben der Sprachmodelle hat nichts freigegeben.
+    ///
+    /// Kein Fehlerobjekt, weil Apple keinen wirft: `release(reservedLocale:)`
+    /// meldet mit `false`, dass gar keine Reservierung gehalten wurde. Für
+    /// den Nutzer ist das trotzdem eine Nachricht — er hat gerade eine
+    /// Rückfrage bestätigt, und das Modell liegt weiterhin auf dem Gerät.
+    case speechModelNotReleased
+
     /// Short, German, aimed at the user.
     var message: String {
         switch self {
@@ -69,6 +77,8 @@ enum AppError: Error {
             "Das Sprachmodell für Chinesisch konnte nicht geladen werden."
         case .speechRecognitionFailed:
             "Die Spracherkennung hat nicht funktioniert. Die Selbsteinschätzung geht weiterhin."
+        case .speechModelNotReleased:
+            "Es gab keine Reservierung zurückzugeben. Das Sprachmodell bleibt auf dem Gerät."
         case .tagDeleteFailed:
             "Die Kategorie konnte nicht gelöscht werden. Sie ist weiterhin vorhanden."
         }
@@ -77,7 +87,7 @@ enum AppError: Error {
     /// The underlying system message, if there is one.
     var technicalDetail: String? {
         switch self {
-        case .cardIncomplete, .tagNameRejected:
+        case .cardIncomplete, .tagNameRejected, .speechModelNotReleased:
             nil
         case .speechAssetsUnavailable(let status):
             // Kein Fehlerobjekt, sondern der gemessene Zustand — und genau

@@ -68,7 +68,16 @@ Jedes Kriterium der Phase genau einer Kategorie zuordnen:
 
 Kein Kriterium ohne Beleg als erfüllt markieren. Typische Gerätetest-Fälle:
 Signing und Start auf dem iPhone, Mikrofon, verfügbare Stimmen,
-Modell-Downloads, Verhalten im Flugmodus, Dynamic Type, VoiceOver.
+Modell-Downloads, Verhalten im Flugmodus.
+
+**Seit dem 2026-09-13 zählt hier nur noch der Entwicklungsbeleg.** Die
+vollständige Geräteprüfung des Produkts und der mehrtägige Alltagstest sind
+kein Gate der einzelnen Phase mehr, sondern das gemeinsame Gate am Ende der
+Roadmap (`docs/roadmap.md` § *Finale Geräte- und Release-Abnahme*). „Gerätetest
+ausstehend" ist deshalb nur dann anzukreuzen, wenn ein hardwareabhängiger Pfad
+**dieser Phase** sonst gar nicht verifizierbar wäre. Regression über die ganze
+App, Dynamic Type, VoiceOver, Dark Mode, Performance, Migration und
+Alltagsstabilität gehören **nicht** mehr in das Verdict einer Phase.
 
 **8. Scope-Creep identifizieren**
 
@@ -167,7 +176,9 @@ Sonst **`NOT READY`**.
 - **Ein ausstehender erforderlicher Gerätetest bedeutet `NOT READY`** — auch
   dann, wenn es der einzige noch offene Punkt ist. Ein Kriterium in der
   Kategorie „Gerätetest ausstehend" ist **nicht** erfüllt, sondern
-  ungeprüft.
+  ungeprüft. „Erforderlich" meint dabei ausschließlich den Entwicklungsbeleg
+  für einen hardwareabhängigen Pfad dieser Phase; die finale Produktabnahme
+  gehört in das Gate am Ende der Roadmap und macht keine Phase `NOT READY`.
 - Führt der Nutzer den Gerätetest durch und meldet das Ergebnis zurück, kann
   eine erneute Verifikation `READY` ergeben.
 - Im Zweifel **NOT READY**. Eine zu optimistische Freigabe ist der

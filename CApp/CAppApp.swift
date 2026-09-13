@@ -66,6 +66,15 @@ extension CAppApp {
     /// Migrationsinfrastruktur wird erst eingeführt, wenn eine konkrete
     /// Schemaänderung sie erzwingt — etwa das Umbenennen oder Entfernen einer
     /// Property oder eine Änderung an einer Beziehung.
+    ///
+    /// **Rückblick Phase 10 (2026-09-12):** Diese Annahme ist bis heute
+    /// **ungeprüft geblieben**, und zwar mangels Gelegenheit — seit Phase 1
+    /// hat sich das Schema nicht geändert, es gab also nie etwas zu
+    /// migrieren. Das ist kein Beleg dafür, dass es reicht. Der
+    /// Entscheidungspunkt ist die erste additive Schemaänderung,
+    /// voraussichtlich `ReviewLog` in Phase 11; geprüft gehört sie dann an
+    /// echten Bestandsdaten auf dem Gerät, nicht an einem frisch angelegten
+    /// Simulator-Store. Einzelheiten unter Q7 in `docs/apple-frameworks.md`.
     static func makeModelContainer() throws -> ModelContainer {
         try ModelContainer(for: schema)
     }

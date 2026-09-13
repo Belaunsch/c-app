@@ -17,11 +17,13 @@ import Foundation
 /// requiring an actor. See Q8 in `docs/apple-frameworks.md`.
 nonisolated enum LearningParameters {
 
-    /// Different cards per mini-batch.
+    /// Different cards per mini-batch — the **default**.
     ///
-    /// Fixed for now. §8 foresees making it configurable between 5 and 10
-    /// later; until then a settings screen would be a promise with nothing
-    /// behind it.
+    /// Adjustable between 5 and 10 since phase 10, as §8 foresaw. The range
+    /// and the clamping live in `Preferences`, not here: this layer takes a
+    /// number and trusts it, and validating a user preference is not the
+    /// engine's job. This value is what an installation uses until someone
+    /// changes it, and what every caller that passes nothing gets.
     static let batchSize = 7
 
     /// How many other cards go before a repeated card comes back.
@@ -65,5 +67,14 @@ nonisolated enum LearningParameters {
     /// Derived rather than a second constant: with few cards there is nothing
     /// to spread out, and damping the ones just seen would skew or block the
     /// selection.
-    static var minimumPoolSizeForRecency: Int { 2 * batchSize }
+    ///
+    /// **Takes the batch size** rather than reading the default, and that is
+    /// the whole point since the size became adjustable. `BatchSelector`
+    /// already warned about it in phase 5: a size passed into the selection
+    /// alone would leave this threshold at seven, and every pool between the
+    /// two numbers would lose the damping §3.2 asks for. One number in, one
+    /// threshold out.
+    static func minimumPoolSizeForRecency(batchSize: Int = batchSize) -> Int {
+        2 * batchSize
+    }
 }

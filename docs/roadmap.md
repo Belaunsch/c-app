@@ -1,9 +1,17 @@
 # Entwicklungs-Roadmap
 
 Eine vorgeschaltete Bootstrap-Phase (**B**) für die Entwicklungsinfrastruktur,
-danach 11 Produktphasen (**0–10**). Jede Produktphase endet in einem Zustand,
-der auf einem echten iPhone überprüfbar ist. Nach jeder Phase wird getestet,
-bevor die nächste beginnt.
+danach 11 Produktphasen (**0–10**) und, nach v1, die Phasen 11 und 12. Jede
+Produktphase endet in einem Zustand, der überprüfbar ist. Nach jeder Phase
+wird getestet, bevor die nächste beginnt.
+
+**Die vollständige Geräteprüfung und der mehrtägige Alltagstest sind seit dem
+2026-09-13 kein Gate der einzelnen Phase mehr**, sondern ein gemeinsames Gate
+am Ende: [Finale Geräte- und Release-Abnahme](#finale-geräte--und-release-abnahme).
+Gezielte Gerätetests innerhalb einer Phase bleiben erlaubt und üblich, wo sich
+ein hardwareabhängiger Pfad sonst nicht sinnvoll belegen lässt — sie sind dann
+**Entwicklungsbelege**, nicht die Abnahme des Produkts. Der Grund für die
+Umstellung steht bei Phase 10 unter „Einordnung der Geräteprüfung".
 
 Die Bootstrap-Phase trägt absichtlich den Buchstaben B statt einer Nummer,
 damit die fachliche Nummerierung 0–10 stabil bleibt.
@@ -1689,13 +1697,263 @@ Test auf dem Gerät unter realen Bedingungen.
 - **10.12** README auf den tatsächlichen Stand bringen.
 
 ### Akzeptanzkriterien
-- [ ] Alle Einstellungen wirken sich sofort und dauerhaft aus.
-- [ ] Kein Fehlerfall führt zu einem Absturz oder einem stillen Verschlucken.
-- [ ] Die App ist nach den Modell-Downloads vollständig offline nutzbar.
-- [ ] Bedienbar mit vergrößerter Schrift.
-- [ ] Mehrere hundert Karten ohne spürbare Verzögerung.
-- [ ] Q1–Q7 sind beantwortet.
-- [ ] Die App läuft stabil über mehrere Tage täglicher Nutzung auf dem Gerät.
+- [x] Alle Einstellungen wirken sich sofort und dauerhaft aus. — Gerätetest
+  2026-09-12, Schritte 3 bis 7.
+- [x] Kein Fehlerfall führt zu einem Absturz oder einem stillen Verschlucken.
+  — Gerätetest Schritt 11, dazu die vollständige Codelesung in
+  [architecture.md §7](architecture.md#7-fehlerbehandlung). **Grenze, die
+  dazugehört:** Die vier SwiftData-Schreibfehler (Zeilen 18–21 der Matrix)
+  sind auch am Gerät nicht auslösbar — ein `save()`, das wirft, lässt sich
+  nicht herbeiführen. Für sie gilt weiterhin Codelesung plus `rollback()`,
+  nicht Messung.
+- [x] Die App ist nach den Modell-Downloads vollständig offline nutzbar. —
+  Gerätetest Schritt 12 im Flugmodus: Karte aus deutschem Text angelegt
+  (Hanzi und Pinyin), gelernt, Aussprache gehört, Mikrofon benutzt.
+- [x] Bedienbar mit vergrößerter Schrift. — Gerätetest Schritt 8, große und
+  Accessibility-Textgröße, Lernkarte mit langem Satz.
+- [x] Mehrere hundert Karten ohne spürbare Verzögerung. — Gerätetest
+  Schritt 13, dazu `LargeCollectionTests` mit 500 Karten (gemessen 9,9 / 22,5
+  / 6,4 ms). **Was das nicht sagt:** Der Bestand auf dem Testgerät ist
+  kleiner als die 500 des Fixtures; die Aussage für wirklich mehrere hundert
+  Karten stützt sich auf die Messung, nicht auf das Gefühl am Gerät.
+- [x] **Präzisiert am 2026-09-12:** Q1–Q6 sind beantwortet; Q7 ist mit
+  Begründung und konkretem Fälligkeitspunkt dokumentiert.
+  *(Ursprünglicher Wortlaut: „Q1–Q7 sind beantwortet." Der war so nicht
+  erfüllbar, und zwar nicht aus Nachlässigkeit: Q7 fragt, ob die automatische
+  SwiftData-Migration über die Projektlaufzeit reicht. Bis heute hat es keine
+  Schemaänderung gegeben — `CApp/Models/` ist seit dem Commit `2e9b627` aus
+  Phase 1 unverändert —, also existiert **keine empirische Evidenz in beide
+  Richtungen**. Einen Haken zu setzen hieße, eine Annahme als Messung
+  auszugeben. Das Kriterium ist deshalb offen **präzisiert** statt still
+  überschrieben; die Begründung und der Fälligkeitspunkt stehen in
+  [apple-frameworks.md §10](apple-frameworks.md#10-offene-technische-fragen-zu-klären-vor-der-jeweiligen-phase).
+  Fälligkeitspunkt: die **erste additive Schemaänderung**, voraussichtlich
+  `ReviewLog` in Phase 11.)*
+- [→] Die App läuft stabil über mehrere Tage täglicher Nutzung auf dem Gerät.
+  **Am 2026-09-13 aus Phase 10 in das globale Release-Gate verschoben** — siehe
+  [Finale Geräte- und Release-Abnahme](#finale-geräte--und-release-abnahme).
+  Das Kriterium ist damit **nicht erledigt und nicht gestrichen**, sondern an
+  einer anderen Stelle fällig. Es steht hier weiter, weil ein stillschweigend
+  entferntes Akzeptanzkriterium später wie ein nie gestelltes aussieht.
+
+### Einordnung der Geräteprüfung — Entscheidung vom 2026-09-13
+
+**Ursprüngliche Planung:** Der mehrtägige Alltagstest war ein
+Akzeptanzkriterium **dieser** Phase, und die Phase galt bis dahin als offen.
+
+**Geändert am 2026-09-13, bewusst und mit diesem Grund:** Nach Phase 10 folgen
+noch Phase 11 und Phase 12, und beide verändern das reale Produkt erneut —
+Phase 11 bringt mit `ReviewLog` die erste Schemaänderung des Projekts, Phase 12
+greift in den Audio- und Spracherkennungs-Lebenszyklus ein. Ein mehrtägiger
+Stabilitätsbeleg für den Stand von Phase 10 wäre danach kein Beleg mehr für
+das ausgelieferte Produkt, und die Dokumentation stünde auf dem denkbar
+schlechtesten Satz: „Phase 12 implementiert, Phase-10-Gerätetest noch offen".
+
+**Konsequenz:** Die vollständige Geräteprüfung und der Alltagstest sind ab
+jetzt **ein gemeinsames Gate am Ende der Roadmap**, nicht pro Phase. Phase 10
+gilt nach Tests, Builds, Reviews, Gegenmutationen und Implementierung als
+**implementiert**. Einen offenen Punkt namens „Phase-10-Gerätetest" oder
+„Phase-10-Soak-Test" gibt es nicht mehr.
+
+**Was das nicht heißt:** Die Geräteprüfung entfällt nicht. Sie wird verschoben,
+nicht erlassen — und sie wird am Ende **strenger**, weil sie dann das fertige
+Produkt prüft statt eines Zwischenstands.
+
+**Die Haken oben bleiben stehen und bedeuten weiterhin, was sie sagen** — sie
+stützen sich auf die Entwicklungs-/Zwischentests vom 2026-09-12 und
+2026-09-13, deren Messungen unverändert unten stehen. Was sie **nicht** sind:
+die Abnahme des fertigen Produkts. Die steht am Ende der Roadmap.
+
+### Stand am 2026-09-13
+
+**Gebaut, im Simulator grün, auf dem Gerät geprüft — und trotzdem nicht
+abgeschlossen.** 537 Testfunktionen / 595 Einzelausführungen, 0 Fehlschläge,
+0 Compilerwarnungen auf einem Debug-Build von null, Release-Build von null
+ebenso.
+
+#### Physischer Gerätetest am 2026-09-12 — bestanden
+
+**Einordnung seit dem 2026-09-13: Entwicklungs-/Zwischentest.** Er belegt die
+unten namentlich genannten Pfade auf dem damaligen Stand — das bleibt gültig
+und wird nicht umgedeutet. Er ist **nicht** die Abnahme des fertigen Produkts;
+die steht im Abschnitt
+[Finale Geräte- und Release-Abnahme](#finale-geräte--und-release-abnahme).
+
+**Gerät:** iPhone 16 Pro (`iPhone17,1`), **iOS 26.6**, per Kabel, Debug-Build,
+installiert über `devicectl` (`de.belaunsch.CApp`). Modell und Systemversion
+sind am Gerät ausgelesen, nicht erinnert.
+
+Geprüfte Pfade, in der Reihenfolge des Durchlaufs:
+
+| # | Pfad | Was geprüft wurde |
+| --- | --- | --- |
+| 1 | Erster Start | App-Icon auf dem Homescreen, Start ohne Splash-Blitz, Kartenliste erscheint |
+| 2 | Einstellungen | Zahnrad in *Karten*, alle Abschnitte vorhanden |
+| 3 | Sprechtempo | Langsam / Normal / Schnell am selben Wort gehört; wirkt ab der nächsten Wiedergabe, ohne Neustart |
+| 4 | Stimme | Automatisch ergibt Lili (Premium); manuelle Wahl spricht die gewählte Stimme; Auswahl überlebt den Neustart |
+| 5 | Kartenzahl je Runde | 5 gezählt; Änderung mitten in der Runde lässt die laufende Runde bei 5 und wirkt ab der nächsten mit 10 |
+| 6 | Kartenzahl je Lernstand | Zahlen gegen die Kartenliste geprüft, ändern sich nach einer Bewertung |
+| 7 | Sprachmodell | Status gelesen, entfernt, wieder vorbereitet; danach Mikrofon erneut benutzt |
+| 8 | Dynamic Type | Große und Accessibility-Textgröße, Lernkarte mit langem Satz |
+| 9 | VoiceOver | Chinesisch wird mit chinesischer Stimme gelesen, Pinyin nicht buchstabiert; Zahnrad, Stift, Lautsprecher und Mikrofon sind benannt |
+| 10 | Dark Mode | alle Bildschirme durchgegangen |
+| 11 | Leer- und Fehlerzustände | Suche ohne Treffer, Kategorie ohne Karten im Lern-Setup, Karte ohne chinesischen Text |
+| 12 | **Flugmodus** | Karte aus deutschem Text angelegt (Hanzi + Pinyin), gelernt, Aussprache gehört, Mikrofon benutzt |
+| 13 | Bestand | Suche, Sortierwechsel, Session-Start ohne spürbare Verzögerung |
+| 14 | Regression | beide Lernrichtungen, Karte bearbeiten, Kategorien anlegen und umbenennen |
+
+**Was der Durchlauf nicht zeigt** — und was deshalb kein Kriterium abhakt: die
+vier SwiftData-Schreibfehler (nicht auslösbar), die False-Accept-Eigenschaft
+der Spracherkennung (in Phase 9 ausdrücklich ungemessen) und die Stabilität
+über mehrere Tage. Genau Letzteres ist das offene Kriterium.
+
+**Und er lag vor der Korrekturrunde.** Der Durchlauf vom 2026-09-12 fand auf
+dem Build **vor** den Änderungen vom 2026-09-13 statt. Auf dem Gerät war das
+Modell bereits installiert, der Weg „Entfernen → Vorbereiten" lief also ohne
+echten Download — genau deshalb ist der Doppeldruck dort nie aufgefallen. Die
+übrigen zwölf Schritte berührt die Korrektur nicht; für die geänderten Pfade
+gab es deshalb den gezielten Nachtest unten.
+
+#### Gezielter Nachtest der Korrekturrunde am 2026-09-13 — bestanden
+
+**Einordnung: Entwicklungs-/Zwischentest**, wie der Durchlauf vom Vortag. Er
+belegt die geänderten Pfade und ersetzt die finale Abnahme nicht.
+
+**Gerät:** iPhone 16 Pro (`iPhone17,1`), **iOS 26.6**, Debug-Build. Geprüft
+wurde ausschließlich, was die Korrekturrunde verändert hat; der Rest stand
+bereits aus dem Durchlauf vom Vortag.
+
+**Zum getesteten Build, so genau wie es belegbar ist:** Produktivcode und
+Arbeitsbaum sind seit der Verifikation unverändert — 537 Testfunktionen / 595
+Einzelausführungen grün, Debug-Build von null und Release-Build von null mit 0
+Compilerdiagnosen. Der gezielte Gerätetest lief auf der auf dem iPhone
+vorhandenen korrigierten Installation. **Deren Herkunft ist in der Sitzung,
+die diese Zeilen geschrieben hat, nicht unabhängig verifiziert worden**: Der
+Installationsversuch aus der Sitzung heraus scheiterte an einem gesperrten
+Gerät, die tatsächlich getestete Installation ist also anderweitig entstanden.
+Dass sie exakt dem verifizierten Arbeitsbaum entspricht, wird hier deshalb
+nicht behauptet.
+
+| # | Pfad | Was geprüft wurde |
+| --- | --- | --- |
+| 1 | Entfernen | Zeile wechselt auf „Wird entfernt …", danach „Freigegeben — das System löscht die Daten später"; Entfernen-Knopf verschwindet, Vorbereiten erscheint |
+| 2 | kein zweites Entfernen | nach erfolgreicher Freigabe wird kein Entfernen mehr angeboten — die falsche Meldung „Es gab keine Reservierung zurückzugeben" ist damit unerreichbar |
+| 3 | Vorbereiten starten | sofort „Wird vorbereitet …", dann „Wird geladen …" mit Fortschrittsbalken; der Vorbereiten-Knopf verschwindet dabei |
+| 4 | während des Downloads mehrfach tippen | kein zweiter Download, der Balken springt nicht und verschwindet nicht |
+| 5 | Download abschließen | „Bereit", Mikrofon im Lernen wieder benutzbar |
+| 6 | Erkennungsfehler im Lernen | Meldung steht unter dem Mikrofonknopf und **nicht** unter „Sprachmodelle" |
+| 7 | Fehler beim Vorbereiten aus den Einstellungen | Meldung steht dort, Zeile sagt „Nicht geladen", Knopf bleibt für einen erneuten Versuch; die Erklärung überlebt Schließen und Wiederöffnen und erscheint **nicht** unter dem Mikrofon |
+| 8 | Sprechtempo | Änderung überlebt Beenden und Neustart |
+| 9 | Batchgröße | Session mit 5 gestartet, mitten in der Runde auf 10 gestellt: laufende Runde bleibt 5, die nächste hat 10 |
+
+Damit sind die vier Blocker aus der zweiten Prüfung und die vier Befunde der
+Nachkontrolle **auch auf dem Gerät** bestätigt — nicht nur im Test.
+
+Der mehrtägige Alltagstest beginnt mit diesem korrigierten Build **neu**.
+
+Fertig: Einstellungen (Sprechtempo, Stimme, Kartenzahl je Runde, Verwaltung
+des Erkennungsmodells, Kartenzahl je Lernstand), Fehler-Audit als Matrix in
+[architecture.md §7](architecture.md#7-fehlerbehandlung), Leer- und
+Ladezustände, Sprachauszeichnung für VoiceOver, Dynamic Type für die
+chinesischen Texte, App-Icon, Q1–Q6, A6 neu bewertet, README.
+
+**Zwei Messungen, die etwas widerlegt haben:**
+
+- **Der Launch-Screen-Hintergrund lässt sich nicht über `INFOPLIST_KEY_*`
+  setzen.** Weder `…_BackgroundColor` noch `…_UIColorName` erreichen die
+  gebaute `Info.plist`; die Einstellung wird ohne Warnung verworfen. Gemessen
+  am Release-Produkt, Belege in `apple-frameworks.md` §9. Die Startfläche
+  bleibt deshalb die Systemhintergrundfarbe — was zugleich die bessere Wahl
+  ist, weil der erste Bildschirm der App eine Liste auf Systemhintergrund ist
+  und eine farbige Fläche davor ein Splash wäre.
+- **Die Zeitmessung in `LargeCollectionTests` war blind.** Sie las
+  `Duration.components.attoseconds`, also nur den Sekundenbruchteil: 1,4 s
+  meldeten sich als 400 ms und bestanden die 500-ms-Schranke. Behoben, und
+  die Schranken sitzen jetzt an gemessenen Werten (9,9 / 22,5 / 6,4 ms) statt
+  an einer Zahl, die 20- bis 80-mal zu groß war.
+
+**Aus der ersten Review-/Audit-Runde behoben:** „Locale nicht auflösbar" und
+„noch nicht gefragt" waren derselbe Zustand und ergaben ein dauerhaftes „Wird
+geprüft …" neben einem Knopf ohne Wirkung; `releaseModel()` hatte den
+Aufnahme-Guard nicht und meldete nicht, wenn es nichts freizugeben gab; das
+einzige stumme `try?` der App liegt jetzt in einem `do/catch` mit Log; die
+Weitergabe der Batchgröße an die Recency-Schwelle ist mit einer Gegenmutation
+abgesichert (vorher wäre ihr Wegfall unbemerkt geblieben); `LearnAnswer.spoken`
+und `accessibilityLabel` waren toter Code.
+
+**Was diese Runde noch nicht behoben hatte — und die zweite Prüfung gefunden
+hat.** Die Korrektur an `modelStatus` schloss nur das **kurze** Fenster nach
+dem Download: Der Zustand wurde vor dem `.downloading`-Frühausstieg gesetzt,
+aber weiterhin erst *nach* `downloadAndInstall()`. Während des eigentlichen
+Downloads — Minuten, nicht Millisekunden — galt also weiter Apples letzte
+Antwort „Noch nicht geladen", `canPrepareModel` blieb `true`, der Knopf stand
+neben dem eigenen Fortschrittsbalken, und ein zweiter Druck startete einen
+zweiten `downloadAndInstall()` neben dem ersten; das zuerst fertige Task
+räumte dann den Fortschritt des anderen ab. Die Formulierung, die hier zuvor
+stand, las sich, als sei der Doppeldruck damit erledigt — das war sie nicht.
+
+**In der Korrekturrunde am 2026-09-13 geschlossen:**
+
+- `SpeechModelState` unterscheidet jetzt, was **diese App** tut, von dem, was
+  Apple meldet: `.preparing`, `.downloading` und `.failed` neben `.assets(…)`.
+  Der Downloadzustand wird **vor** dem `await` gesetzt, und zwar zusammen mit
+  Fortschritt und Phase in einer einzigen Operation (`beginDownload`), damit
+  die drei nicht wieder auseinanderlaufen.
+- Ein zweiter Lauf wird an der Quelle abgewiesen: `beginModelWork()` gibt
+  `nil` zurück, solange ein eigener Lauf in der Luft ist. Der verborgene Knopf
+  ist die Höflichkeit, diese Regel ist die Absicherung.
+- Modellläufe haben eine eigene Generation (`modelEpoch`) nach dem Muster des
+  Aufnahmepfads. Ein überholter Lauf schreibt weder Zustand noch Fortschritt;
+  `releaseModel()` prüft das jetzt auch **nach** seinem `await`.
+- Fehler sind getrennt: `failure` gehört dem Aufnahmepfad, `modelFailure` der
+  Modellverwaltung. Ein Erkennungsfehler aus dem Lernen erscheint nicht mehr
+  unter „Sprachmodelle", und umgekehrt erklärt sich eine in den Einstellungen
+  gestartete Vorbereitung nicht mehr unter dem Mikrofonknopf. Ein veralteter
+  Modellfehler verschwindet beim erneuten Öffnen; die Erklärung eines gerade
+  gescheiterten Versuchs (`.failed`) bleibt stehen.
+
+**Zweite Korrekturrunde am selben Tag, aus Review und Audit der ersten.** Die
+erste Runde hatte den Doppeldownload geschlossen und dabei eine gleichwertige
+Fehlerklasse eingeführt:
+
+- `takeOverModelWork()` erhöhte die Generation, ohne den Zustand zu
+  beanspruchen. Der überholte Lauf durfte sein eigenes Ende nicht mehr
+  schreiben, und `refreshModelStatus()` weigert sich absichtlich, einen
+  laufenden Zustand zu korrigieren — der Einstellungsbildschirm wäre bis zum
+  App-Neustart auf „Wird geladen …" eingefroren. Wer übernimmt, beansprucht
+  jetzt den Zustand und erbt damit die Pflicht, ihn zu beenden; eine
+  Gegenmutation sichert das ab.
+- `refreshModelStatus()` löschte `modelFailure` bedingungslos und hätte damit
+  genau die Erklärung gelöscht, wegen der man den Bildschirm öffnet.
+- Ein erfolgreiches Entfernen blieb ohne Rückmeldung: Apple löscht die Assets
+  später, der gemessene Status sagte weiter „Bereit", und ein zweiter Tipp
+  meldete „Es gab keine Reservierung zurückzugeben" — nach einer Entfernung,
+  die funktioniert hatte. Dafür gibt es jetzt `.released` mit eigenem Satz,
+  und der Entfernen-Knopf ist danach weg.
+- Übernahm das System einen Download selbst, blieb `phase` auf `.downloading`
+  hängen: Die Einstellungen sagten irgendwann „Bereit", das Mikrofon blieb
+  aber bis zum Neustart mit „Sprachmodell wird geladen …" gesperrt. Dieser
+  Pfad ist **älter** als die Korrekturrunden; `refreshModelStatus()` ist die
+  einzige Stelle, die beide Werte sieht, und zieht die Phase jetzt nach.
+- `SpeechRate` schreibt seine Rohwerte aus, wie `CardSortOrder` es seit Phase 6
+  vormacht, und `PreferencesTests.rawValuesArePinned` nagelt sie fest. Ohne das
+  hätte ein Umbenennen des Swift-Falls jeder Installation still das Sprechtempo
+  zurückgesetzt.
+
+**Status: Implementierung abgeschlossen.** Sechs der sieben
+Akzeptanzkriterien sind erfüllt und belegt; das siebte — Stabilität über
+mehrere Tage — ist am 2026-09-13 in die
+[finale Geräte- und Release-Abnahme](#finale-geräte--und-release-abnahme)
+verschoben worden, zusammen mit der vollständigen Geräteprüfung. Belegt sind:
+537 Testfunktionen / 595 Einzelausführungen grün, Debug-Build von null und
+Release-Build von null mit 0 Compilerdiagnosen, zwei unabhängige Code Reviews
+und zwei Testaudits mit abgearbeiteten Findings, zehn Gegenmutationen, dazu
+die beiden Entwicklungs-Gerätetests oben.
+
+**Der frühere Wortlaut hier lautete `NOT READY — mehrtägiger Soak-Test
+ausstehend`** und war für die damalige Struktur richtig. Er ist nicht gelöscht,
+sondern ersetzt, weil das Gate umgezogen ist — die Begründung steht oben unter
+„Einordnung der Geräteprüfung".
 
 ### Abhängigkeiten
 Phasen 0–9.
@@ -1911,6 +2169,135 @@ Wie in Phase 9 gilt: erst Spike und Dokumentation, dann Produktcode.
 Phase 9 (Erkennungspfad) und Phase 11 (Review- und Bewertungsverhalten). Ohne
 Phase 11 würde ein Hands-free-Modus nach jeder Karte weiterhin eine manuelle
 Bewertung verlangen und damit seinen eigenen Zweck verfehlen.
+
+---
+
+## Finale Geräte- und Release-Abnahme
+
+**Kein Feature und keine Produktphase, sondern das abschließende Gate der
+gesamten Roadmap.** Hier wird nicht entwickelt; hier wird das fertige Produkt
+auf dem echten Gerät geprüft und abgenommen.
+
+**Warum es diesen Abschnitt gibt.** Bis zum 2026-09-13 hatte jede Phase ihre
+eigene Geräteprüfung, und der mehrtägige Alltagstest hing an Phase 10. Das
+führt nach Phase 11 und 12 zu einer Dokumentation, die sich selbst
+widerspricht: „Phase 12 implementiert, Phase-10-Gerätetest noch offen". Die
+Phasen danach verändern das Produkt real — Phase 11 bringt die erste
+Schemaänderung überhaupt, Phase 12 greift in den Audio-Lebenszyklus ein —,
+also wäre ein Stabilitätsbeleg für einen Zwischenstand am Ende wertlos. Die
+vollständige Prüfung wandert deshalb ans Ende, wo sie das misst, was
+ausgeliefert wird.
+
+**Verhältnis zu den Gerätetests aus den Phasen.** Die bisherigen physischen
+Tests — Phase 3+4, 4.5, 6, 6.5, 7, 8, 9 und die beiden aus Phase 10 — bleiben
+vollständig dokumentiert und gültig. Sie sind **Entwicklungs-/Zwischentests**:
+Sie belegen namentlich genannte Pfade auf dem jeweiligen Stand. Sie sind nicht
+die Abnahme des fertigen Produkts und waren es rückblickend auch nie.
+
+**Voraussetzung:** alle Implementierungsphasen abgeschlossen, verifiziert und
+auf `main` committet.
+
+### Vorbereitung
+
+- [ ] `main` ist final verifiziert: gesamte Testsuite grün, Debug-Build von
+      null, Release-Build von null, 0 Compilerwarnungen
+- [ ] Der Build für die Abnahme wird **aus diesem `main`** erzeugt und auf dem
+      primären iPhone installiert
+- [ ] Ab hier keine Codeänderung mehr, bis die Abnahme durch ist
+
+### 1. Vollständiger Regressionstest auf dem primären iPhone
+
+- [ ] App-Start, App-Icon, Launch-Screen
+- [ ] Karten anlegen, bearbeiten, löschen
+- [ ] Kategorien anlegen, umbenennen, löschen, zuordnen
+- [ ] Suche, Filter, Sortierung
+- [ ] beide Lernrichtungen (Deutsch → Chinesisch, Audio → Deutsch)
+- [ ] Session- und Batch-Verhalten, Wiedereinstreuung, Statusübergänge
+- [ ] Einstellungen und ihre Persistenz über einen Neustart
+- [ ] Sprachausgabe (TTS)
+- [ ] Spracherkennung
+- [ ] Verwaltung der Sprachmodelle
+- [ ] alle Funktionen aus Phase 11
+- [ ] alle Funktionen aus Phase 12
+
+### 2. Persistenz und Migration
+
+Der kritischste Punkt der ganzen Abnahme, weil er als einziger Daten des
+Nutzers vernichten kann.
+
+- [ ] Einen **real bestehenden privaten Store** mit dem finalen Schema öffnen
+      — kein frisch angelegter, kein Simulator-Store
+- [ ] Keine bestehenden Karten, Kategorien oder Lernstände gehen verloren
+- [ ] Alle bis dahin hinzugekommenen Modelle und Migrationen prüfen,
+      insbesondere `ReviewLog` aus Phase 11 und dessen Beziehung zu `Card`
+- [ ] Damit ist auch **Q7** fällig
+      ([apple-frameworks.md §10](apple-frameworks.md#10-offene-technische-fragen-zu-klären-vor-der-jeweiligen-phase)):
+      ob die automatische SwiftData-Migration reicht, entscheidet sich hier
+      und nirgends sonst
+
+### 3. Offline
+
+Nach einmalig installierten Assets, im Flugmodus:
+
+- [ ] Kartenverwaltung
+- [ ] Pinyin-Erzeugung
+- [ ] Lernmodus, beide Richtungen
+- [ ] Sprachausgabe
+- [ ] Spracherkennung
+- [ ] alle sonstigen als offline deklarierten Funktionen
+
+### 4. Accessibility und Darstellung
+
+- [ ] Dynamic Type bis zu den Accessibility-Größen
+- [ ] VoiceOver, einschließlich der chinesischen Sprachauszeichnung
+- [ ] Dark Mode
+- [ ] lange chinesische Sätze (Umbruch, Abschneiden, Lesbarkeit)
+- [ ] alle final hinzugekommenen Screens
+
+### 5. Performance
+
+- [ ] mehrere hundert Karten im realen Bestand
+- [ ] Suche
+- [ ] Filter
+- [ ] Session-Start
+- [ ] Review-History und die übrige Phase-11-Logik, soweit sie mit dem
+      Bestand wächst
+
+### 6. Audio- und Speech-Lebenszyklus
+
+Die Fehlerklasse, die in den Phasen 7 und 9 die meisten Gerätebefunde
+erzeugt hat.
+
+- [ ] Erkennung → Sprachausgabe unmittelbar danach
+- [ ] Sprachausgabe → Erkennung unmittelbar danach
+- [ ] Kartenwechsel während laufender Sprachausgabe oder Aufnahme
+- [ ] Wechsel in den Hintergrund und zurück
+- [ ] Unterbrechungen (Anruf, andere App, Stummschalter, Kopfhörer)
+- [ ] alle Freihand-Pfade aus Phase 12, falls implementiert
+
+### 7. Mehrtägiger Alltagstest
+
+Der **unveränderte** Release-Kandidat wird mehrere Tage real benutzt.
+
+- [ ] keine Abstürze
+- [ ] kein Datenverlust
+- [ ] keine festhängenden Audio- oder Spracherkennungszustände
+- [ ] keine dauerhaft falschen UI- oder Modellzustände
+- [ ] persistierte Einstellungen bleiben korrekt
+- [ ] die Kernlernabläufe werden real benutzt, nicht nur angetippt
+
+**Regel für Änderungen währenddessen:** Jede Änderung am **Laufzeitverhalten**
+startet diesen Alltagstest **neu** — Produktivcode, Assets, Buildeinstellungen.
+Reine Dokumentationsänderungen tun das nicht.
+
+### Ergebnis
+
+- [ ] **Finale Abnahme erteilt.** Erst dann gilt die Roadmap als
+      abgeschlossen und das Produkt als abgenommen.
+
+**Solange dieser Abschnitt offene Punkte hat, lautet der Projektstatus
+`Finale Roadmap-Abnahme: ausstehend`** — unabhängig davon, wie viele Phasen
+als implementiert gelten.
 
 ---
 

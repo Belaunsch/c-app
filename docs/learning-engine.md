@@ -302,7 +302,7 @@ Alle an einer Stelle, als benannte Konstanten:
 
 | Konstante | Wert | Bedeutung |
 | --- | --- | --- |
-| `batchSize` | 7 | Karten pro Mini-Batch |
+| `batchSize` | 7 (Default) | Karten pro Mini-Batch; seit Phase 10 in den Einstellungen zwischen 5 und 10 verstellbar |
 | `reinsertGap` | 3 | **Mindest**anzahl anderer Karten vor der Wiederholung; ungesehene Karten gehen immer vor (§5) |
 | `maxReinserts` | 1 | Wiedereinreihungen pro Karte und Batch (bis zum Gerätetest der Phase 6: 3, siehe §5) |
 | `recencyFactor` | 0.2 | Gewichtsfaktor für Karten aus dem vorherigen Batch |
@@ -312,8 +312,25 @@ Alle an einer Stelle, als benannte Konstanten:
 | `weightGood` | 1.0 | Basisgewicht *Gut* |
 | `weightSecure` | 0.3 | Basisgewicht *Sicher* |
 
-`batchSize` wird später optional in den Einstellungen verstellbar (Bereich
-5–10). Vorerst fest.
+**`batchSize` ist seit Phase 10 verstellbar** — Bereich 5 bis 10, Default
+weiterhin 7. Drei Dinge gehören dazu:
+
+- **Geklemmt wird beim Lesen, nicht am Bedienelement.** `Preferences.batchSize`
+  begrenzt jeden gespeicherten Wert auf 5…10 und liest eine fehlende Angabe
+  als „Default". Die Voreinstellungsdatenbank ist editierbar und überlebt
+  App-Updates; „der Stepper kann nur gültige Werte schreiben" gilt für den
+  Stepper, nicht für den Speicher.
+- **Die Größe erreicht zwei Stellen.** Die Auswahl selbst *und* die
+  Recency-Schwelle `minimumPoolSizeForRecency(batchSize:)`, die zwei Batches
+  entspricht. Wird sie nur an die Auswahl gereicht, verlieren alle Pools
+  zwischen den beiden Zahlen die Dämpfung aus §3.2 — deshalb reicht
+  `BatchSelector` sie an `CardWeighting.effectiveWeight` weiter, und genau
+  diese Weitergabe ist mit einer Gegenmutation abgesichert
+  (`BatchSelectorTests.batchSizeReachesTheRecencyThreshold`).
+- **Gelesen wird am Batchstart, nie mitten im Batch.** Eine Änderung während
+  einer laufenden Runde baut diese Runde nicht um; sie wirkt ab der nächsten.
+
+§9 („Pool kleiner als `batchSize`") gilt unverändert.
 
 ---
 

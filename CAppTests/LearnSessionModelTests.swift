@@ -49,13 +49,28 @@ struct LearnSessionModelTests {
     private func model(
         type: CardType = .word,
         tagKeys: Set<String> = [],
-        seed: UInt64 = 1
+        seed: UInt64 = 1,
+        defaults: UserDefaults = .standard
     ) -> LearnSessionModel {
         LearnSessionModel(
             configuration: SessionConfiguration(cardType: type, tagKeys: tagKeys),
             generator: AnyRandomNumberGenerator(SeededGenerator(seed: seed)),
-            now: { Self.reviewDate }
+            now: { Self.reviewDate },
+            defaults: defaults
         )
+    }
+
+    /// A settings suite of its own, emptied before use and removed afterwards.
+    ///
+    /// What is isolated is **this suite**; the tests below all write the value
+    /// they then read, so nothing depends on whether a suite also reads
+    /// through to the app's own domain.
+    private func withScratchDefaults(_ name: String, _ body: (UserDefaults) throws -> Void) throws {
+        let suite = "LearnSessionModelTests.\(name)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        try body(defaults)
     }
 
     // MARK: - Pool
@@ -898,7 +913,8 @@ struct LearnSessionModelTests {
         #expect(PinyinService.pinyin(for: card.hanzi) == "dōngxī", "what generating would give")
         #expect(LearnAnswer.pinyin(for: card) == "dōngxi", "what the user corrected it to")
         #expect(LearnAnswer.hanzi(for: card) == "东西")
-        #expect(LearnAnswer.accessibilityLabel(for: card) == "Antwort: 东西, dōngxi")
+        #expect(String(LearnAnswer.accessibilityAttributedLabel(for: card).characters)
+            == "Antwort: 东西, dōngxi")
     }
 
     @Test("A card without Pinyin reveals just the Hanzi")
@@ -907,7 +923,8 @@ struct LearnSessionModelTests {
         try context.save()
 
         #expect(LearnAnswer.pinyin(for: card).isEmpty)
-        #expect(LearnAnswer.accessibilityLabel(for: card) == "Antwort: 苹果", "no dangling comma")
+        #expect(String(LearnAnswer.accessibilityAttributedLabel(for: card).characters)
+            == "Antwort: 苹果", "no dangling comma")
     }
 
     // MARK: - Helpers
@@ -920,4 +937,92 @@ struct LearnSessionModelTests {
             cards.first { $0.id == snapshot.id }?.german
         }
     }
+
+    // MARK: - The batch size from the settings
+
+    @Test("The session draws the size the settings ask for, and the round is that long")
+    func storedBatchSizeIsUsed() throws {
+        // Both directions, because the round's **length** is only observable
+        // where the stored value changes inside it: the size the model reports
+        // flips at the round boundary, so counting answers up to the flip
+        // measures the round. The first version asserted `currentBatchSize`
+        // before and after the loop — identical either way, and blind to a
+        // round built one card short.
+        for (first, second) in [(5, 10), (10, 5)] {
+            try withScratchDefaults("size\(first)to\(second)") { defaults in
+                defaults.set(first, forKey: Preferences.batchSizeKey)
+
+                for index in 0..<40 { insert("Wort \(index)") }
+                try context.save()
+
+                let session = model(defaults: defaults)
+                session.start(in: context)
+                #expect(session.currentBatchSize == first)
+
+                // The new size is stored right away, so any read after this
+                // point would show it — the round must not.
+                defaults.set(second, forKey: Preferences.batchSizeKey)
+
+                var seen: [UUID] = []
+                for answer in 1...first {
+                    let card = try #require(session.currentCard)
+                    seen.append(card.id)
+                    session.reveal()
+                    session.submit(.secure, in: context)
+
+                    if answer < first {
+                        #expect(session.currentBatchSize == first,
+                                "answer \(answer) of \(first) is still inside the round")
+                    }
+                }
+                #expect(Set(seen).count == first, "no card twice inside one batch")
+                #expect(session.currentBatchSize == second,
+                        "and the round ended after exactly \(first) answers")
+
+                for card in try context.fetch(FetchDescriptor<Card>()) { context.delete(card) }
+                try context.save()
+            }
+        }
+    }
+
+    @Test("Changing the size mid-round leaves the running round alone")
+    func changingTheSizeDoesNotRebuildTheRunningBatch() throws {
+        // The promise the settings screen makes in so many words: „Gilt ab
+        // der nächsten Runde. Eine laufende Runde wird nicht umgebaut."
+        try withScratchDefaults("midRound") { defaults in
+        defaults.set(5, forKey: Preferences.batchSizeKey)
+
+        for index in 0..<40 { insert("Wort \(index)") }
+        try context.save()
+
+        let session = model(defaults: defaults)
+        session.start(in: context)
+        #expect(session.currentBatchSize == 5)
+
+        // Two cards in, the learner changes their mind.
+        for _ in 0..<2 {
+            session.reveal()
+            session.submit(.secure, in: context)
+        }
+        defaults.set(10, forKey: Preferences.batchSizeKey)
+        #expect(session.currentBatchSize == 5, "the round in progress keeps its size")
+
+        // **Mid-round, with the new value already stored.** This is the
+        // assertion the audit asked for: without it the test could not tell
+        // „read once at the start of the batch" from „read again on every
+        // answer" — an implementation that refreshed the size inside
+        // `submit(_:in:)` would still have shown 5 above and 10 at the end.
+        session.reveal()
+        session.submit(.secure, in: context)
+        #expect(session.currentBatchSize == 5, "still the same round, still its own size")
+
+        // Finish the round. Only now does the new size apply.
+        for _ in 0..<2 {
+            session.reveal()
+            session.submit(.secure, in: context)
+        }
+        #expect(session.currentBatchSize == 10, "the next round picks it up")
+        }
+    }
+
 }

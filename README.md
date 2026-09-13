@@ -6,7 +6,22 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 9 abgeschlossen.**
+**Phasen 0 bis 10 implementiert. Finale Roadmap-Abnahme: ausstehend.**
+
+Die Implementierung von v1 steht: Tests grün, Debug- und Release-Build sauber,
+zwei unabhängige Code Reviews und zwei Testaudits abgearbeitet. Physische
+Gerätetests hat es in jeder Phase gegeben, zuletzt am **2026-09-12** und
+**2026-09-13** auf einem iPhone 16 Pro (iOS 26.6) — sie sind
+**Entwicklungsbelege** für die jeweils geprüften Pfade.
+
+**Abgenommen ist das Produkt damit nicht.** Die vollständige Geräteprüfung
+inklusive Migration, Offline-Kette, Barrierefreiheit, Audio-Lebenszyklus und
+einem mehrtägigen Alltagstest ist seit dem 2026-09-13 ein **gemeinsames Gate
+am Ende der Roadmap** statt eines Gates je Phase — weil die Phasen 11 und 12
+das Produkt erneut verändern und ein Stabilitätsbeleg für einen Zwischenstand
+am Ende nichts über das ausgelieferte Produkt sagt. Der Abschnitt
+[Finale Geräte- und Release-Abnahme](docs/roadmap.md) führt auf, was dazu
+gehört.
 
 Vorhanden sind die Architektur- und Planungsdokumentation, die
 Claude-Code-Entwicklungsinfrastruktur (`.claude/agents/`, `.claude/skills/`,
@@ -16,10 +31,11 @@ Kartenverwaltung: Wörter und Sätze getrennt, Karten anlegen, bearbeiten und
 löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
 Lernstatus, Kategorien umbenennen und löschen.
 
-Build und Unit-Tests laufen grün: **470 Testfunktionen / 528 Einzelausführungen,
+Build und Unit-Tests laufen grün: **537 Testfunktionen / 595 Einzelausführungen,
 0 Fehlschläge, 0 Compilerwarnungen** auf einem Debug-Build von null (iPhone-17-Simulator, iOS
-26.5), Release-Build von null ebenso. Jede Phase ist auf einem echten iPhone
-bestätigt, die letzte am **2026-09-09**.
+26.5), Release-Build von null ebenso. Jede Phase ist zusätzlich auf einem
+echten iPhone belegt worden — zuletzt am **2026-09-12** und **2026-09-13** —,
+jeweils für die Pfade, die sich anders nicht prüfen ließen.
 
 Neu aus den Phasen 3 und 4: Beim Anlegen einer Karte genügt der deutsche Text
 — mit Return oder beim Verlassen des Feldes erzeugt die App Hanzi über Apples
@@ -51,7 +67,7 @@ Editor den gerade eingegebenen, noch nicht gespeicherten Text. Gesprochen
 wird immer **Hanzi**, nie Pinyin. Die Stimme wird nach Qualität gewählt
 (`.premium` > `.enhanced` > `.default`); auf dem Testgerät ist das die
 nachgeladene **Lili (Premium)**, ohne Premium- oder Enhanced-Stimme
-**Tingting**. Sprechrate `0.45`, verstellbar erst in Phase 10. Ein neuer Tap
+**Tingting**. Sprechrate `0.45`, seit Phase 10 dreistufig verstellbar. Ein neuer Tap
 ersetzt die laufende Wiedergabe, es gibt keine Warteschlange und kein
 automatisches Abspielen. Fehlt jede chinesische Stimme, verschwindet der
 Knopf — im Lernen tritt an seine Stelle ein Hinweis, weil dort ohne Ton keine
@@ -96,6 +112,18 @@ Apple häufig einen anderen chinesischen Text als den gemeinten — von 16 norma
 gesprochenen Zielantworten stimmten 8 exakt überein. Ein Treffer ist deshalb
 ein Hinweis, kein Urteil.
 
+Aus Phase 10: **Einstellungen** hinter dem Zahnrad in der Kartenübersicht —
+Sprechtempo in drei Stufen (`0.40`/`0.45`/`0.50`, die in Phase 7 gehörten
+Werte), Stimmenauswahl, sobald mehr als eine Mandarin-Stimme installiert ist,
+Kartenzahl je Runde zwischen 5 und 10, Verwaltung des Erkennungsmodells und
+die Kartenzahl je Lernstand. Eine Änderung wirkt ab der nächsten Wiedergabe
+beziehungsweise der nächsten Runde; eine laufende Runde wird nicht umgebaut.
+Dazu ein App-Icon, ein Launch-Screen und ein Durchgang durch alle Fehler-,
+Leer- und Ladezustände. Kein Fehlerpfad endet still: jeder führt in einen
+Alert, einen sichtbaren Zustand oder mindestens einen Logeintrag mit
+Begründung, warum der Nutzer davon nichts erfahren muss. Die Matrix dazu steht
+in [docs/architecture.md §7](docs/architecture.md#7-fehlerbehandlung).
+
 Noch nicht vorhanden: automatische Statusvorschläge aus der Review-Historie
 und ein freihändiger Sprachmodus — beides ist als Phase 11 und 12 in der
 Roadmap vorgezeichnet.
@@ -127,7 +155,9 @@ Testcode und in
 allen vier fehlt die entscheidende Information in den Daten, nicht im
 Algorithmus.
 
-Nächster Schritt: **Phase 10 — Einstellungen, Fehlerbehandlung, Device-Test & Polish**.
+Nächster Schritt: **Phase 11 — Review History & Assisted Assessment**, danach
+Phase 12. Die finale Geräte- und Release-Abnahme folgt am Ende, auf dem dann
+fertigen Produkt.
 
 ## Drittanbieter-Daten
 
@@ -182,7 +212,7 @@ Tageslimits, Gamification, Werbung, In-App-Käufe, Accounts, Analytics.
 | UI | SwiftUI |
 | Persistenz | SwiftData (lokal, keine CloudKit-Synchronisation) |
 | Übersetzung DE → ZH | Translation Framework (`TranslationSession`) |
-| Hanzi → Pinyin | CoreFoundation-Transliteration (`CFStringTokenizer` / `CFStringTransform`) |
+| Hanzi → Pinyin | gebündeltes CC-CEDICT-Lexikon; CoreFoundation (`CFStringTokenizer` / `CFStringTransform`) nur noch für Wortgrenzen und den gekennzeichneten Fallback |
 | Sprachausgabe | AVFoundation (`AVSpeechSynthesizer`, `zh-CN`-Stimme) |
 | Spracherkennung | Speech Framework (`SpeechAnalyzer` / `SpeechTranscriber`) |
 | Externe Dependencies | keine |
@@ -223,7 +253,7 @@ reichen für den Umfang dieser App aus. Details und Begründung in
 
 | Dokument | Inhalt |
 | --- | --- |
-| [docs/roadmap.md](docs/roadmap.md) | Bootstrap-Phase B plus 11 Produktphasen (0–10) mit Ziel, Scope, Tasks, Akzeptanzkriterien, Abhängigkeiten und expliziten Nicht-Zielen |
+| [docs/roadmap.md](docs/roadmap.md) | Bootstrap-Phase B plus 11 Produktphasen (0–10) mit Ziel, Scope, Tasks, Akzeptanzkriterien, Abhängigkeiten und expliziten Nicht-Zielen; dazu die beiden vorgezeichneten Post-v1-Phasen 11 und 12 |
 | [docs/architecture.md](docs/architecture.md) | Ordnerstruktur, SwiftData-Modell, Schichten, Services, Fehlerbehandlung, Erweiterbarkeit |
 | [docs/learning-engine.md](docs/learning-engine.md) | Spezifikation von Gewichtung, Mini-Batch-Auswahl, Queue-Verhalten und Statusübergängen |
 | [docs/apple-frameworks.md](docs/apple-frameworks.md) | Geprüfte API-Verfügbarkeit, Permissions, Offline-/Online-Verhalten, offene technische Fragen, Quellen |
@@ -239,7 +269,13 @@ Zwei Einschränkungen sind dokumentiert und technisch bedingt:
 
 - Sprachmodelle für **Übersetzung** und **Spracherkennung** werden beim ersten
   Gebrauch von Apple-Servern heruntergeladen. Das erfordert einmalig eine
-  Internetverbindung; danach läuft die Verarbeitung auf dem Gerät.
+  Internetverbindung; danach läuft die Verarbeitung auf dem Gerät. Das
+  Erkennungsmodell lässt sich in den Einstellungen wieder freigeben — dann
+  braucht ein erneutes Vorbereiten wieder eine Verbindung. Stimmen für die
+  Sprachausgabe verwaltet iOS selbst; die App lädt keine nach.
+- Aufnahmen werden **nicht gespeichert**: Der Ton geht direkt in die Erkennung
+  auf dem Gerät, es gibt keine Hintergrundaufnahme und keine Audiodatei.
+  Gesetzt ist als einzige Berechtigung `NSMicrophoneUsageDescription`.
 - Apple gibt für `TranslationSession` an, dass API-Nutzungs- und
   Performance-Metriken erhoben werden können (Bundle-ID, Sprachpaar) — jedoch
   **keine Inhalte**.

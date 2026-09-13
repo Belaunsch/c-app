@@ -18,7 +18,7 @@ struct BatchSelectorTests {
 
     /// Comfortably above the threshold where the recency damping switches on,
     /// derived rather than a literal.
-    private var largePool: Int { LearningParameters.minimumPoolSizeForRecency * 2 }
+    private var largePool: Int { LearningParameters.minimumPoolSizeForRecency() * 2 }
 
     // §10, test 4
     @Test("A batch never contains the same card twice")
@@ -124,7 +124,7 @@ struct BatchSelectorTests {
         let previous = pool(10, status: .weak)
         let fresh = pool(10, status: .weak)
         let cards = previous + fresh
-        #expect(cards.count >= LearningParameters.minimumPoolSizeForRecency, "damping has to be active")
+        #expect(cards.count >= LearningParameters.minimumPoolSizeForRecency(), "damping has to be active")
         let previousIDs = Set(previous.map(\.id))
 
         var generator = SeededGenerator(seed: 4711)
@@ -141,6 +141,59 @@ struct BatchSelectorTests {
         // selector stops passing the flag or the pool size through.
         #expect(freshDraws > previousDraws * 2, "fresh \(freshDraws) vs previous \(previousDraws)")
         #expect(previousDraws > 0, "a card from the previous batch may still turn up")
+    }
+
+    @Test("A different batch size moves the damping threshold with it")
+    func batchSizeReachesTheRecencyThreshold() {
+        // The gap the audit found: every other test here either passes a
+        // `batchSize` **or** a `previousBatchIDs`, never both — so dropping
+        // `batchSize:` from the `effectiveWeight` call inside `selectBatch`
+        // left the whole suite green while the damping quietly used the
+        // default threshold.
+        //
+        // A pool of twelve is the one place where the two answers differ: at
+        // a batch of five the threshold is ten, so the damping is on; at
+        // seven it is fourteen, so it is off. Same pool, same seed, same
+        // marked card — only the size changes.
+        func draws(batchSize: Int, seed: UInt64) -> (marked: Int, unmarked: Int) {
+            let marked = CardSnapshot(id: UUID(), status: .weak)
+            let unmarked = CardSnapshot(id: UUID(), status: .weak)
+            let cards = [marked, unmarked] + pool(10, status: .good)
+
+            var generator = SeededGenerator(seed: seed)
+            var markedDraws = 0
+            var unmarkedDraws = 0
+            for _ in 0..<200 {
+                let batch = BatchSelector.selectBatch(
+                    from: cards,
+                    previousBatchIDs: [marked.id],
+                    batchSize: batchSize,
+                    using: &generator
+                )
+                if batch.contains(marked) { markedDraws += 1 }
+                if batch.contains(unmarked) { unmarkedDraws += 1 }
+            }
+            return (markedDraws, unmarkedDraws)
+        }
+
+        #expect(LearningParameters.minimumPoolSizeForRecency(batchSize: 5) == 10)
+        #expect(LearningParameters.minimumPoolSizeForRecency(batchSize: 7) == 14)
+
+        // Batch of five: pool of twelve is above ten, damping on.
+        let damped = draws(batchSize: 5, seed: 7)
+        #expect(
+            damped.marked < damped.unmarked * 3 / 4,
+            "damped \(damped.marked) vs undamped \(damped.unmarked)"
+        )
+
+        // Batch of seven: pool of twelve is below fourteen, damping off — the
+        // two cards are indistinguishable again. If the size never reached
+        // the weighting, this run would look exactly like the one above.
+        let undamped = draws(batchSize: 7, seed: 7)
+        #expect(
+            undamped.marked > undamped.unmarked * 3 / 4,
+            "marked \(undamped.marked) vs unmarked \(undamped.unmarked) — expected no damping"
+        )
     }
 
     @Test("The damping switches on exactly at two batches' worth of cards")
@@ -173,7 +226,7 @@ struct BatchSelectorTests {
 
         // At the threshold: the damping is on, so the marked card — same
         // status, same everything else — is drawn clearly less often.
-        let atThreshold = draws(poolSize: LearningParameters.minimumPoolSizeForRecency, seed: 99)
+        let atThreshold = draws(poolSize: LearningParameters.minimumPoolSizeForRecency(), seed: 99)
         #expect(
             atThreshold.marked < atThreshold.unmarked * 3 / 4,
             "damped \(atThreshold.marked) vs undamped \(atThreshold.unmarked)"
@@ -182,7 +235,7 @@ struct BatchSelectorTests {
         // One card below it: the damping is off (§3.2), so both cards behave
         // the same. Same weights mean the same expectation, so anything close
         // is fine and a disabled-by-mistake damping still shows up above.
-        let belowThreshold = draws(poolSize: LearningParameters.minimumPoolSizeForRecency - 1, seed: 99)
+        let belowThreshold = draws(poolSize: LearningParameters.minimumPoolSizeForRecency() - 1, seed: 99)
         #expect(
             belowThreshold.marked > belowThreshold.unmarked * 3 / 4,
             "below the threshold nothing is damped: \(belowThreshold.marked) vs \(belowThreshold.unmarked)"
