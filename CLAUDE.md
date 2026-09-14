@@ -6,8 +6,8 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phasen 0–11 implementiert.** Stand des Gates: **580
-Testfunktionen / 641 Einzelausführungen grün** — parametrisierte Tests machen
+**Aktueller Stand: Phasen 0–12 implementiert.** Stand des Gates: **603
+Testfunktionen / 664 Einzelausführungen grün** — parametrisierte Tests machen
 daraus zwei Zahlen, also immer mit Einheit nennen —, 0 fehlgeschlagen, 0
 Compilerwarnungen auf einem Debug-Build von null, Release-Build von null
 ebenso, dazu zwei unabhängige Code Reviews, zwei Testaudits und zehn
@@ -34,8 +34,18 @@ Mismatch senkt nie etwas, ein einzelner Treffer trägt nichts, die eigene
 Bewertung gewinnt immer. Regel und die drei als Produktentscheidung
 gekennzeichneten Parameter: [learning-engine.md §12](docs/learning-engine.md).
 
-**Nächster Schritt: Phase 12 — Hands-free Speech Sessions.** Das Phase-Gate
-gilt unverändert für Tests, Builds, Review, Testaudit und Gegenmutationen.
+Seit Phase 12 gibt es den **Session-Sprachmodus**: Ein Mikrofon-Tap armiert
+ihn, danach startet die Aufnahme auf jeder neuen Karte von selbst — **beendet
+wird sie weiterhin per Tap.** Kein eigenes Endpointing, und das ist gemessen
+statt vermutet (Q11): `SpeechDetector` liefert auf iOS 26.6 nichts, `isFinal`
+kommt Sekunden zu spät. Genau **ein** automatischer Versuch pro Karte, sonst
+entstünde nach „Nichts erkannt" eine Schleife. Sprachausgabe, Hintergrund,
+Unterbrechung, technischer Fehler und Sessionende entwaffnen den Modus; ein
+Neustart braucht immer einen Tap. Regeln in
+`CApp/Features/Learn/SessionSpeechMode.swift`, Entscheidungen A37 bis A39.
+
+**Nächster Schritt: die finale Geräte- und Release-Abnahme** am Ende der
+Roadmap. Alle Implementierungsphasen sind durch.
 
 Die Kette `Deutsch → Hanzi → Pinyin` läuft mit Return oder beim Verlassen des
 Feldes automatisch, beide Werte bleiben editierbar, und ein von Hand gesetzter

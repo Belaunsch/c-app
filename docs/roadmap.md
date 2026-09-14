@@ -2210,29 +2210,70 @@ dieser Phase; die vollständige Abnahme steht am Ende der Roadmap.
 
 ---
 
-## Phase 12 — Hands-free Speech Sessions
+## Phase 12 — Session-Sprachmodus
+
+### Umbenannt am 2026-09-14, und warum
+
+Diese Phase hieß **„Hands-free Speech Sessions"**. Der Name ist für den
+umgesetzten Umfang irreführend: Zum Beenden einer Antwort ist weiterhin ein
+Tap nötig, und was einen Tap braucht, heißt nicht freihändig.
+
+**Ursprünglich vorgesehen war automatisches Endpointing** — die App sollte
+selbst erkennen, wann der Lernende aufgehört hat zu sprechen, und die Aufnahme
+von sich aus abschließen. Genau dafür wurde vor dem Produktcode gemessen
+(Q11 in [apple-frameworks.md](apple-frameworks.md), Gerätespike am
+2026-09-14 auf dem iPhone 16 Pro, iOS 26.6):
+
+- **`SpeechDetector`** existiert seit iOS 26.0 als öffentliche VAD-API, lieferte
+  aber mit `reportResults: true` über 45 Sekunden mit vier echten Äußerungen
+  **null Ergebnisse und keinen Fehler**.
+- **`SpeechTranscriber.isFinal`** stellte seine Ergebnisse **3,9 bis 6,6
+  Sekunden** nach dem Ende des abgedeckten Audios zu — als Endpoint unbrauchbar,
+  und nicht knapp.
+- **Eigene Audioenergie** trennt Sprachspitzen grundsätzlich vom Grundrauschen
+  (Faktor 10 bis 30), aber nicht auf Einzelmesspunktbasis: Leise Stellen echter
+  Äußerungen liegen auf Stilleniveau, und ein Störimpuls erreichte Sprachpegel.
+
+**Produktentscheidung daraus:** Der Umfang für die private v1 wird auf
+**Auto-Start plus manuelles Ende** reduziert. Eine belastbare eigene Regel
+bräuchte mindestens Schwelle, Hysterese, Mindestsprechdauer und Stillezeit —
+alles abgeleitet aus **einem** Durchlauf in **einem** ruhigen Raum. Ein falsches
+Endpointing, das mitten im Wort abschneidet oder ewig wartet, schadet mehr als
+ein zusätzlicher Tap.
+
+**Das ist keine Aussage darüber, dass automatische VAD unmöglich wäre** —
+sondern darüber, was auf dieser iOS-Version auf diesem Gerät gemessen wurde.
+Echtes Endpointing steht im Backlog.
 
 ### Ziel
 
 Spracherkennung soll während einer Lernsession nicht für **jede einzelne
 Karte** erneut manuell gestartet werden müssen. Ein Tap auf „Antwort
-sprechen" kann einen **Session-Sprachmodus** aktivieren:
+sprechen" aktiviert einen **Session-Sprachmodus**:
 
 ```text
 neue unrevealed Karte
-  → Aufnahme automatisch starten
+  → Aufnahme startet automatisch
   → Nutzer spricht
+  → Nutzer beendet die Aufnahme mit einem Tap
   → Erkennung, finaler Text
-  → Reveal und Auswertung
+  → bestehender Phase-9-Vergleich
+  → bestehender Phase-11-Bewertungspfad
   → nächste Karte
-  → Aufnahme automatisch wieder starten
+  → Aufnahme startet automatisch
 ```
+
+**Der Modus entscheidet nicht, wann der Lernende fertig ist.** Es gibt kein
+Silence-Endpointing und keinen Timeout als Ersatz dafür — gespart wird der
+Tap zum *Starten*, nicht der zum Beenden.
 
 ### Was das ausdrücklich nicht ist
 
 **Kein dauerhaftes, ununterbrochenes Recording.** Die App hält einen
-*Sessionmodus* aktiv und startet und stoppt die eigentliche Mikrofonaufnahme
-passend zum Karten-Lebenszyklus.
+*Sessionmodus* aktiv und startet die eigentliche Mikrofonaufnahme passend zum
+Karten-Lebenszyklus; beendet wird sie vom Lernenden.
+
+**Und ausdrücklich nicht freihändig.** Siehe die Umbenennung oben.
 
 Die Aufnahme pausiert oder endet bei:
 
@@ -2257,15 +2298,110 @@ mitschneidet, nähme die Entscheidung darüber weg.
 Ebenfalls ausgeschlossen: **keine Aufnahme im Hintergrund**, **keine
 Speicherung von Roh-Audio**.
 
-### Offen, erst in Phase 12 über Apple-APIs zu klären
+### Geklärt am 2026-09-14, vor dem Produktcode
+
+Die vier offenen Punkte dieser Phase lauteten:
 
 - zuverlässige Erkennung des **Äußerungsendes** (Endpointing)
 - ob `SpeechAnalyzer` dafür eine ausreichende Finalisierung liefert oder eine
   zusätzliche Silence-Regel nötig ist
-- UX bei „Nichts erkannt" im Hands-free-Modus
-- Retry-Verhalten im Hands-free-Modus
+- UX bei „Nichts erkannt"
+- Retry-Verhalten
 
-Wie in Phase 9 gilt: erst Spike und Dokumentation, dann Produktcode.
+**Die ersten beiden sind gemessen und beantwortet** (Q11): kein verwertbares
+Apple-Signal, und eine eigene Regel wäre unkalibriert. Daraus folgte der
+reduzierte Scope oben — das Endpointing entfällt, also entfällt auch die
+Frage nach der Silence-Regel.
+
+**Die letzten beiden sind damit entschieden:**
+
+- **„Nichts erkannt"** zeigt den bestehenden Zustand aus Phase 9. Auf
+  derselben Karte startet **keine** neue Aufnahme von selbst — sonst entstünde
+  genau die Schleife aus Aufnehmen, Nichts, Aufnehmen. Der Modus bleibt aktiv,
+  ein erneuter Versuch auf derselben Karte braucht einen Mikrofon-Tap.
+- **Retry** ist damit immer ausdrücklich. Nach einer Bewertung und dem
+  Kartenwechsel startet die nächste Karte wieder von selbst.
+
+Wie in Phase 9 gilt: erst Spike und Dokumentation, dann Produktcode — und
+diesmal hat der Spike den Umfang verändert.
+
+### Akzeptanzkriterien
+
+Formuliert am 2026-09-14 zu Beginn der Umsetzung — die Phase hatte bis dahin
+keine, weil sie als Skizze geschrieben war.
+
+- [x] Ein Mikrofon-Tap in Modus A armiert den Sprachmodus **und** startet die
+      Aufnahme der aktuellen Karte.
+- [x] Eine laufende Aufnahme wird vom Lernenden beendet; das Bedienelement
+      sagt das („Aufnahme beenden").
+- [x] Auf einer neuen unaufgedeckten Karte startet die Aufnahme von selbst,
+      solange der Modus aktiv ist — **genau einmal** pro Karte.
+- [x] Nach „Nichts erkannt" startet auf derselben Karte **keine** weitere
+      Aufnahme von selbst; ein erneuter Versuch braucht einen Tap.
+- [x] Während die Selbsteinschätzung auf eine Entscheidung wartet, läuft keine
+      Aufnahme.
+- [x] Eine Karte, die nach „Nochmal" unmittelbar wiederkommt, bekommt wieder
+      eine Aufnahme.
+- [x] Sprachausgabe, Hintergrund, Audio-Unterbrechung, technischer Fehler,
+      dauerhaft nicht verfügbare Erkennung und Sessionende **deaktivieren** den
+      Modus; danach gibt es keinen automatischen Neustart.
+- [x] Manuelles Aufdecken bricht eine laufende Aufnahme ab, der Modus bleibt
+      aktiv, und `wasManualReveal` erreicht den Phase-11-Pfad korrekt.
+- [x] Es entsteht **kein** eigenes Endpointing: kein RMS, keine
+      Noise-Floor-Kalibrierung, kein Silence-Timer, kein Timeout als Ersatz,
+      kein `SpeechDetector`-Polling.
+- [x] Keine neue Speech- oder Lernsemantik: kein Fuzzy Matching, keine
+      Konfidenz, kein Score, `CApp/Learning/` und `ReviewLog` unverändert.
+- [x] Modus B ist unverändert; Modus A bei ausgeschaltetem Sprachmodus
+      verhält sich wie in Phase 11.
+- [x] Nie zwei Aufnahmen gleichzeitig, und kein Aufnahmezustand überlebt einen
+      Kartenwechsel.
+
+### Stand am 2026-09-14 — implementiert
+
+**603 Testfunktionen / 664 Einzelausführungen grün, 0 übersprungen**,
+Debug-Build von null und Release-Build von null mit 0 Compilerdiagnosen. Ein
+unabhängiges Code Review und ein unabhängiges Testaudit sind abgearbeitet.
+
+**Was die beiden Prüfungen gefunden haben — zwei davon waren echte Fehler:**
+
+- **Doppelstart auf dem Auto-Advance-Pfad.** `stopRecording` startete nach der
+  Auswertung selbst eine Aufnahme, und der Kartenwechsel-Beobachter tat es noch
+  einmal. `SpeechRecognitionService.startRecording()` setzt `phase = .recording`
+  erst nach mehreren `await`, also kamen beide Aufrufe durch den Eingangsguard —
+  zwei Mikrofonpfade gleichzeitig, oder ein erkannter Text, der stillschweigend
+  verfiel. Behoben: **ein** Auslöser pro Kartenübergang.
+- **Abbruch im Startfenster wirkte nicht.** `cancelRecording()` kehrt sofort
+  zurück, solange noch keine Engine steht. Eine im Startfenster abgebrochene
+  Aufnahme lief danach trotzdem an, gehörte keiner Karte und ihr Text wurde
+  verworfen. Behoben über einen Generationszähler nach dem Muster, das der
+  Service intern schon benutzt.
+- **Wiedereinstreuung übersehen.** „Nochmal" auf der **letzten** Karte eines
+  Batches legt dieselbe Karte zurück auf Position 0 — die Karten-ID ändert sich
+  nicht, ein reiner ID-Beobachter verpasst das, und der Modus hätte still
+  geschwiegen. Behoben über einen zusammengesetzten Schlüssel.
+- **`.inactive` galt als Hintergrund.** Damit hätte der Mikrofon-Berechtigungs-
+  dialog beim allerersten Tap den eigenen Versuch abgebrochen. Jetzt zählt nur
+  `.background`, was auch dem Wortlaut der Roadmap entspricht.
+- **Ein Test bewies nichts:** Er verglich zwei unabhängige UUIDs und war damit
+  ein verkapptes Duplikat. Ersetzt durch echte Sequenztests über
+  `SessionSpeechState`.
+- Dazu: ein toter `.task`-Aufruf entfernt, ein nie ausgelöster Ereignisfall
+  gestrichen, ein Modus-B-Guard am Sprachausgabe-Beobachter ergänzt, und
+  dauerhaft nicht verfügbare Erkennung entwaffnet den Modus jetzt statt ihn
+  in einer Senke stehen zu lassen.
+
+**Gegenmutationen: zehn ausgeführt, alle greifen** — Schleifenschutz,
+`isRevealed`-Guard, Richtungs-Guard, TTS entwaffnet nicht mehr,
+`.noSpeechDetected` gilt als startbereit, Reveal bricht nicht ab,
+Wiedereinstreuung öffnet keinen Versuch, Marker wird nie zurückgesetzt, Tap
+armiert nicht, dauerhaft Unmögliches entwaffnet nicht.
+
+**Offen und benannt:** Der Auto-Start ist hardwareabhängig und im Simulator
+nicht auslösbar. Die reale Bedienung — Auto-Start beim Kartenwechsel, der
+Berechtigungsdialog beim ersten Tap, Unterbrechung durch einen Anruf — gehört
+in die [finale Geräte- und Release-Abnahme](#finale-geräte--und-release-abnahme)
+und ist dort Teil des Abschnitts zum Audio-Lebenszyklus.
 
 ### Abhängigkeiten
 
@@ -2435,6 +2571,14 @@ wird vor Abschluss von Phase 10 begonnen.
 - Fortschritt je Tag
 
 **Sprache**
+- **Automatisches Speech-Endpointing / kalibrierte VAD.** In Phase 12 gemessen
+  und zurückgestellt (Q11): `SpeechDetector` lieferte auf iOS 26.6 keine
+  Ergebnisse, `isFinal` kam 3,9–6,6 s zu spät, und eine eigene Energieregel
+  wäre aus einem einzigen ruhigen Setting geraten. Wieder aufnehmen, sobald
+  **entweder** eine funktionierende System-API vorliegt — etwa wenn Apple
+  `SpeechDetector.speechDetected` tatsächlich befüllt — **oder** genug reale
+  Messdaten aus verschiedenen Umgebungen existieren, um Schwelle, Hysterese
+  und Stillezeit zu kalibrieren statt zu raten.
 - Echte Aussprachebewertung inklusive Tonanalyse
 - Phonetischer Ähnlichkeitsvergleich statt exaktem Textvergleich
 

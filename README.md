@@ -6,7 +6,7 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 11 implementiert. Finale Roadmap-Abnahme: ausstehend.**
+**Phasen 0 bis 12 implementiert. Finale Roadmap-Abnahme: ausstehend.**
 
 Die Implementierung von v1 steht: Tests grün, Debug- und Release-Build sauber,
 zwei unabhängige Code Reviews und zwei Testaudits abgearbeitet. Physische
@@ -31,7 +31,7 @@ Kartenverwaltung: Wörter und Sätze getrennt, Karten anlegen, bearbeiten und
 löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
 Lernstatus, Kategorien umbenennen und löschen.
 
-Build und Unit-Tests laufen grün: **580 Testfunktionen / 641 Einzelausführungen,
+Build und Unit-Tests laufen grün: **603 Testfunktionen / 664 Einzelausführungen,
 0 Fehlschläge, 0 Compilerwarnungen** auf einem Debug-Build von null (iPhone-17-Simulator, iOS
 26.5), Release-Build von null ebenso. Jede Phase ist zusätzlich auf einem
 echten iPhone belegt worden — zuletzt am **2026-09-12** und **2026-09-13** —,
@@ -124,9 +124,6 @@ Alert, einen sichtbaren Zustand oder mindestens einen Logeintrag mit
 Begründung, warum der Nutzer davon nichts erfahren muss. Die Matrix dazu steht
 in [docs/architecture.md §7](docs/architecture.md#7-fehlerbehandlung).
 
-Noch nicht vorhanden: automatische Statusvorschläge aus der Review-Historie
-und ein freihändiger Sprachmodus — beides ist als Phase 11 und 12 in der
-Roadmap vorgezeichnet.
 
 Neu aus Phase 4.5: Das Pinyin kommt nicht mehr aus reiner Transliteration,
 sondern aus einem gebündelten Lexikon — daher die neutralen Töne (`xièxie`,
@@ -167,8 +164,19 @@ die eigene Bewertung gewinnt immer. Die Historie ist die erste
 Schemaerweiterung seit Phase 1 — dass sie verlustfrei migriert, ist an einem
 echten Store gemessen (Q7).
 
-Nächster Schritt: **Phase 12 — Hands-free Speech Sessions**. Die finale
-Geräte- und Release-Abnahme folgt am Ende, auf dem dann fertigen Produkt.
+Neu aus Phase 12: **Session-Sprachmodus.** Ein Tap aufs Mikrofon schaltet ihn
+ein; danach startet die Aufnahme auf jeder neuen Karte von selbst. **Beendet
+wird sie weiterhin per Tap** — und das ist eine Entscheidung aus einer Messung,
+keine Bequemlichkeit: Auf iOS 26.6 liefert Apples `SpeechDetector` trotz echter
+Sprache keine Ergebnisse, und `isFinal` kommt 3,9 bis 6,6 Sekunden zu spät. Eine
+eigene Stille-Regel hätte vier geratene Parameter gebraucht, und ein Endpointing,
+das mitten im Wort abschneidet, schadet mehr als ein Tap. Die Phase hieß deshalb
+ursprünglich „Hands-free" und heißt jetzt nicht mehr so. Sprachausgabe,
+Hintergrund, Unterbrechung, Fehler und Sessionende schalten den Modus ab; ein
+leerer Versuch startet auf derselben Karte nichts Neues.
+
+Nächster Schritt: die **finale Geräte- und Release-Abnahme** auf dem fertigen
+Produkt.
 
 ## Drittanbieter-Daten
 

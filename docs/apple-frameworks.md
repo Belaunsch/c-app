@@ -442,6 +442,14 @@ konvertiert ausdrücklich nicht — die Konvertierung ist also Pflicht, nicht
 Optimierung. Die Zahlen gehören trotzdem **nicht** als Konstanten in den Code:
 Apple dokumentiert sie nirgends, sie sind je Gerät und Locale zu erfragen.
 
+**Falle bei künftigen Recherchen (2026-09-14):** Apples **Live-Doku-Seite** zu
+`SpeechAnalyzer` zeigt inzwischen **iOS-27-Beispielcode** — ihr Codebeispiel
+benutzt `AnalyzerInputConverter`, der Abschnitt „Analyze audio from files or
+capture devices" benutzt `CaptureInputSequenceProvider`. Beide sind iOS 27 und
+im SDK 26.5 nicht vorhanden (nachgesehen: null Treffer im `swiftinterface`).
+**Verbindlich ist allein `metadata.platforms[].introducedAt` pro Symbol**,
+niemals die Prosa und niemals ein Beispiel.
+
 ### Q4 — geklärt am 2026-09-11
 
 ```text
@@ -651,12 +659,150 @@ Belegte Eigenheiten, die den Entwurf bestimmen:
   dokumentiert Apple **nicht**.
 - **Ergebnisse:** Vorläufige sind opt-in über
   `SpeechTranscriber.ReportingOption.volatileResults`; unterschieden wird über
-  `SpeechModuleResult.isFinal`. Der Text ist **`AttributedString`**, nicht
+  `SpeechModuleResult.isFinal`. **`isFinal` ist ein Finalisierungs-, kein
+  Endpointing-Marker** — Apple definiert es als „Equivalent to
+  `resultsFinalizationTime >= range.end`", also „dieser Text wird nicht mehr
+  revidiert" und **nicht** „die Äußerung ist zu Ende". Mit dem hier benutzten
+  Preset `.transcription` sind ohnehin **alle** Ergebnisse final; die Klausel
+  `where result.isFinal` filtert dort nichts weg und steht als Absicherung
+  gegen eine spätere Preset-Änderung. Folgen für einen Session-Sprachmodus unter
+  Q11. Der Text ist **`AttributedString`**, nicht
   `String` — für die Normalisierung gilt `String(result.text.characters)`.
   **Für Regel 7 entscheidend:** Der Textvergleich läuft ausschließlich auf
   `isFinal == true`. Und `ConfidenceAttribute` wird **nicht** angefasst — eine
   Konfidenz anzuzeigen oder zu verrechnen wäre genau die Aussprachebewertung,
   die Regel 7 verbietet.
+
+### 7.1 Endpointing — Messung vom 2026-09-14 (Q11)
+
+Für einen Session-Sprachmodus (Phase 12) muss die App erkennen, **wann der
+Lernende aufgehört hat zu sprechen**. Gemessen auf dem iPhone 16 Pro,
+iOS 26.6, ein Fenster über 45 Sekunden, in dem viermal chinesisch gesprochen
+wurde, mit Pausen dazwischen. Drei Ebenen werden hier getrennt gehalten: was
+Apple dokumentiert, was das Gerät gezeigt hat, und was daraus folgt.
+
+**Ein methodischer Hinweis vorweg, weil er einen ersten Lauf gekostet hat:**
+Ein Durchlauf ohne Sprache belegt **nichts** über einen Sprachdetektor. Der
+erste Versuch lief versehentlich stumm; er wurde verworfen und ist hier nicht
+ausgewertet. Sein einziger verwertbarer Nebenbefund steht unten.
+
+#### Was Apple dokumentiert
+
+- `SpeechDetector` ist seit **iOS 26.0** öffentlich: „A module that performs a
+  voice activity detection (VAD) analysis", nutzbar nur zusammen mit einem
+  Transcriber im selben Analyzer, drei Empfindlichkeitsstufen, `medium`
+  empfohlen. Verfügbarkeit im lokalen SDK 26.5 selbst nachgesehen.
+- **Apple widerspricht sich zur entscheidenden Frage.**
+  `init(detectionOptions:reportResults:)` beschreibt `reportResults` als
+  „Enables the results sequence to report the **VAD model's results**",
+  `init()` spricht von „moment-to-moment results" — `SpeechDetector.Result`
+  sagt dagegen „currently only support **error handling** from the VAD
+  model", und die Abstract von `speechDetected` ist **leer**.
+- `isFinal` heißt „Equivalent to `resultsFinalizationTime >= range.end`" —
+  „dieser Text wird nicht mehr revidiert", **nicht** „die Äußerung ist zu
+  Ende". Was im Live-Stream eine Phrasengrenze auslöst, steht nirgends.
+
+#### Was das Gerät gezeigt hat
+
+**`SpeechDetector`: null Ergebnisse, kein Fehler.** Über 45 Sekunden mit vier
+Äußerungen lief der Ergebnisstrom leer aus. Das ist die Antwort auf Q11, und
+sie ist eindeutig — es lag nicht an fehlender Sprache, denn derselbe Ton
+erzeugte im selben Lauf vier Transkripte.
+
+**Der Transcriber liefert viel zu spät.** Der Verzug ist die Differenz zwischen
+Zustellzeit (Wanduhr ab Aufnahmebeginn) und `range.end` (Ende des abgedeckten
+Audios auf derselben Zeitachse) — also unabhängig davon, wann im Fenster
+gesprochen wurde:
+
+| Audiobereich | zugestellt bei | Verzug | Text |
+| --- | --- | --- | --- |
+| 6,45…8,07 s | 12,00 s | **3,93 s** | `你好。` |
+| 9,70…16,90 s | 23,45 s | **6,55 s** | ` Hello test test 你好` |
+| 16,90…18,22 s | 23,47 s | **5,25 s** | `谢谢` |
+| 28,95…31,05 s | 34,93 s | **3,88 s** | `我是 Philip` |
+
+**3,9 s bis 6,6 s** — das Ziel „unter 2 s" wird nicht knapp verfehlt, sondern
+um das Doppelte bis Dreifache. Ergebnisse zwei und drei kamen außerdem
+**gemeinsam** an (23,45 und 23,47 s), also in einem Schub statt einzeln.
+
+**Die Zwei-Modul-Konfiguration wäre kostenlos gewesen** — daran scheitert es
+ausdrücklich nicht:
+
+| | `[transcriber]` | `[transcriber, detector]` |
+| --- | --- | --- |
+| `AssetInventory.status` | `installed` | `installed` |
+| `bestAvailableAudioFormat` | `1 ch, 16000 Hz, Int16` | identisch |
+
+Mikrofoneingang: `1 ch, 48000 Hz, Float32` — die Konvertierung bleibt nötig.
+
+#### Die eigene Energie, im selben Lauf mitgemessen
+
+151 Messpunkte im Abstand von 0,25 s, RMS über die Frames, die der bestehende
+`installTap` ohnehin liefert. Zuordnung zu „Sprache" über die Audiobereiche
+der Transkripte oben:
+
+| | n | Median | p90 | Maximum |
+| --- | --- | --- | --- | --- |
+| Stille | 104 | **0,00036** | 0,00053 | **0,00477** |
+| Sprache | 47 | 0,00051 | 0,00633 | **0,01124** |
+
+**Was das sagt — und was nicht.** Sprachspitzen liegen mit 0,003 bis 0,011
+**zehn- bis dreißigfach** über dem Grundrauschen von rund 0,00036. Eine
+Schwelle dazwischen trennt beides sauber. **Aber der Median der Sprachfenster
+liegt bei 0,00051 und damit praktisch auf dem p90 der Stille** — in einer
+Äußerung ist die Mehrzahl der Viertelsekunden leise, weil zwischen Silben
+Pausen liegen. Eine Regel, die auf *einzelne* Messpunkte schaut, fällt darauf
+herein. Und der Stille-Maximalwert von 0,00477 zeigt, dass ein einzelner
+Störimpuls die Größenordnung von Sprache erreicht.
+
+Beides zusammen heißt: Eine brauchbare Regel braucht **Hysterese und Dauer**,
+nicht eine Schwelle. Konkret: Sprachbeginn erst nach mehreren Überschreitungen
+in Folge, Sprachende erst nach einer zusammenhängenden Stillezeit — die Länge
+dieser Zeit ist der Parameter, der über „schneidet ab" gegen „wartet ewig"
+entscheidet, und er ist aus keiner Apple-Quelle ableitbar.
+
+#### Nebenbefund aus dem verworfenen stummen Lauf
+
+Im Lauf ohne Sprache erzeugte der Transcriber aus Umgebungsgeräusch das
+Transkript `哎那`. Das ist kein Endpointing-Befund, gehört aber zu der in
+Phase 9 gemessenen Empfindlichkeit: **Der Erkenner liefert auch Text, wo
+niemand gesprochen hat.** Für einen Session-Sprachmodus, der eine Aufnahme selbst
+startet, ist das relevanter als für den manuellen Pfad — eine automatisch
+gestartete Aufnahme in einem lauten Raum kann ein Transkript erzeugen, das
+niemand gesprochen hat. Die Phase-11-Regel fängt das teilweise ab, weil ein
+einzelner Treffer nichts trägt; ausgeschlossen ist es nicht.
+
+#### Was daraus folgte — entschieden und umgesetzt
+
+Das Endpointing kann sich auf **kein** Apple-Signal stützen. Es bleiben zwei
+Wege, und die Wahl zwischen ihnen ist eine Produktentscheidung:
+
+**Weg A — eigene Energieregel.** Machbar, im selben Lauf belegt, aber mit vier
+Parametern, die **sämtlich Produktentscheidungen** wären und aus keiner
+Dokumentation folgen: Energieschwelle, Mindestdauer über der Schwelle für
+„spricht", zusammenhängende Stillezeit für „fertig", und eine Höchstdauer als
+Reißleine. Handwerklich dazu: in Sekunden rechnen, nie in Callbacks (Apple:
+„The implementation may choose another size" für `bufferSize`); der Tap läuft
+**nicht** auf dem Main-Thread; `floatChannelData` kann `nil` sein, wenn das
+Format nicht Float32 ist. Ausschließlich Sprache-gegen-Stille — **keine**
+Qualitäts-, Ton- oder Ausspracheaussage (harte Regel 7), und nichts davon wird
+je angezeigt. Offene Grenze bleibt das Umgebungsgeräusch: Die Messung stammt
+aus einem ruhigen Raum, und der Stille-Ausreißer von 0,00477 zeigt, wie schnell
+das kippt.
+
+**Weg B — Session-Sprachmodus ohne Endpointing.** Die Aufnahme **startet** automatisch
+pro Karte, der Lernende **beendet** sie weiterhin selbst mit einem Tap. Das
+ist weniger als die Roadmap skizziert und spart pro Karte einen statt zwei
+Taps — kostet dafür keine erfundene Heuristik, keine vier unkalibrierten
+Parameter und kein Verhalten, das in einem lauten Raum umkippt.
+
+**Entschieden am 2026-09-14: Weg B**, umgesetzt in Phase 12
+([roadmap.md](roadmap.md)). Weg A ist belegt machbar, aber vier geratene
+Parameter aus einem einzigen ruhigen Raum wären in einem Projekt, das sonst
+jede Zahl belegt, ein Fremdkörper — und ein Endpointing, das mitten im Wort
+abschneidet, schadet mehr als ein zusätzlicher Tap. Weg A liegt als
+Backlog-Eintrag „Automatisches Speech-Endpointing / kalibrierte VAD" bereit,
+mit der Bedingung, wann er wieder aufgenommen werden kann.
 
 ### Bewertung der Antwort (bewusst einfach gehalten)
 
@@ -767,6 +913,7 @@ Berechtigungsdialog wäre ein Rückschritt.
 | Q8 | Muss `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` für `Learning/` abgeschaltet werden? **In Phase 5 entschieden: nein — Variante A, der MainActor-Default bleibt.** Gemessen mit zwei Compile-Spikes auf Kopien des Repositories, jeweils zusätzlich mit `SWIFT_STRICT_CONCURRENCY=complete`, weil erst das die Swift-6-Tauglichkeit zeigt (das Target fährt `SWIFT_VERSION = 5.0`): **Variante A** (Ist-Zustand, `Learning/` mit explizitem `nonisolated`): 0 Fehler, 0 Warnungen mit den echten Projekteinstellungen; unter `complete` 0 Fehler und 4 Warnungen, alle **vorbestehend** und keine davon in `Learning/` — dreimal das Translation-Framework (`TranslationService.swift:7` und `:104`, `CardEditorModel.swift:342`) und einmal `AppError.swift:38`, das `TagNormalization.maximumLength` aus nonisolated Kontext liest. **Variante B** (`SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated` fürs Target): zuerst 1 Fehler in `PinyinService.pinyin(for:)`, das ohne den Default-Actor das explizit `@MainActor` markierte `resolution(for:)` nicht mehr aufrufen darf. Dieser eine Fehler bricht den Build ab, verdeckt also den Rest; nach der minimalen Anpassung (ein `@MainActor` an `pinyin(for:)`) sind es **3 Fehler und 3 Warnungen**. Die drei Fehler liegen in `CardEditorModel` und `PinyinService` und betreffen Zugriffe auf `ChineseLexicon.shared`, `ChineseLexicon.prepare()` und `PinyinService.resolution(for:)` — also genau die Stellen mit veränderlichem Zustand. Mehr als diese 3 Fehler in 2 Dateien ist nicht gemessen; der Build stoppt danach wieder, weitere Folgekosten sind also plausibel, aber unbelegt. Belegt ist die Richtung: Variante B nimmt die automatische Isolation genau dort weg, wo geteilter veränderlicher Zustand liegt, und verlangt sie dort per Annotation zurück. **Konsequenz:** `project.pbxproj` bleibt unverändert. Reine Typen tragen einzeln `nonisolated` — `CardType` und `LearningStatus` seit Phase 1, `PinyinTone` und `CardFilterSelection` seit Phase 4.5, alle neun Dateien in `Learning/` seit Phase 5. Das ist zugleich Dokumentation: Wer `nonisolated` liest, weiß, dass der Typ ohne Actor auskommt. Die vier vorbestehenden `complete`-Warnungen sind notiert, aber kein Phase-5-Thema — sie liegen in `Services/`, `Support/` und `Features/Cards/`, nicht in `Learning/`. | **Geschlossen** | entfällt |
 | Q9 | **In Phase 3 gelöst.** Wie unterscheidet der Karten-Editor einen **von der Automatik** erzeugten Wert von einem getippten? `CardEditorModel.manualEditFlag` vergleicht gegen den gespeicherten Wert; bei einer **neuen** Karte ist der leer, also gilt jeder Wert als manuell. Füllt in Phase 3 die Pinyin-Erzeugung das Feld einer neuen Karte, wird der Merker fälschlich `true` gesetzt, und Task 3.5 („nur vorschlagen, wenn Feld leer oder Merker false") greift danach nie mehr. | erledigt in Phase 3 | **Umgesetzt:** `CardEditorModel` führt `hanziBaseline` und `pinyinBaseline` mit — den letzten **abgeglichenen** Wert, also was die App selbst ins Feld geschrieben hat (beim Laden oder aus der Automatik) oder was der Nutzer beim letzten Editier-Ende darin stehen hatte. Daraus ergeben sich die Merker `hanziIsManual`/`pinyinIsManual`, live geführt statt beim Speichern aus dem gespeicherten Wert abgeleitet. Ein generierter Wert gilt damit nie als manuell, auch nicht auf einer neuen Karte. Ergänzt in Phase 4: Zusätzlich wird mit `pinyinSourceHanzi` mitgeführt, **aus welchem Hanzi** das automatische Pinyin erzeugt wurde. Das beantwortet zwei Fälle, die der Manuell-Merker nicht beantworten kann — ein vom Nutzer geleertes Pinyin (ein leerer Wert setzt den Merker naturgemäß auf `false`) und ein Pinyin, das nach einer abgebrochenen Übersetzung zum alten Wort gehört. Begründung in [architecture.md A19](architecture.md#10-zusammenfassung-der-architekturentscheidungen). |
 | Q10 | Wie gut ist die **gesprochene** Form, also die Lernaussprache statt der Wörterbuchlesung? **In Phase 6.5 gemessen.** Golden Corpus mit **372 Fällen** in elf Kategorien, Sollwerte aus GB/T 16159-2012, 北京语言大学s 现代汉语 und CC-CEDICT — nicht aus der Implementierung. Ergebnis nach dem Accuracy Pass: **343 von 347** Fällen mit Aussprache-Erwartung exakt getroffen, **98,8 %**, dazu 0 Abweichungen bei den festgenagelten Wortgrenzen und 0 falsch gesetzte Prüfhinweise. Der Prozentwert gilt für **genau diesen Corpus** und ist keine Aussage über beliebigen Text. Angewandt werden drei obligatorische Regeln: dritter Ton vor drittem Ton innerhalb einer Lexikoneinheit und dort zyklisch je Konstituente (`你好`→`níhǎo`, `展览馆`→`zhánlánguǎn` als 双单格, `小老鼠`→`xiǎoláoshǔ` als 单双格), `一` vor viertem Ton → `yí` und vor erstem/zweitem/drittem → `yì` (`一下`→`yíxià`, `一点`→`yìdiǎn`), `不` vor viertem Ton → `bú` (`不对`→`búduì`). Ausnahmen strukturell erkannt statt per Wortliste: Ordnungszahl nach `第`, `一` als Ziffer in einer Zahl, Ziffernfolge, Eigenname (CC-CEDICTs Großschreibung ist das Signal — 18.957 Einträge), Reduplikation zwischen zwei gleichen Zeichen. Lexikalischer Neutralton hat immer Vorrang: `对不起` bleibt `duìbuqǐ`, `看不见` bleibt `kànbujiàn`. **Vier Restfehler nach dem Accuracy Pass, alle Klasse Datenlücke.** Vorher waren es sechs: drei sind algorithmisch behoben (`一个` und seine zwei Satzvorkommen — `PinyinSyllable` unterscheidet jetzt `lexicalTone` von `underlyingTone`, und `cedict-base-tones.txt` belegt den Grundton reduzierter Silben aus dem schon gebündelten Asset). `不看` hatte ich aus dem Messsatz genommen, weil mir eine Aussprache **und** ein Prüfhinweis für denselben Fall widersprüchlich schien; das Review hat es zurückgeholt, denn die Konjunktion ist der informativste Fall — unsicher und falsch. Die vier verbleibenden: (1) `一号` müsste `yīhào` sein — belegt: `一月一号` ist `yī yuè yī hào`, als Ordnungs- und Datumsangabe behält `一` den Grundton. Ob ein `一` zählt oder benennt, ist semantisch; CC-CEDICT trägt die Klassifikator-Markierung in den englischen Glossen, die das Asset verworfen hat. Konkreter Vorschlag für eine spätere Phase: Klassifikator-Kennzeichnung ins Asset, dann ist die ganze Ordnungszahl-Klasse lösbar. (2) `千禧一代`: CC-CEDICT schreibt `Yi1` groß, obwohl es kein Eigenname ist; den Guard zu streichen wäre schlechter, dann käme in jedes `不列颠`-Kompositum ein falsches `bú`. (3) `不看`: `看` ist mehrdeutig, kommt tonlos bei der Regel an und kann sie nicht auslösen; der Prüfhinweis ist korrekt, die Aussprache trotzdem falsch, weil `看` hier determiniert `kàn` ist. (4) `水果酒`: **nicht** die Domänenregel — das Wort ist ein Stichwort und bildet eine Unit. Ursache ist die Fuß-Heuristik: `水果` **und** `果酒` sind Stichwörter, die Klammerung ist also unbelegbar, es greift die Mittelteilung, und `水` behält seinen dritten Ton. Das Leerzeichen im Ergebnis kommt von ICU, der Tonfehler nicht. Fehldiagnose vom Audit gefunden. **Alle vier stehen mit dem sprachlich richtigen Sollwert im Corpus und sind in `PinyinCorpusTests.knownFailures` namentlich festgeschrieben** — eine neue Abweichung macht die Suite rot, und eine behobene muss dort erst gestrichen werden. **Nebenbefund aus dem Gerätetest:** `银行`, `行为` und `长大` sind einzeln sauber; der Prüfhinweis in der Viererreihe kommt allein von `很长`, wo `长` als Einzelzeichen mehrdeutig ist und auf ICU fällt. Der Hinweis ist dort korrekt. **Zwei Befunde des Reviews sind in die Implementierung eingegangen:** die zyklische Anwendung je Konstituente (vorher gleichförmig von links, was `小老鼠` zu `xiáoláoshǔ` machte) und der Eigennamen-Guard bei `不`. **Nicht angewandt und begründet:** dritter Ton über Wortgrenzen (prosodisch variabel, A28), dritter Ton vor neutralem Ton (Variation nicht vorhersagbar), der neutrale Ton selbst (lexikalisch). **Nebenbefund mit Gewicht:** 34 von 60 gewöhnlichen Alltagssätzen enthalten mindestens ein Wort, das das Lexikon nicht eindeutig auflöst — Alltagszeichen wie `好`, `个`, `大`, `行`, `长`, `为`, `号`, `少`, `教`, `重`, `还`, `都`, `得`, `觉`, `乐`, `差` stehen alle in der Mehrdeutigkeitsliste. Das ist die größte verbleibende Fehlerklasse und betrifft die Grundauflösung, nicht das Sandhi. | **Beantwortet**, Restklassen dokumentiert | gering — Feld editierbar, Unsicherheit sichtbar |
+| Q11 | Liefert `SpeechDetector` (iOS 26.0) auf dem Zielgerät auswertbare `speechDetected`-Werte, und mit welcher Latenz? **Gemessen am 2026-09-14 auf dem iPhone 16 Pro, iOS 26.6, mit echter Sprache: nein — und `isFinal` taugt ebenfalls nicht.** Vollständige Messung in §7.1. Kurzfassung: (1) `SpeechDetector(detectionOptions: .init(sensitivityLevel: .medium), reportResults: true)` lieferte über 45 Sekunden **null Ergebnisse und keinen Fehler**, obwohl in diesem Fenster viermal gesprochen und viermal erkannt wurde. Von Apples zwei widersprüchlichen Doku-Stellen ist die pessimistische die zutreffende („currently only support **error handling** from the VAD model"); die Versprechen in `init(detectionOptions:reportResults:)` und `init()` treffen auf iOS 26.6 nicht zu. (2) Der Transcriber stellte seine vier finalen Ergebnisse **3,9 s bis 6,6 s nach dem Ende des jeweils abgedeckten Audios** zu. Damit ist die Doku-Analyse empirisch bestätigt: `isFinal` markiert Finalisierung, nicht das Äußerungsende. **Das Ziel „unter 2 s" erreicht keines der beiden Apple-Signale**, und zwar nicht knapp. (3) Die Zwei-Modul-Konfiguration wäre kostenlos gewesen: `AssetInventory.status` und `bestAvailableAudioFormat` liefern für `[transcriber]` und `[transcriber, detector]` identische Werte. **Konsequenz:** Ein Hands-free-Endpointing kann sich auf kein Apple-Signal stützen. Bleibt eine eigene Kurzzeit-Energie — im selben Lauf mitgemessen und in §7.1 mit Zahlen belegt, inklusive der Stelle, an der sie unsauber wird. | **Beantwortet am 2026-09-14 — beide Apple-Signale ungeeignet** | gering — der manuelle Stop-Pfad aus Phase 9 bleibt unberührt |
 
 ---
 
