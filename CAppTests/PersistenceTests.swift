@@ -219,16 +219,40 @@ struct PersistenceTests {
             cardAttributes.isDisjoint(with: ["weight", "errorCount", "accuracy", "isNew", "type", "status"]),
             "Abgeleitete Werte gehören laut docs/architecture.md §3 nicht in den Store"
         )
-        #expect(Set(card.relationships.map(\.name)) == ["tags"])
+        // `reviews` seit Phase 11.
+        #expect(Set(card.relationships.map(\.name)) == ["tags", "reviews"])
 
         let tag = try #require(CAppApp.schema.entities.first { $0.name == "Tag" })
         #expect(Set(tag.attributes.map(\.name)) == ["name"])
         #expect(Set(tag.relationships.map(\.name)) == ["cards"])
+
+        // Der Eintrag speichert die Entscheidungsgrundlage und sonst nichts.
+        let review = try #require(CAppApp.schema.entities.first { $0.name == "ReviewLog" })
+        let reviewAttributes = Set(review.attributes.map(\.name))
+        #expect(reviewAttributes == [
+            "id", "reviewedAt", "directionRaw", "previousStatusRaw", "assessmentRaw",
+            "usedSpeech", "speechMatched", "wasManualReveal", "wasRetry",
+        ])
+        // Die harte Regel 7 als Schemaprüfung: Was nie gemessen wurde, darf
+        // auch kein Feld haben — ein Feld, das existiert, wird irgendwann
+        // benutzt. Ebenso wenig gehört der erkannte Wortlaut in den Store.
+        #expect(
+            reviewAttributes.isDisjoint(with: [
+                "confidence", "score", "toneScore", "pronunciationScore",
+                "audio", "audioURL", "recognizedText", "duration",
+            ]),
+            "ReviewLog speichert keine Audio-, Konfidenz- oder Aussprachewerte"
+        )
+        #expect(Set(review.relationships.map(\.name)) == ["card"])
     }
 
     @Test("Das produktive Schema enthält genau Card und Tag")
     func productionSchemaContainsCardAndTag() {
+        // `ReviewLog` seit Phase 11 — die erste Erweiterung des Schemas seit
+        // Phase 1. Absichtlich eine harte Gleichheit und keine Teilmenge: Ein
+        // versehentlich mitgeschlepptes Modell wäre eine Tabelle im privaten
+        // Store des Nutzers, die niemand beschlossen hat.
         let names = Set(CAppApp.schema.entities.map(\.name))
-        #expect(names == ["Card", "Tag"])
+        #expect(names == ["Card", "Tag", "ReviewLog"])
     }
 }

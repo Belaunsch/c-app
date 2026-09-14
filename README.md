@@ -6,7 +6,7 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 10 implementiert. Finale Roadmap-Abnahme: ausstehend.**
+**Phasen 0 bis 11 implementiert. Finale Roadmap-Abnahme: ausstehend.**
 
 Die Implementierung von v1 steht: Tests grün, Debug- und Release-Build sauber,
 zwei unabhängige Code Reviews und zwei Testaudits abgearbeitet. Physische
@@ -31,7 +31,7 @@ Kartenverwaltung: Wörter und Sätze getrennt, Karten anlegen, bearbeiten und
 löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
 Lernstatus, Kategorien umbenennen und löschen.
 
-Build und Unit-Tests laufen grün: **537 Testfunktionen / 595 Einzelausführungen,
+Build und Unit-Tests laufen grün: **580 Testfunktionen / 641 Einzelausführungen,
 0 Fehlschläge, 0 Compilerwarnungen** auf einem Debug-Build von null (iPhone-17-Simulator, iOS
 26.5), Release-Build von null ebenso. Jede Phase ist zusätzlich auf einem
 echten iPhone belegt worden — zuletzt am **2026-09-12** und **2026-09-13** —,
@@ -155,9 +155,20 @@ Testcode und in
 allen vier fehlt die entscheidende Information in den Daten, nicht im
 Algorithmus.
 
-Nächster Schritt: **Phase 11 — Review History & Assisted Assessment**, danach
-Phase 12. Die finale Geräte- und Release-Abnahme folgt am Ende, auf dem dann
-fertigen Produkt.
+Neu aus Phase 11: **Review-Historie und assistierte Bewertung.** Die App
+schreibt zu jedem Versuch einen Eintrag — Zeitpunkt, Richtung, Ausgangsstatus,
+ob gesprochen wurde, ob der Text übereinstimmte, ob von Hand aufgedeckt wurde,
+ob es ein zweiter Anlauf war, und die Bewertung, falls eine abgegeben wurde.
+Nach zwei sauberen Erstversuchen in Folge entfällt die Vierfachauswahl und die
+App geht von selbst weiter, **ohne den Lernstand zu ändern**; nach drei
+automatischen Reviews fragt sie wieder und hebt dabei eine Stufe hervor. Ein
+Erkennungs-Mismatch senkt nie etwas, ein einzelner Treffer trägt nichts, und
+die eigene Bewertung gewinnt immer. Die Historie ist die erste
+Schemaerweiterung seit Phase 1 — dass sie verlustfrei migriert, ist an einem
+echten Store gemessen (Q7).
+
+Nächster Schritt: **Phase 12 — Hands-free Speech Sessions**. Die finale
+Geräte- und Release-Abnahme folgt am Ende, auf dem dann fertigen Produkt.
 
 ## Drittanbieter-Daten
 

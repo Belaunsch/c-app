@@ -11,8 +11,11 @@ import SwiftData
 /// Persistiert werden ausschließlich die in `docs/architecture.md` §3 als
 /// „persistiert" geführten Werte. Bewusst **nicht** gespeichert und deshalb
 /// hier nicht vorhanden: `weight` (reine Funktion aus `status`),
-/// `errorCount`, `accuracy` und `isNew`. Ebenso gibt es keine
-/// Antwort-Historie — ein `ReviewLog` wäre additiv nachrüstbar.
+/// `errorCount`, `accuracy` und `isNew`.
+///
+/// **Die Antwort-Historie gibt es seit Phase 11.** Der Satz „ein `ReviewLog`
+/// wäre additiv nachrüstbar" stand hier seit Phase 1 als Vorhersage; sie hat
+/// sich gehalten — ``reviews`` ist genau diese additive Erweiterung.
 ///
 /// Alle Properties haben einen Default. Das ist Konvention (Task 1.9) und hält
 /// eine spätere CloudKit-Option offen, ohne heute etwas zu kosten.
@@ -88,6 +91,18 @@ final class Card {
     /// Die Inverse wird nur auf dieser Seite deklariert.
     @Relationship(deleteRule: .nullify, inverse: \Tag.cards)
     var tags: [Tag] = []
+
+    /// Die Antwort-Historie dieser Karte (Phase 11).
+    ///
+    /// Die Löschregel ist `.cascade`, anders als bei `tags`: Ein `ReviewLog`
+    /// beschreibt einen Versuch an **dieser** Karte und hat ohne sie keine
+    /// Bedeutung. Eine gelöschte Karte nimmt ihre Historie also mit.
+    ///
+    /// Ungeordnet, wie jede SwiftData-Beziehung — die Sortierung nach
+    /// `reviewedAt` macht die Feature-Schicht, bevor sie die Signale an die
+    /// Engine reicht.
+    @Relationship(deleteRule: .cascade, inverse: \ReviewLog.card)
+    var reviews: [ReviewLog] = []
 
     init(
         id: UUID = UUID(),

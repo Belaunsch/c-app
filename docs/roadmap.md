@@ -2031,7 +2031,10 @@ rekonstruierbar sein:
 | SelfAssessment | die tatsächliche Bewertung, **falls** eine abgegeben wurde |
 
 Der genaue Zuschnitt des Modells wird zu Beginn von Phase 11 entschieden,
-nicht hier.
+nicht hier. **Entschieden am 2026-09-13:** `ReviewLog` mit genau diesen neun
+Feldern plus Beziehung zur Karte — die Felder stehen in
+[architecture.md §3](architecture.md#3-datenmodell), die Begründung für jedes
+Nicht-Feld daneben.
 
 ### Produktregeln
 
@@ -2040,8 +2043,11 @@ nicht hier.
 - **Mehrere wiederholte exakte Speech-Matches können als *potenzielle*
   positive Evidenz** in die Statusschätzung eingehen — aber weiterhin nie als
   Aussprache- oder Tonbewertung (harte Regel 7 gilt unverändert).
-  **[OPEN]:** welche Stärke diese Evidenz bekommt und ob sie allein überhaupt
-  genügt. Zu kalibrieren an realer Review-Historie **und insbesondere an den
+  **[ENTSCHIEDEN am 2026-09-13]:** Sie genügt allein — aber erst
+  **wiederholt** (zwei saubere Erstversuche in Folge), und nur dafür, die
+  Frage zu **überspringen**, nicht dafür, den Status zu heben. Ein einzelner
+  Treffer trägt nichts. Regel in [learning-engine.md §12](learning-engine.md);
+  die Zahlen sind Produktentscheidungen, keine Messungen (§12.5). Zu kalibrieren an realer Review-Historie **und insbesondere an den
   noch unbekannten False-Accept-Eigenschaften**: Der Phase-9-Benchmark wurde
   nach dem ersten Positivdurchgang abgebrochen, die 12 Negativversuche wurden
   nicht durchgeführt. Wie oft der Transcriber eine *andere* Äußerung
@@ -2063,11 +2069,25 @@ SuggestedLearningStatus
 
 Ausgangsidee sind ungefähr die letzten zehn verwertbaren Versuche.
 
-**[OPEN] — bewusst nicht jetzt festgelegt:** Fenstergröße, Gewichtung der
-Evidenzarten, zeitliche Alterung und Schwellen. Diese Werte willkürlich
-vorwegzunehmen wäre dasselbe Muster, das beim Phase-9-Benchmark vermieden
-wurde: ein Kriterium erfinden, bevor Daten vorliegen. Konkretisiert wird die
-Formel zu Beginn von Phase 11, **nachdem reale Review-Historie existiert**.
+**[ENTSCHIEDEN am 2026-09-13, aber ausdrücklich nicht kalibriert]:**
+Fenstergröße 10, Schwelle zwei saubere Versuche, Rekalibrierung nach drei
+automatischen Reviews, **keine** zeitliche Alterung. Gewichte gibt es nicht —
+die Regel zählt einen Lauf, sie verrechnet nichts.
+
+Der ursprüngliche Text lautete: *„Diese Werte willkürlich vorwegzunehmen wäre
+dasselbe Muster, das beim Phase-9-Benchmark vermieden wurde: ein Kriterium
+erfinden, bevor Daten vorliegen. Konkretisiert wird die Formel zu Beginn von
+Phase 11, nachdem reale Review-Historie existiert."*
+
+**Die zweite Hälfte ließ sich nicht einlösen, und das steht hier statt in
+einer Fußnote:** Reale Review-Historie gibt es nicht, weil diese Phase sie
+erst anlegt. Die Werte sind deshalb **entschieden statt gemessen**, jeder
+einzeln begründet und im Code als Produktentscheidung gekennzeichnet. Die
+Kalibrierung bleibt offen und ist ohne Schemaänderung nachholbar, weil ab
+jetzt aufgezeichnet wird. **Und eine Korrektur an der ersten Fassung:** Die
+Aktualität entsteht nicht durch das Fenster, sondern dadurch, dass der Lauf am
+ersten nicht sauberen Versuch abbricht — das Fenster begrenzt nur, wie viel
+Historie gelesen wird (§12.5).
 
 ### UX-Ziel
 
@@ -2102,8 +2122,91 @@ Regel 6 gilt unverändert).
 
 ### Akzeptanzkriterien
 
-Erst zu Beginn von Phase 11 zu konkretisieren — zusammen mit der Inferenzformel
-und auf Basis realer Review-Historie.
+**Konkretisiert am 2026-09-13, zu Beginn der Umsetzung.** Der ursprüngliche
+Satz lautete: „Erst zu Beginn von Phase 11 zu konkretisieren — zusammen mit
+der Inferenzformel und auf Basis realer Review-Historie."
+
+Die zweite Hälfte dieses Satzes ließ sich **nicht** einlösen, und das gehört
+hierher statt in eine Fußnote: Reale Review-Historie gibt es nicht, weil
+diese Phase sie erst anlegt. Die Formel ist deshalb nicht kalibriert worden,
+sondern **entschieden** — konservativ, erklärbar und mit jedem freien Wert
+ausdrücklich als Produktentscheidung gekennzeichnet
+([learning-engine.md §12.5](learning-engine.md)). Eine Kalibrierung an echten
+Daten bleibt offen und ist ohne Schemaänderung nachholbar, weil die Historie
+ab jetzt aufgezeichnet wird.
+
+- [x] Pro abgeschlossenem Versuch entsteht **genau ein** `ReviewLog`-Eintrag
+      mit den Feldern aus [learning-engine.md §12.1](learning-engine.md).
+- [x] Die Schemaerweiterung ist additiv: Ein mit dem Phase-10-Schema
+      geschriebener Store öffnet mit dem Phase-11-Schema **ohne Verlust** und
+      ohne Migrationsplan (Q7).
+- [x] Die Inferenz liegt in `Learning/`, ist rein, deterministisch,
+      Foundation-only und kennt weder `Card` noch `ModelContext`.
+- [x] **Ein Speech-Mismatch senkt niemals einen Status und schlägt niemals
+      einen Downgrade vor.**
+- [x] **Ein einzelner Exact-Match trägt keine Statusaussage.**
+- [x] Die manuelle Bewertung hat Vorrang: Der Vorschlag ändert nichts ohne
+      Tipp des Nutzers, und ein abweichender Tipp gewinnt vollständig.
+- [x] Bei ausreichend wiederholter sauberer Evidenz entfällt die
+      Vierfachauswahl; bei Unsicherheit, Mismatch, manuellem Aufdecken,
+      fehlender Spracherkennung, Retry und bei fälliger Rekalibrierung
+      erscheint sie weiterhin.
+- [x] Automatisches Weitergehen verändert den Lernstand **nicht**.
+- [x] Fenstergröße, Schwelle und Rekalibrierungsintervall sind im Code und in
+      der Dokumentation als Produktentscheidung benannt, nicht als Messung.
+- [x] Die Phase-5-Regeln gelten unverändert: Übergangsmatrix (§6) und
+      „Statusänderung nur einmal pro Mini-Batch" (§6.1).
+- [x] Kein Score, keine Prozent-Mastery, keine Streaks, keine Aussage über
+      Aussprache oder Töne.
+
+### Stand am 2026-09-13 — implementiert
+
+**580 Testfunktionen / 641 Einzelausführungen grün, 0 übersprungen**, Debug-Build
+von null und Release-Build von null mit 0 Compilerdiagnosen. Ein unabhängiges
+Code Review und ein unabhängiges Testaudit sind abgearbeitet.
+
+**Q7 ist damit zum ersten Mal wirklich beantwortet** — für additive Änderungen:
+Ein mit dem nachgebauten Phase-10-Schema geschriebener Store öffnet mit dem
+Phase-11-Schema ohne Verlust und ohne Migrationsplan. Einzelheiten und Grenzen
+unter Q7 in [apple-frameworks.md](apple-frameworks.md).
+
+**Was die beiden Prüfungen gefunden haben und was daraus wurde:**
+
+- **Ein Blocker aus dem Testaudit:** Der Eintrag des automatischen Pfads war
+  durch keinen Test abgesichert — der Test las `card.reviews.first` auf einer
+  ungeordneten Beziehung, deren geseedeter Eintrag dieselben Werte trug. „Gar
+  keinen Eintrag schreiben" blieb grün. Jetzt wird gezählt und der neue
+  Eintrag über seinen Zeitstempel ausgewählt; die Gegenmutation ist rot.
+- **Zwei Produktivbefunde aus dem Review:** Eine von Hand auf *Neu*
+  zurückgesetzte Karte behält ihre Historie — die App hätte dort sofort eine
+  Beförderung hervorgehoben, also genau auf der Karte, die der Nutzer eben als
+  ungelernt erklärt hat. Und `correctCount` stieg beim automatischen Weitergehen,
+  ohne dass jemand bewertet hatte; das ist jetzt unterlassen und in
+  [learning-engine.md §7.1](learning-engine.md) begründet.
+- **Eine falsche Aussage über die eigene Regel:** Code und §12.5 beschrieben das
+  Fenster als Recency-Mechanismus. Das ist es nicht — die Aktualität entsteht
+  dadurch, dass der Lauf am ersten nicht sauberen Versuch abbricht; das Fenster
+  begrenzt nur, wie viel Historie gelesen wird. Der Text sagt das jetzt, und der
+  Test, der das Fenster zu prüfen vorgab, prüft nun den Abbruch.
+- **Fünf Tests bestanden aus dem falschen Grund** (die Rekalibrierung oder das
+  obere Leiterende erzwangen das Ergebnis statt der geprüften Regel) und sind
+  isoliert worden; fünf fehlende Integrationstests sind dazugekommen, darunter
+  das Zurücksetzen des Versuchszustands zwischen zwei Karten und ein
+  automatisches Weitergehen auf der **letzten** Karte eines Batches.
+- **Eine tote Bedingung** in `suggestedStatus` wurde von einer Gegenmutation
+  aufgedeckt und entfernt.
+
+**Gegenmutationen: dreizehn ausgeführt, alle greifen** — Schwelle 2→1,
+`new`-Guard, Vorschlag bei `new`, Sauberkeitsprüfung im Lauf, Rekalibrierung,
+`wasManualReveal`, Auto-Advance hebt den Status, `.cascade`→`.nullify`,
+Eintrag im automatischen Pfad, `revealedByHand`-Reset, `usedSpeech`-Reset,
+Historie falsch herum gelesen, plus die eine, die die tote Bedingung fand.
+
+**Offen und benannt:** Der automatische Pfad ist produktiv **nur** über echte
+Spracherkennung erreichbar und im Simulator nicht auslösbar. Ein gezielter
+Gerätetest als **Entwicklungsbeleg** ist deshalb sinnvoll — insbesondere die
+Frage, ob der Kartenwechsel ohne Rückmeldung zu abrupt wirkt. Er ist kein Gate
+dieser Phase; die vollständige Abnahme steht am Ende der Roadmap.
 
 ---
 

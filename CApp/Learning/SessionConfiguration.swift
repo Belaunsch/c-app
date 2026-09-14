@@ -54,17 +54,22 @@ nonisolated struct SessionConfiguration: Equatable, Sendable {
 /// concerns and no German text. The titles live in `LearnDisplay`, the same
 /// split `CardDisplay` makes for the models.
 ///
-/// **No raw value on purpose.** One would read as "this gets persisted", and
-/// the direction deliberately is not — unlike the card list's sort order it
-/// is part of deciding what to practise now, not a setting about how the app
-/// looks. Nothing needs `RawRepresentable` here.
-nonisolated enum SessionDirection: CaseIterable, Sendable {
+/// **Raw values since phase 11, and the reason is worth recording.** Until
+/// then this type deliberately had none, with the note that one "would read
+/// as: this gets persisted, and the direction deliberately is not". Phase 11
+/// changed the premise rather than the principle: a `ReviewLog` entry records
+/// which way round the card was asked, because mode A and mode B ask
+/// different questions and evidence from one is not evidence about the other.
+/// So the direction **is** persisted now, and the strings are written out for
+/// the same reason as in `CardSortOrder` and `SpeechRate` — renaming a Swift
+/// case must not silently rewrite stored history.
+nonisolated enum SessionDirection: String, CaseIterable, Sendable {
     /// Mode A, since phase 6: the German is shown, the learner produces the
     /// Chinese.
-    case germanToChinese
+    case germanToChinese = "germanToChinese"
 
     /// Mode B, since phase 8: the Chinese is **heard**, the learner works out
     /// the meaning. Audio to German, never audio to Hanzi — that would be a
     /// third mode and is explicitly out of scope.
-    case audioToGerman
+    case audioToGerman = "audioToGerman"
 }

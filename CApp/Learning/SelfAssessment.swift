@@ -10,11 +10,16 @@ import Foundation
 /// The four answers of `docs/learning-engine.md` §6 — there is deliberately
 /// no fifth. German titles for these live in the feature layer; `Learning/`
 /// holds no user-facing text.
-nonisolated enum SelfAssessment: CaseIterable, Sendable {
-    case again
-    case hard
-    case good
-    case secure
+///
+/// **Raw values since phase 11**, written out rather than left to the
+/// compiler: a `ReviewLog` entry stores the assessment the learner actually
+/// gave, so the strings are history and a rename must not rewrite it. Same
+/// rule as `CardSortOrder`, `SpeechRate` and `SessionDirection`.
+nonisolated enum SelfAssessment: String, CaseIterable, Sendable {
+    case again = "again"
+    case hard = "hard"
+    case good = "good"
+    case secure = "secure"
 
     /// Steps up or down the status ladder (§6).
     var statusDelta: Int {

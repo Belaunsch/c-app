@@ -52,7 +52,7 @@ struct CAppApp: App {
 extension CAppApp {
     /// Das Schema der App.
     static var schema: Schema {
-        Schema([Card.self, Tag.self])
+        Schema([Card.self, Tag.self, ReviewLog.self])
     }
 
     /// Der produktive Datenspeicher: rein lokal, auf der Platte, ohne
@@ -67,14 +67,17 @@ extension CAppApp {
     /// Schemaänderung sie erzwingt — etwa das Umbenennen oder Entfernen einer
     /// Property oder eine Änderung an einer Beziehung.
     ///
-    /// **Rückblick Phase 10 (2026-09-12):** Diese Annahme ist bis heute
-    /// **ungeprüft geblieben**, und zwar mangels Gelegenheit — seit Phase 1
-    /// hat sich das Schema nicht geändert, es gab also nie etwas zu
-    /// migrieren. Das ist kein Beleg dafür, dass es reicht. Der
-    /// Entscheidungspunkt ist die erste additive Schemaänderung,
-    /// voraussichtlich `ReviewLog` in Phase 11; geprüft gehört sie dann an
-    /// echten Bestandsdaten auf dem Gerät, nicht an einem frisch angelegten
-    /// Simulator-Store. Einzelheiten unter Q7 in `docs/apple-frameworks.md`.
+    /// **Geprüft in Phase 11 (2026-09-13):** Die erste echte Schemaänderung
+    /// des Projekts — `ReviewLog` plus die Beziehung `Card.reviews` — wird
+    /// von der leichtgewichtigen Migration getragen. `SchemaMigrationTests`
+    /// schreibt einen Store mit dem nachgebauten Phase-10-Schema und öffnet
+    /// dieselbe Datei mit dem heutigen: nichts geht verloren, die neue
+    /// Beziehung ist da und leer. Deshalb bleibt es auch hier beim Verzicht.
+    ///
+    /// Das gilt für **diese** Änderung. Ein Umbenennen oder Entfernen einer
+    /// Property ist damit nicht belegt, und der gewachsene private Store auf
+    /// dem iPhone ist es auch nicht — der gehört in die finale Geräte- und
+    /// Release-Abnahme. Einzelheiten unter Q7 in `docs/apple-frameworks.md`.
     static func makeModelContainer() throws -> ModelContainer {
         try ModelContainer(for: schema)
     }

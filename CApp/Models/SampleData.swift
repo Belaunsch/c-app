@@ -39,7 +39,7 @@ enum SampleData {
     @MainActor
     static func makePreviewContainer() throws -> ModelContainer {
         let container = try ModelContainer(
-            for: Card.self, Tag.self,
+            for: CAppApp.schema,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         insert(into: container.mainContext)

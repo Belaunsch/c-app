@@ -53,6 +53,19 @@ final class LearnSessionModel {
     /// mode A, where nothing ever sets it.
     private(set) var hasShownHanzi = false
 
+    /// What the app suggests for the card on screen, or `nil` when the
+    /// evidence supports no highlight (phase 11).
+    ///
+    /// A highlight and nothing else: the status changes when the learner taps,
+    /// never because this is set.
+    private(set) var suggestedAssessment: SelfAssessment?
+
+    /// Whether the microphone was used for the attempt currently on screen.
+    private var usedSpeechThisAttempt = false
+
+    /// Whether the answer on screen was uncovered by hand rather than earned.
+    private var revealedByHand = false
+
     /// What the spoken answer came to, if the learner used the microphone.
     ///
     /// `nil` means they did not — which is the normal case, because the
@@ -235,6 +248,12 @@ final class LearnSessionModel {
 
     func reveal() {
         guard currentCard != nil else { return }
+        // Uncovering by hand is not a recall (phase 11). It is remembered for
+        // the review entry and it rules out every automatic shortcut: a
+        // learner who reads the answer and then says it has demonstrated
+        // reading aloud.
+        revealedByHand = true
+        suggestedAssessment = nil
         isRevealed = true
     }
 
@@ -264,13 +283,31 @@ final class LearnSessionModel {
     /// the card, so the card opens, and the one revealed state shows the
     /// result next to the answer. The self-assessment stays untouched and
     /// manual — recognition never rates anything.
-    func applyRecognition(_ recognized: String, forCardWith id: UUID) {
+    func applyRecognition(_ recognized: String, forCardWith id: UUID, in context: ModelContext) {
         guard let card = currentCard, card.id == id else {
             Self.logger.info("recognition result dropped: the session moved on")
             return
         }
-        speechCheck = SpeechCheck.compare(recognized: recognized, expected: card.hanzi)
+        let check = SpeechCheck.compare(recognized: recognized, expected: card.hanzi)
+        speechCheck = check
+        usedSpeechThisAttempt = true
         isRevealed = true
+
+        // Phase 11: enough repeated clean evidence means the learner is not
+        // asked again. The rule lives in `Learning/`; this only carries out
+        // what it decided.
+        switch AssistedAssessment.decision(
+            currentStatus: card.status,
+            current: attemptSignal(for: card),
+            history: recentSignals(for: card)
+        ) {
+        case .autoAdvance:
+            autoAdvance(card, in: context)
+        case .ask(let suggestion):
+            suggestedAssessment = suggestion.flatMap {
+                AssistedAssessment.assessment(leadingTo: $0, from: card.status)
+            }
+        }
     }
 
     /// Records one self-assessment: engine first, then the store, then the
@@ -301,7 +338,15 @@ final class LearnSessionModel {
         // without any feedback.
         isRevealed = false
 
+        // Read **before** `apply` moves it: the entry records the status the
+        // card had going into this review, which is what later evidence has
+        // to be read against.
+        let previousStatus = card.status
         apply(outcome, to: card)
+        // The review entry is written **before** the save, so the card's new
+        // status and its history are one transaction: a failed save rolls
+        // both back together and the learner rates the same card again.
+        context.insert(reviewLog(for: card, previousStatus: previousStatus, assessment: assessment))
         do {
             try context.save()
         } catch {
@@ -321,9 +366,126 @@ final class LearnSessionModel {
         // `currentCard` is assigned, because this is the one path from one
         // card to the next — and because a failed save above returns before
         // it, leaving the user on the same card exactly as they left it.
+        resetAttemptState()
+        advanceToNextAnswerableCard(in: context)
+    }
+
+    // MARK: - Assisted assessment (phase 11)
+
+    /// Records the attempt and moves on without asking.
+    ///
+    /// **The status is not touched.** That is the whole of the roadmap's
+    /// „keine Neubewertung nötig": the app spares the learner a question it
+    /// cannot justify asking, it does not hand out a promotion nobody granted.
+    /// Only a tap — or the recalibration this run is counting towards — can
+    /// move a card along the ladder.
+    private func autoAdvance(_ card: Card, in context: ModelContext) {
+        guard var advanced = queue else { return }
+        isRevealed = false
+
+        card.reviewCount += 1
+        card.lastReviewedAt = now()
+        // **`correctCount` deliberately does not move.** A review happened, so
+        // `reviewCount` does; whether it was *correct* is a judgement, and the
+        // only thing that happened here is a text match whose false-accept
+        // property phase 9 never measured. §7 defines `correctCount` in terms
+        // of a self-assessment, and there was none.
+        //
+        // This makes `accuracy` (a derived value, read nowhere today)
+        // under-report for cards that auto-advance rather than over-report.
+        // Of the two directions that is the one to be wrong in: it can only
+        // understate what the learner knows, never overstate it.
+        // `learning-engine.md` §7 says so too.
+        // Nothing moved the status here, so „before" and „after" are the same
+        // value — it is still read explicitly rather than implied.
+        context.insert(reviewLog(for: card, previousStatus: card.status, assessment: nil))
+
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            isRevealed = true
+            // Back on the same card, so the learner needs the four buttons —
+            // and the suggestion that would have been shown had the app asked
+            // in the first place. Without this they get four identical
+            // buttons on a card the app was confident about.
+            suggestedAssessment = AssistedAssessment.suggestedStatus(
+                currentStatus: card.status,
+                current: attemptSignal(for: card),
+                history: recentSignals(for: card)
+            ).flatMap { AssistedAssessment.assessment(leadingTo: $0, from: card.status) }
+            saveFailure = .cardSaveFailed(error)
+            Self.logger.error("Auto-advanced review could not be saved: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+
+        // The card leaves the batch without a rating. `skipCurrentCard()` is
+        // exactly that: no reinsertion, no assessment recorded in the queue.
+        advanced.skipCurrentCard()
+        queue = advanced
+        answeredCount += 1
+        resetAttemptState()
+        advanceToNextAnswerableCard(in: context)
+    }
+
+    /// The attempt on screen, as the engine sees it.
+    private func attemptSignal(for card: Card) -> ReviewSignal {
+        ReviewSignal(
+            direction: configuration.direction,
+            previousStatus: card.status,
+            usedSpeech: usedSpeechThisAttempt,
+            speechMatched: speechCheck?.isMatch,
+            wasManualReveal: revealedByHand,
+            wasRetry: isRetryOfCurrentCard(card),
+            assessment: nil
+        )
+    }
+
+    /// The card's earlier reviews, newest first and bounded by the window.
+    ///
+    /// Sorted here rather than in the store: a SwiftData relationship is
+    /// unordered, and the engine is given a sequence whose order it may rely
+    /// on.
+    private func recentSignals(for card: Card) -> [ReviewSignal] {
+        card.reviews
+            .sorted { $0.reviewedAt > $1.reviewedAt }
+            .prefix(AssistedAssessment.windowSize)
+            .map(\.signal)
+    }
+
+    /// Whether the card on screen has already been through this batch.
+    ///
+    /// Read from the queue rather than tracked separately: it already knows,
+    /// because reinsertion is its job.
+    private func isRetryOfCurrentCard(_ card: Card) -> Bool {
+        (queue?.reinsertCount(for: card.id) ?? 0) > 0
+    }
+
+    private func reviewLog(
+        for card: Card,
+        previousStatus: LearningStatus,
+        assessment: SelfAssessment?
+    ) -> ReviewLog {
+        ReviewLog(
+            reviewedAt: now(),
+            direction: configuration.direction,
+            previousStatus: previousStatus,
+            usedSpeech: usedSpeechThisAttempt,
+            speechMatched: speechCheck?.isMatch,
+            wasManualReveal: revealedByHand,
+            wasRetry: isRetryOfCurrentCard(card),
+            assessment: assessment,
+            card: card
+        )
+    }
+
+    /// Everything that belongs to the attempt just finished.
+    private func resetAttemptState() {
         hasShownHanzi = false
         speechCheck = nil
-        advanceToNextAnswerableCard(in: context)
+        suggestedAssessment = nil
+        usedSpeechThisAttempt = false
+        revealedByHand = false
     }
 
     func dismissSaveFailure() {

@@ -34,8 +34,19 @@ struct TemporaryStore {
     /// App-Starts auf derselben Datenbank.
     @MainActor
     func openContainer() throws -> ModelContainer {
+        try openContainer(for: CAppApp.schema)
+    }
+
+    /// Öffnet denselben Store mit einem **ausdrücklich angegebenen** Schema.
+    ///
+    /// Nur für den Migrationstest aus Phase 11: Er schreibt mit dem Schema der
+    /// Phase 10 (`Card`, `Tag`) und öffnet dieselbe Datei anschließend mit dem
+    /// Schema der Phase 11 (zusätzlich `ReviewLog`). Ohne diese Naht ließe
+    /// sich die erste echte Schemaänderung des Projekts nur behaupten.
+    @MainActor
+    func openContainer(for schema: Schema) throws -> ModelContainer {
         try ModelContainer(
-            for: CAppApp.schema,
+            for: schema,
             configurations: ModelConfiguration(url: url)
         )
     }

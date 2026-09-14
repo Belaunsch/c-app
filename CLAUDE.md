@@ -6,8 +6,8 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phasen 0–10 implementiert.** Stand des Gates: **537
-Testfunktionen / 595 Einzelausführungen grün** — parametrisierte Tests machen
+**Aktueller Stand: Phasen 0–11 implementiert.** Stand des Gates: **580
+Testfunktionen / 641 Einzelausführungen grün** — parametrisierte Tests machen
 daraus zwei Zahlen, also immer mit Einheit nennen —, 0 fehlgeschlagen, 0
 Compilerwarnungen auf einem Debug-Build von null, Release-Build von null
 ebenso, dazu zwei unabhängige Code Reviews, zwei Testaudits und zehn
@@ -25,10 +25,17 @@ vollständig in der Roadmap und wird nicht hierher kopiert.
 **Projektstatus: `Finale Roadmap-Abnahme: ausstehend`.** Das Produkt ist nicht
 abgenommen, solange dieses Gate offene Punkte hat.
 
-**Nächster Schritt: Phase 11 — Review History & Assisted Assessment.** Sie darf
-normal auf `main` implementiert, verifiziert und committet werden; das
-Phase-Gate gilt unverändert für Tests, Builds, Review, Testaudit und
-Gegenmutationen.
+Seit Phase 11 gibt es die **Review-Historie** (`ReviewLog`, erste
+Schemaerweiterung seit Phase 1 — Q7 ist daran gemessen und beantwortet) und die
+**assistierte Bewertung**: Nach zwei sauberen Erstversuchen in Folge entfällt
+die Vierfachauswahl, der Lernstand bleibt dabei **unverändert**; nach drei
+automatischen Reviews wird wieder gefragt, mit hervorgehobenem Vorschlag. Ein
+Mismatch senkt nie etwas, ein einzelner Treffer trägt nichts, die eigene
+Bewertung gewinnt immer. Regel und die drei als Produktentscheidung
+gekennzeichneten Parameter: [learning-engine.md §12](docs/learning-engine.md).
+
+**Nächster Schritt: Phase 12 — Hands-free Speech Sessions.** Das Phase-Gate
+gilt unverändert für Tests, Builds, Review, Testaudit und Gegenmutationen.
 
 Die Kette `Deutsch → Hanzi → Pinyin` läuft mit Return oder beim Verlassen des
 Feldes automatisch, beide Werte bleiben editierbar, und ein von Hand gesetzter

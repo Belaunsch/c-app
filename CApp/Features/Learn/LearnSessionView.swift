@@ -138,7 +138,7 @@ struct LearnSessionView: View {
             // `.noSpeechDetected` and the button says so. The card stays
             // covered, because nothing was checked.
             guard let text, let id = recordingCardID else { return }
-            model.applyRecognition(text, forCardWith: id)
+            model.applyRecognition(text, forCardWith: id, in: context)
         }
     }
 
@@ -160,11 +160,14 @@ struct LearnSessionView: View {
     @ViewBuilder
     private var controls: some View {
         if AudioPrompt.allowsAssessment(at: model.promptStage) {
-            SelfAssessmentBar { assessment in
-                // A rating can only follow a finished recording: the card is
-                // revealed here, and revealing always ends one.
-                model.submit(assessment, in: context)
-            }
+            SelfAssessmentBar(
+                action: { assessment in
+                    // A rating can only follow a finished recording: the card
+                    // is revealed here, and revealing always ends one.
+                    model.submit(assessment, in: context)
+                },
+                suggestion: model.suggestedAssessment
+            )
         } else {
             VStack(spacing: 8) {
                 if AudioPrompt.offersHanziStep(

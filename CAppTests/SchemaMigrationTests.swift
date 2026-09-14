@@ -1,0 +1,214 @@
+//
+//  SchemaMigrationTests.swift
+//  CAppTests
+//
+
+import Foundation
+import SwiftData
+import Testing
+@testable import CApp
+
+/// Q7, finally asked of a real change.
+///
+/// Since phase 1 the project has run without a `VersionedSchema` and without a
+/// `SchemaMigrationPlan`, on the assumption that SwiftData's lightweight
+/// migration would carry additive changes. Until today that assumption was
+/// untestable for the best of reasons: `CApp/Models/` had never changed, so
+/// there was nothing to migrate. Phase 11 adds `ReviewLog` and one
+/// relationship on `Card`, and that is the first real case.
+///
+/// ## How the old state is reconstructed
+///
+/// A store cannot be written with the previous version of `Card`, because the
+/// class in the app already carries the new relationship. So the phase-10
+/// shape is declared again, separately, inside `Phase10Schema` — same entity
+/// names, same attributes, no `reviews`. SwiftData maps by entity name, so a
+/// store written through those classes is byte-for-byte a store from the
+/// released phase-10 app.
+///
+/// ## What this proves and what it does not
+///
+/// It proves that a store containing real cards, categories and learning
+/// states **survives the schema change**: the file is opened again with the
+/// phase-11 schema, every value is read back, and the new relationship is
+/// there and empty.
+///
+/// It does **not** prove that the private store on the user's iPhone
+/// migrates. That one is older, larger, has been through every release and
+/// lives on a device — and it is explicitly part of the final device and
+/// release acceptance at the end of the roadmap, not of this phase.
+@MainActor
+struct SchemaMigrationTests {
+
+    /// The data model exactly as phase 10 shipped it.
+    enum Phase10Schema {
+        static var schema: Schema { Schema([Card.self, Tag.self]) }
+
+        @Model
+        final class Card {
+            var id: UUID = UUID()
+            var typeRaw: String = CardType.word.rawValue
+            var statusRaw: Int = LearningStatus.new.rawValue
+            var german: String = ""
+            var hanzi: String = ""
+            var pinyin: String = ""
+            var createdAt: Date = Date()
+            var lastReviewedAt: Date?
+            var reviewCount: Int = 0
+            var correctCount: Int = 0
+            var hanziWasEditedManually: Bool = false
+            var pinyinWasEditedManually: Bool = false
+
+            @Relationship(deleteRule: .nullify, inverse: \Tag.cards)
+            var tags: [Tag] = []
+
+            init(german: String, hanzi: String, pinyin: String = "") {
+                self.german = german
+                self.hanzi = hanzi
+                self.pinyin = pinyin
+            }
+        }
+
+        @Model
+        final class Tag {
+            var name: String = ""
+            var cards: [Card] = []
+
+            init(name: String) { self.name = name }
+        }
+    }
+
+    @Test("A phase-10 store opens under the phase-11 schema with nothing lost")
+    func lightweightMigrationCarriesTheStore() throws {
+        let store = TemporaryStore()
+        defer { store.remove() }
+
+        // 1. Write a realistic collection with the old schema.
+        let writtenAt = Date(timeIntervalSince1970: 1_700_000_000)
+        do {
+            let container = try store.openContainer(for: Phase10Schema.schema)
+            let context = container.mainContext
+
+            let food = Phase10Schema.Tag(name: "Essen")
+            let travel = Phase10Schema.Tag(name: "Reisen")
+            context.insert(food)
+            context.insert(travel)
+
+            let apple = Phase10Schema.Card(german: "Apfel", hanzi: "苹果", pinyin: "píngguǒ")
+            apple.statusRaw = LearningStatus.good.rawValue
+            apple.reviewCount = 7
+            apple.correctCount = 5
+            apple.lastReviewedAt = writtenAt
+            apple.pinyinWasEditedManually = true
+            apple.tags = [food]
+
+            let sentence = Phase10Schema.Card(
+                german: "Ich möchte etwas essen.",
+                hanzi: "我想吃点东西",
+                pinyin: "wǒ xiǎng chī diǎn dōngxi"
+            )
+            sentence.typeRaw = CardType.sentence.rawValue
+            sentence.statusRaw = LearningStatus.weak.rawValue
+            sentence.tags = [food, travel]
+
+            let untouched = Phase10Schema.Card(german: "Wasser", hanzi: "水", pinyin: "shuǐ")
+
+            context.insert(apple)
+            context.insert(sentence)
+            context.insert(untouched)
+            try context.save()
+        }
+
+        // 2. Open the very same file with the phase-11 schema. No
+        //    `SchemaMigrationPlan`, no `VersionedSchema` — if this throws, the
+        //    assumption from phase 1 was wrong and the phase needs one.
+        let container = try store.openContainer()
+        let context = container.mainContext
+        let cards = try context.fetch(FetchDescriptor<CApp.Card>(sortBy: [SortDescriptor(\.german)]))
+        let tags = try context.fetch(FetchDescriptor<CApp.Tag>(sortBy: [SortDescriptor(\.name)]))
+
+        // 3. Everything is still there, with the values it was given.
+        #expect(cards.count == 3)
+        #expect(tags.map(\.name) == ["Essen", "Reisen"])
+
+        let apple = try #require(cards.first { $0.german == "Apfel" })
+        #expect(apple.hanzi == "苹果")
+        #expect(apple.pinyin == "píngguǒ")
+        #expect(apple.type == .word)
+        #expect(apple.status == .good, "der Lernstand überlebt die Migration")
+        #expect(apple.reviewCount == 7)
+        #expect(apple.correctCount == 5)
+        #expect(apple.lastReviewedAt == writtenAt)
+        #expect(apple.pinyinWasEditedManually)
+        #expect(apple.tags.map(\.name) == ["Essen"], "die Zuordnung ebenfalls")
+
+        let sentence = try #require(cards.first { $0.type == .sentence })
+        #expect(sentence.status == .weak)
+        #expect(Set(sentence.tags.map(\.name)) == ["Essen", "Reisen"])
+
+        // 4. The new relationship exists and is empty — a card from before the
+        //    change has no history, which is the only honest starting value.
+        #expect(cards.allSatisfy { $0.reviews.isEmpty })
+
+        // 5. And it is usable immediately: the migrated card takes an entry.
+        let log = ReviewLog(
+            reviewedAt: writtenAt, direction: .germanToChinese,
+            previousStatus: apple.status, usedSpeech: true, speechMatched: true,
+            assessment: .good, card: apple
+        )
+        context.insert(log)
+        try context.save()
+        #expect(apple.reviews.count == 1)
+        #expect(apple.reviews.first?.assessment == .good)
+    }
+
+    @Test("The migrated store still reads correctly after another restart")
+    func migratedStoreSurvivesAReopen() throws {
+        // Two opens after the migration, because a lightweight migration that
+        // only appears to work would show up here: the second open reads what
+        // the first one actually wrote to disk.
+        let store = TemporaryStore()
+        defer { store.remove() }
+
+        do {
+            let container = try store.openContainer(for: Phase10Schema.schema)
+            let card = Phase10Schema.Card(german: "Apfel", hanzi: "苹果")
+            card.statusRaw = LearningStatus.medium.rawValue
+            container.mainContext.insert(card)
+            try container.mainContext.save()
+        }
+        do {
+            let container = try store.openContainer()
+            let card = try #require(try container.mainContext.fetch(FetchDescriptor<CApp.Card>()).first)
+            card.reviews.append(ReviewLog(direction: .audioToGerman, previousStatus: .medium))
+            try container.mainContext.save()
+        }
+
+        let container = try store.openContainer()
+        let card = try #require(try container.mainContext.fetch(FetchDescriptor<CApp.Card>()).first)
+        #expect(card.german == "Apfel")
+        #expect(card.status == .medium)
+        #expect(card.reviews.count == 1)
+        #expect(card.reviews.first?.direction == .audioToGerman)
+    }
+
+    @Test("Deleting a card takes its history with it")
+    func deletingACardCascades() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let card = CApp.Card(type: .word, german: "Apfel", hanzi: "苹果")
+        context.insert(card)
+        context.insert(ReviewLog(direction: .germanToChinese, previousStatus: .new, card: card))
+        context.insert(ReviewLog(direction: .germanToChinese, previousStatus: .weak, card: card))
+        try context.save()
+        #expect(try context.fetch(FetchDescriptor<ReviewLog>()).count == 2)
+
+        context.delete(card)
+        try context.save()
+
+        // `.cascade`, unlike the `.nullify` on tags: a review describes an
+        // attempt at **this** card and means nothing without it.
+        #expect(try context.fetch(FetchDescriptor<ReviewLog>()).isEmpty)
+    }
+}

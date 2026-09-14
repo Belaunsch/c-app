@@ -177,7 +177,7 @@ struct SpeechRecognitionTests {
         #expect(session.speechCheck == nil)
         #expect(session.isRevealed == false)
 
-        session.applyRecognition("苹果", forCardWith: current.id)
+        session.applyRecognition("苹果", forCardWith: current.id, in: context)
 
         #expect(session.speechCheck?.isMatch == true)
         #expect(session.isRevealed, "speaking checks the card, so the card opens")
@@ -196,7 +196,7 @@ struct SpeechRecognitionTests {
         // The id of a card that is not on screen — what a recording started
         // two cards ago would carry. Recognition is asynchronous, and the
         // learner can reveal, rate and move on while the analyzer finalises.
-        session.applyRecognition("苹果", forCardWith: UUID())
+        session.applyRecognition("苹果", forCardWith: UUID(), in: context)
 
         #expect(session.speechCheck == nil, "nothing attached itself to the wrong card")
         #expect(session.isRevealed == false, "and nothing revealed a card the learner is still working on")
@@ -211,7 +211,7 @@ struct SpeechRecognitionTests {
         session.start(in: context)
         let current = try #require(session.currentCard)
 
-        session.applyRecognition("苹果", forCardWith: current.id)
+        session.applyRecognition("苹果", forCardWith: current.id, in: context)
         #expect(session.speechCheck == .mismatch(recognized: "苹果", expected: "水"))
         #expect(card.hanzi == "水", "compared against this card, not another")
     }
@@ -227,7 +227,7 @@ struct SpeechRecognitionTests {
         session.start(in: context)
         let first = try #require(session.currentCard)
 
-        session.applyRecognition("苹果", forCardWith: first.id)
+        session.applyRecognition("苹果", forCardWith: first.id, in: context)
         #expect(session.speechCheck != nil)
 
         session.submit(.good, in: context)
@@ -248,7 +248,7 @@ struct SpeechRecognitionTests {
         session.start(in: context)
         let current = try #require(session.currentCard)
 
-        session.applyRecognition("苹果", forCardWith: current.id)
+        session.applyRecognition("苹果", forCardWith: current.id, in: context)
 
         #expect(card.status == .weak, "a match is not an assessment")
         #expect(session.answeredCount == 0, "and nothing was recorded")
@@ -268,7 +268,7 @@ struct SpeechRecognitionTests {
         session.start(in: context)
         let current = try #require(session.currentCard)
 
-        session.applyRecognition("香蕉", forCardWith: current.id)
+        session.applyRecognition("香蕉", forCardWith: current.id, in: context)
 
         #expect(card.status == .good, "the learner decides, not the recogniser")
         #expect(session.answeredCount == 0)

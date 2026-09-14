@@ -296,6 +296,27 @@ einem Absturz oder App-Wechsel nichts verloren.
 
 ---
 
+### 7.1 Automatisch weitergereichte Versuche (Phase 11)
+
+Geht die App von selbst weiter (§12), gibt es **keine** Selbsteinschätzung.
+Persistiert wird dann:
+
+| Feld | Änderung |
+| --- | --- |
+| `reviewCount` | `+= 1` — ein Versuch hat stattgefunden |
+| `lastReviewedAt` | auf jetzt |
+| `correctCount` | **unverändert** |
+| `status` | **unverändert** (A36) |
+
+`correctCount` bleibt stehen, weil „richtig" eine Bewertung ist und hier
+niemand bewertet hat. Das Einzige, was vorlag, ist ein Textvergleich, dessen
+False-Accept-Eigenschaft in Phase 9 nicht gemessen wurde. Folge: `accuracy`
+(abgeleitet, heute von keiner Ansicht gelesen) **unterschätzt** Karten, die
+oft automatisch durchlaufen. Von den beiden möglichen Fehlerrichtungen ist das
+die richtige — sie kann nie mehr behaupten, als der Lernende gezeigt hat.
+
+---
+
 ## 8. Parameter
 
 Alle an einer Stelle, als benannte Konstanten:
@@ -404,3 +425,98 @@ Der Übergang ist bewusst klein gehalten:
 **Batch-Auswahl, Queue-Logik und die Schnittstelle der Engine bleiben dabei
 unverändert.** Genau deshalb ist die Gewichtung als eigene, austauschbare
 Funktion herausgezogen.
+
+---
+
+## 12. Assistierte Bewertung (Phase 11)
+
+Seit Phase 11 sammelt die App Evidenz über eine Karte und **fragt an geeigneten
+Stellen nicht mehr**. Die Regel ist rein, deterministisch und liegt in
+`Learning/AssistedAssessment.swift`; die Historie liefert die Feature-Schicht
+als `ReviewSignal`-Werte, genau wie sie `Card` als `CardSnapshot` liefert.
+
+### 12.1 Was in einen Versuch eingeht
+
+| Signal | Bedeutung |
+| --- | --- |
+| `direction` | Modus A oder B — beide stellen verschiedene Fragen |
+| `previousStatus` | der Stand **vor** diesem Versuch |
+| `usedSpeech` | ob überhaupt eine automatische Evidenz vorlag |
+| `speechMatched` | ob Apples Text nach der Normalisierung dem Hanzi entsprach; `nil` ohne Sprache |
+| `wasManualReveal` | Aufdecken ohne Versuch |
+| `wasRetry` | zweiter Anlauf an derselben Karte im selben Batch |
+| `assessment` | die abgegebene Bewertung, `nil` bei automatischem Weitergehen |
+
+**Nicht enthalten und nicht gespeichert:** Rohaudio, Konfidenz, Zeitdauern,
+Aussprache- oder Tonwerte. Keiner dieser Werte wurde je gemessen (harte
+Regel 7), und ein Feld, das es gibt, wird irgendwann benutzt.
+
+### 12.2 Ein „sauberer Versuch"
+
+Vier Bedingungen zusammen, jede tragend:
+
+1. Sprache wurde benutzt **und** der Text stimmte überein,
+2. es war **kein** Wiederholungsversuch (§6.1 folgt derselben Logik),
+3. es wurde **nichts** vorher aufgedeckt,
+4. eine abgegebene Bewertung schadet nicht — wer einen sauberen Versuch selbst
+   bestätigt, hat trotzdem einen sauberen Versuch gemacht.
+
+### 12.3 Die Entscheidung
+
+```text
+Karte ist Neu                      → fragen
+kein sauberer Versuch              → fragen   (Mismatch, Aufdecken, Retry, ohne Sprache)
+Lauf < 2 saubere Versuche          → fragen
+3 automatische Reviews seit der
+  letzten eigenen Bewertung        → fragen   (Rekalibrierung)
+sonst                              → automatisch weiter, Status unverändert
+```
+
+Der **Vorschlag** ist ein Schritt nach oben und nie mehr: `StatusTransition`
+mit *Gut*, auf derselben Leiter wie §6. Am oberen Ende gibt es keinen, weil
+*Gut* auf *Sicher* nichts ändert. **Nach unten gibt es nie einen Vorschlag** —
+der einzige Kandidat dafür wäre ein Mismatch, und ein Mismatch ist keine
+negative Evidenz.
+
+### 12.4 Was die Regel nicht darf
+
+- **Ein Mismatch senkt nichts.** Er beendet einen Lauf, und das heißt: fragen,
+  nicht abwerten. Der exakte Vergleich ist konstruktionsbedingt empfindlich —
+  in Phase 9 kamen 8 von 16 normal gesprochenen Zielantworten als anderer
+  chinesischer Text zurück.
+- **Ein einzelner Treffer trägt nichts.** Die False-Accept-Eigenschaft des
+  Vergleichs ist **nicht gemessen**; der Phase-9-Benchmark wurde nach dem
+  Positivdurchgang abgebrochen. Wie oft ein Treffer zufällig entsteht, ist
+  damit unbekannt.
+- **Der Vorschlag ändert nie etwas.** Er hebt eine Taste hervor. Der Status
+  bewegt sich ausschließlich über `StatusTransition` und ausschließlich nach
+  einem Tipp des Nutzers.
+- **Automatisches Weitergehen hebt den Status nicht.** Es spart eine Frage,
+  es vergibt keine Beförderung.
+
+### 12.5 Die drei freien Parameter sind Produktentscheidungen
+
+Die Roadmap hatte Fenstergröße, Gewichte, Alterung und Schwellen offen
+gelassen — zu konkretisieren, „nachdem reale Review-Historie existiert". Diese
+Historie entsteht erst mit dieser Phase. Die Werte sind deshalb **entschieden,
+nicht gemessen**, und stehen so auch im Code:
+
+| Parameter | Wert | Begründung |
+| --- | --- | --- |
+| Fenstergröße | 10 | die Ausgangsidee der Roadmap; begrenzt, damit ein alter Lauf nicht die letzte Woche überstimmt |
+| saubere Versuche vor dem Weitergehen | 2 | die kleinste Zahl, die nicht eins ist; höher gewählt würde das Feature keine einzige Frage sparen |
+| automatische Reviews bis zur Rekalibrierung | 3 | ohne sie friert der Status einer Karte mit langem Lauf ein, und Evidenz könnte nie etwas bedeuten |
+
+**Zeitliche Alterung gibt es bewusst nicht.** Ein Halbwertsbetrag ohne Daten,
+an die er angepasst wäre, wäre genau das Muster, das der Phase-9-Benchmark
+vermieden hat. Eine echte Alterung bleibt offen, bis Historie existiert, an
+der sie kalibrierbar wäre.
+
+**Aktualität entsteht durch den Abbruch des Laufs, nicht durch das Fenster.**
+Das ist eine Korrektur an der ersten Fassung dieses Abschnitts, die das
+Testaudit gefunden hat: Der Lauf wird vom neuesten Versuch rückwärts gezählt
+und endet beim ersten verwertbaren Versuch, der nicht sauber war — alles vor
+dem letzten Patzer kann also nichts bewirken. Das Fenster ist dagegen eine
+**Obergrenze für das, was gelesen wird**: Bei einer Schwelle von zwei kann das
+Kappen eines Laufs bei zehn keine Entscheidung ändern. Es begrenzt die
+Datenmenge, nicht das Ergebnis, und genau so steht es jetzt auch im Code.
