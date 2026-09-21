@@ -177,7 +177,7 @@ struct SpeechRecognitionTests {
         #expect(session.speechCheck == nil)
         #expect(session.isRevealed == false)
 
-        session.applyRecognition("苹果", forCardWith: current.id, in: context)
+        session.applyRecognition("苹果", forCardWith: current.id)
 
         #expect(session.speechCheck?.isMatch == true)
         #expect(session.isRevealed, "speaking checks the card, so the card opens")
@@ -196,7 +196,7 @@ struct SpeechRecognitionTests {
         // The id of a card that is not on screen — what a recording started
         // two cards ago would carry. Recognition is asynchronous, and the
         // learner can reveal, rate and move on while the analyzer finalises.
-        session.applyRecognition("苹果", forCardWith: UUID(), in: context)
+        session.applyRecognition("苹果", forCardWith: UUID())
 
         #expect(session.speechCheck == nil, "nothing attached itself to the wrong card")
         #expect(session.isRevealed == false, "and nothing revealed a card the learner is still working on")
@@ -211,7 +211,7 @@ struct SpeechRecognitionTests {
         session.start(in: context)
         let current = try #require(session.currentCard)
 
-        session.applyRecognition("苹果", forCardWith: current.id, in: context)
+        session.applyRecognition("苹果", forCardWith: current.id)
         #expect(session.speechCheck == .mismatch(recognized: "苹果", expected: "水"))
         #expect(card.hanzi == "水", "compared against this card, not another")
     }
@@ -227,10 +227,10 @@ struct SpeechRecognitionTests {
         session.start(in: context)
         let first = try #require(session.currentCard)
 
-        session.applyRecognition("苹果", forCardWith: first.id, in: context)
+        session.applyRecognition("苹果", forCardWith: first.id)
         #expect(session.speechCheck != nil)
 
-        session.submit(.good, in: context)
+        session.moveOn(in: context)
 
         #expect(session.currentCard !== first)
         #expect(session.speechCheck == nil, "the next card is not carrying the previous answer")
@@ -248,14 +248,16 @@ struct SpeechRecognitionTests {
         session.start(in: context)
         let current = try #require(session.currentCard)
 
-        session.applyRecognition("苹果", forCardWith: current.id, in: context)
+        session.applyRecognition("苹果", forCardWith: current.id)
 
-        #expect(card.status == .weak, "a match is not an assessment")
+        #expect(card.status == .weak, "a match is no classification")
         #expect(session.answeredCount == 0, "and nothing was recorded")
 
-        // Only the self-assessment moves it, exactly as before phase 9.
-        session.submit(.good, in: context)
-        #expect(card.status != .weak)
+        // Since phase 13 nothing but a confirmed offer moves it — and a single
+        // match earns no offer, so closing the attempt leaves the card alone.
+        #expect(session.proposedStatus == nil)
+        session.moveOn(in: context)
+        #expect(card.status == .weak, "recognition alone never rates")
         #expect(session.answeredCount == 1)
     }
 
@@ -268,7 +270,7 @@ struct SpeechRecognitionTests {
         session.start(in: context)
         let current = try #require(session.currentCard)
 
-        session.applyRecognition("香蕉", forCardWith: current.id, in: context)
+        session.applyRecognition("香蕉", forCardWith: current.id)
 
         #expect(card.status == .good, "the learner decides, not the recogniser")
         #expect(session.answeredCount == 0)
@@ -300,9 +302,9 @@ struct SpeechRecognitionTests {
         }
 
         // Only a running recording stops; everything else starts.
-        #expect(RecordAnswerButton.isStopping(at: .recording))
+        #expect(RecordAnswerButton.showsStopControl(at: .recording))
         for phase in states where phase != .recording {
-            #expect(RecordAnswerButton.isStopping(at: phase) == false, "\(phase)")
+            #expect(RecordAnswerButton.showsStopControl(at: phase) == false, "\(phase)")
         }
 
         // Nothing is tappable while the system is busy — a second tap during
@@ -405,12 +407,13 @@ struct SpeechRecognitionTests {
 
         // No recognition anywhere in this flow — the path a learner without a
         // microphone, or without permission, takes every time.
-        session.reveal()
+        session.reveal(recordingWasPossible: true)
         #expect(session.isRevealed)
         #expect(session.speechCheck == nil, "and the revealed card shows no recognition note")
 
-        session.submit(.secure, in: context)
+        session.moveOn(in: context)
         #expect(session.answeredCount == 1)
-        #expect(card.status != .medium)
+        #expect(card.status == .medium, "and mode A without speech evidence stays status-neutral")
+        #expect(card.reviewCount == 1, "the attempt is still recorded")
     }
 }

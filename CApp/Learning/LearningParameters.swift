@@ -28,14 +28,14 @@ nonisolated enum LearningParameters {
 
     /// How many other cards go before a repeated card comes back.
     ///
-    /// The whole point of the queue: a card answered with "Nochmal" has to
+    /// The whole point of the queue: a card the learner did not know has to
     /// return within the same batch, but never straight away.
     static let reinsertGap = 3
 
     /// How often one card may be put back into the same mini-batch.
     ///
     /// **One** since the phase-6 device test. It was 3, and together with
-    /// several cards answered "Nochmal" that turned a seven-card window into
+    /// several unknown cards that turned a seven-card window into
     /// ten to fifteen questions about the same few cards — a drill, not a
     /// session. One short repetition keeps the value of trying again soon;
     /// everything beyond that is the weighting's job, which brings a card

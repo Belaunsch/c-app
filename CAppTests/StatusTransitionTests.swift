@@ -63,31 +63,58 @@ struct StatusTransitionTests {
         )
     }
 
-    // §10, test 17
-    @Test("A second assessment in the same batch leaves the status alone")
-    func onlyTheFirstAssessmentChangesTheStatus() {
-        // The rule from §6.1, and the reason for it: without it "Nochmal"
-        // followed by a later "Gut" would leave a card better rated than
-        // before, although the learner did not know it at first.
-        let card = UUID()
-        var queue = SessionQueue(cardIDs: [card])
+    // §10, test 17 — rewritten for phase 13.
+    @Test("A card cannot change status twice in one mini-batch")
+    func onlyOneStatusChangePerBatch() {
+        // §6.1 used to be enforced by a counter in the queue: only the first
+        // assessment of a card produced a new status. Phase 13 took the
+        // assessments out of the flow, and the rule now holds **structurally** —
+        // which is exactly why it needs a test rather than a comment.
+        //
+        // The chain: a status only moves when the learner confirms a proposal;
+        // a proposal needs a clean attempt; a clean attempt is never a retry;
+        // and the only way a card comes back inside one batch is a give-up,
+        // which makes the next attempt a retry. So the second appearance can
+        // never carry a proposal.
+        let secondAppearance = ReviewSignal(
+            direction: .germanToChinese,
+            previousStatus: .medium,
+            usedSpeech: true,
+            speechMatched: true,
+            wasRetry: true
+        )
+        let plentyOfCleanHistory = Array(
+            repeating: ReviewSignal(
+                direction: .germanToChinese,
+                previousStatus: .medium,
+                usedSpeech: true,
+                speechMatched: true
+            ),
+            count: 5
+        )
 
-        let first = queue.assess(.again, currentStatus: .weak)
-        #expect(first?.wasFirstAssessmentInBatch == true)
-        #expect(first?.newStatus == .weak, "the first attempt is the indicator")
+        #expect(
+            AssistedAssessment.decision(
+                currentStatus: .medium,
+                current: secondAppearance,
+                history: plentyOfCleanHistory
+            ) == .continueOnly,
+            "a repeat attempt must never be offered a promotion, however clean the history"
+        )
 
-        // The case the rule exists for: knowing it later in the same batch
-        // must not lift the card above what the first attempt showed. With
-        // `maxReinserts` at 1 since phase 6, this repetition is the last one
-        // the batch grants.
-        let second = queue.assess(.good, currentStatus: .weak)
-        #expect(second?.wasFirstAssessmentInBatch == false)
-        #expect(second?.newStatus == nil, "a later Gut must not improve the status")
-        #expect(second?.isResolved == true)
-
-        // The counters do keep going, though (§7) — that is the difference
-        // between "no status change" and "did not happen".
-        #expect(first?.countsAsCorrect == false, "Nochmal is not correct")
-        #expect(second?.countsAsCorrect == true, "the later Gut still counts as a review hit")
+        // And the give-up that produced the repeat is not positive evidence
+        // either — the other half of the same chain.
+        let gaveUp = ReviewSignal(
+            direction: .germanToChinese,
+            previousStatus: .medium,
+            wasManualReveal: true
+        )
+        #expect(
+            AssistedAssessment.decision(
+                currentStatus: .medium,
+                current: gaveUp,
+                history: plentyOfCleanHistory
+            ) == .continueOnly
+        )
     }
 }

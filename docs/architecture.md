@@ -85,6 +85,7 @@ c-app/
 │   │   ├── CardType.swift          enum: word | sentence
 │   │   ├── LearningStatus.swift    enum: new | weak | medium | good | secure
 │   │   ├── ReviewLog.swift         @Model, Antwort-Historie (Phase 11)
+│   │   ├── SuggestionDecision.swift enum: accepted | declined (Phase 13)
 │   │   └── SampleData.swift        Vorschau-/Testdaten (nur DEBUG)
 │   │
 │   ├── Learning/                   ← reiner Swift-Code, nur Foundation
@@ -128,8 +129,9 @@ c-app/
 │   │   │   ├── SpeechCheck.swift          Vergleichsergebnis, rein und testbar
 │   │   │   ├── RecordAnswerButton.swift   Mikrofonknopf, Zustandstabelle testbar
 │   │   │   ├── SessionSpeechMode.swift   Session-Sprachmodus, rein (Phase 12)
+│   │   │   ├── LearnFlow.swift            Flowregeln, rein und testbar (Phase 13)
 │   │   │   ├── PromptAudioToGermanView.swift
-│   │   │   └── SelfAssessmentBar.swift
+│   │   │   └── RevealedDecisionBar.swift  Weiter oder Einstufungsfrage (Phase 13)
 │   │   ├── Cards/
 │   │   │   ├── CardListView.swift          Liste, Akkordeon, Filter, Sortierung
 │   │   │   ├── CardListArrangement.swift  Sortierung, Sections, Akkordeonregel
@@ -175,17 +177,16 @@ c-app/
 └── docs/
 ```
 
-**Was Phase 13 an `Features/Learn/` ändert** (spezifiziert am 2026-09-21, noch
-nicht gebaut — die Struktur oben beschreibt den gebauten Stand):
-`SelfAssessmentBar.swift` entfällt und wird durch `RevealedDecisionBar.swift`
-ersetzt (*Weiter* oder die Einstufungsfrage), dazu kommt
-`LearnFlow.swift` mit den reinen Regeln des neuen Bedienflusses —
-Beschriftung des Aufdeck-Knopfes, „bietet Aufgeben an", „streut wieder ein".
-`RecordAnswerButton.swift` behält seinen Namen und bekommt den geteilten
-Zustand `[ Fertig ][ ■ ]`. Neue Dateien in `Learning/` entstehen **nicht**;
-`AssistedAssessment.swift`, `ReviewSignal.swift` und `SessionQueue.swift`
-werden geändert. In `Models/` kommt `SuggestionDecision.swift` hinzu
-(`accepted` / `declined`), und `ReviewLog.swift` bekommt die zwei neuen
+**Was Phase 13 an dieser Struktur geändert hat** (2026-09-21, oben schon
+eingetragen): `SelfAssessmentBar.swift` ist **gelöscht** und durch
+`RevealedDecisionBar.swift` ersetzt (*Weiter* oder die Einstufungsfrage), dazu
+ist `LearnFlow.swift` mit den reinen Regeln des neuen Bedienflusses
+hinzugekommen — Beschriftung des Aufdeck-Knopfes und, davon getrennt, „streut
+wieder ein". `RecordAnswerButton.swift` behält seinen Namen und hat den
+geteilten Zustand `[ Fertig ][ ■ ]` bekommen. In `Learning/` ist **keine**
+Datei hinzugekommen; `AssistedAssessment.swift`, `ReviewSignal.swift`,
+`SessionQueue.swift` und `SelfAssessment.swift` sind geändert. In `Models/` ist
+`SuggestionDecision.swift` neu, und `ReviewLog.swift` hat die zwei neuen
 Properties.
 
 **Empfehlung für den VS-Code-Workflow:** Die Ordner unter `CApp/` als
@@ -357,7 +358,7 @@ Die Aggregate `reviewCount` und `correctCount` auf `Card` bleiben, wo sie
 sind — sie wären jetzt zwar ableitbar, aber sie neu zu berechnen wäre eine
 Änderung ohne Nutzen und mit Migrationsrisiko.
 
-#### Die zwei Felder aus Phase 13 (spezifiziert, nicht gebaut)
+#### Die zwei Felder aus Phase 13
 
 ```swift
 private(set) var suggestedStatusRaw: Int?        // LearningStatus?
@@ -402,10 +403,15 @@ möglich war. Er entscheidet die Wiedereinstreuung innerhalb des laufenden
 Versuchs, wird später von keiner Regel gelesen, und `wasManualReveal` trägt die
 Evidenzseite schon.
 
-**Und es sind die ersten neuen Properties auf einem bestehenden Modell.** Q7 ist
-für ein neues Modell plus Beziehung gemessen, für diesen Fall **nicht** — die
-Messung gegen einen Phase-12-Store ist deshalb ein Akzeptanzkriterium von
-Phase 13 und kein Erfahrungswert.
+**Und es sind die ersten neuen Properties auf einem bestehenden Modell.** Q7 war
+für ein neues Modell plus Beziehung gemessen, für diesen Fall **nicht** — also
+ist es nachgemessen worden: `SchemaMigrationTests.phase13PropertiesMigrateLightly`
+schreibt einen Store mit dem nachgebauten **Phase-12-Schema** (dieselben
+Entitätsnamen, `ReviewLog` ohne die beiden Felder) samt realer Historie und
+öffnet dieselbe Datei mit dem Phase-13-Schema. Ergebnis: ohne
+`SchemaMigrationPlan`, ohne Verlust, die beiden neuen Properties lesen auf jedem
+Alteintrag als `nil`, und ein zweites Öffnen bestätigt, was tatsächlich auf der
+Platte steht.
 
 ---
 
@@ -457,11 +463,16 @@ neuen Inhalt, ohne dass die Engine davon etwas wissen muss
   damit Tests mit einem festen Seed deterministisch laufen. Die Engine
   erzeugt nie selbst einen Generator.
 
-**Was Phase 13 an dieser Schnittstelle ändert** (spezifiziert am 2026-09-21,
-noch nicht gebaut): `AssessmentOutcome` und `SessionQueue.assess(_:currentStatus:)`
-werden durch `AttemptOutcome` und `closeCurrentCard(reinserting:)` ersetzt —
-der Eingang der Engine ist nicht mehr eine Selbsteinschätzung, sondern der
-Abschluss eines Versuchs. Die **Regeln** darunter bleiben unverändert:
+**Was Phase 13 an dieser Schnittstelle geändert hat** (2026-09-21):
+`AssessmentOutcome` und `SessionQueue.assess(_:currentStatus:)` sind durch
+`closeCurrentCard(reinserting:) -> Bool` ersetzt — der Eingang der Engine ist
+nicht mehr eine Selbsteinschätzung, sondern der Abschluss eines Versuchs. Ein
+Outcome-Objekt gibt es **nicht** mehr, und das ist eine Abweichung von der
+Spezifikation mit Grund: Nach dem Umbau hatte es keinen Leser mehr. Der Status
+wird nur bei *Bestätigen* geschrieben und kommt dort aus dem Vorschlag, „erster
+Versuch im Batch" beantwortet `reinsertCount(for:)`, und das Batchende fragt der
+Aufrufer mit `isFinished` ab. Zurückgegeben wird deshalb nur, **ob** eine Karte
+geschlossen wurde. Die **Regeln** darunter bleiben unverändert:
 Wiedereinstreuungsposition, `maxReinserts`, „ungesehene Karten zuerst",
 Batchende. `StatusTransition` bleibt die einzige Stelle, an der ein Status
 entsteht; sie wird ab Phase 13 vom Feature-Layer direkt aufgerufen, wenn der
@@ -783,12 +794,12 @@ das eine noch das andere zutrifft — mit Begründung in derselben Zelle.
 | 12 | Erkennung | Mikrofon nicht freigegeben | Knopf sichtbar aber tot, Satz: „Ohne Mikrofon geht alles andere weiter …" | Freigabe in den iOS-Einstellungen nachholen | beides |
 | 13 | Erkennung | Modelle nach dem Versuch weiterhin nicht installiert | `AppError.speechAssetsUnavailable` mit dem **gemessenen** `AssetInventory`-Status im technischen Teil | später erneut versuchen, in den Einstellungen vorbereiten | Gerät |
 | 14 | Erkennung | Reservierung oder Download scheitern (offline beim ersten Mal) | `AppError.speechAssetsFailed` + Systemtext | online gehen, erneut vorbereiten | Gerät (Flugmodus vor dem ersten Download) |
-| 15 | Erkennung | Aufnahme oder Analyse brechen ab | `AppError.speechRecognitionFailed`, Knopf geht zurück auf „Antwort sprechen", Meldung darunter | erneut sprechen oder die Antwort zeigen | Gerät |
-| 16 | Erkennung | nichts gesprochen | „Nichts erkannt. Noch einmal versuchen, oder die Antwort zeigen." — ausdrücklich **kein** Fehler und **kein** Urteil über die Aussprache | wiederholen | beides |
+| 15 | Erkennung | Aufnahme oder Analyse brechen ab | `AppError.speechRecognitionFailed`, Knopf geht zurück auf „Antwort sprechen", Meldung darunter | erneut sprechen oder aufgeben | Gerät |
+| 16 | Erkennung | nichts gesprochen | „Nichts erkannt. Noch einmal versuchen, oder aufgeben." — ausdrücklich **kein** Fehler und **kein** Urteil über die Aussprache | wiederholen | beides |
 | 17 | SwiftData | Container lässt sich nicht öffnen | ganzseitige `PersistenceErrorView` statt Absturz | App neu starten; der Grund steht da | Gerät |
 | 18 | SwiftData | `save()` beim Anlegen/Bearbeiten einer Karte scheitert | Alert `cardSaveFailed` **und** `rollback()` | erneut versuchen; nichts wurde halb geschrieben | **Gerät** — siehe Kasten unten |
 | 19 | SwiftData | `save()` beim Löschen scheitert | Alert `cardDeleteFailed` + `rollback()`, die Karte bleibt sichtbar | erneut versuchen | **Gerät** |
-| 20 | SwiftData | `save()` **während einer Session** scheitert | Alert, `rollback()`, die Karte bleibt aufgedeckt und unbewertet in der Queue | dieselbe Karte erneut bewerten | **Gerät** |
+| 20 | SwiftData | `save()` **während einer Session** scheitert | Alert, `rollback()`, die Karte bleibt aufgedeckt und der Vorschlag stehen | dieselbe Entscheidung erneut treffen | **Gerät** |
 | 21 | SwiftData | Kategorie anlegen/umbenennen/löschen scheitert | `tagCreateFailed` / `tagRenameFailed` / `tagDeleteFailed`, jeweils mit Systemtext | erneut versuchen; der alte Zustand steht noch | **Gerät** |
 | 22 | Eingabe | Kategoriename leer, zu lang oder doppelt | `tagNameRejected` mit dem konkreten Grund, **bevor** geschrieben wird | Namen ändern | Test |
 | 23 | Eingabe | Karte ohne Deutsch oder ohne chinesisches Zeichen | `cardIncomplete` — der Speichern-Knopf ist ohnehin aus | Felder füllen | Test |
@@ -837,17 +848,17 @@ geprüft. Sie stehen auf der Geräteliste dieser Phase, und erst deren Ergebnis
 entscheidet über das Akzeptanzkriterium „Kein Fehlerfall führt zu einem
 Absturz oder einem stillen Verschlucken".
 
-### Was Phase 13 an dieser Tabelle ändert (spezifiziert, nicht umgesetzt)
+### Was Phase 13 an dieser Tabelle geändert hat
 
-Die Tabelle oben ist der **Befund vom 2026-09-12** und beschreibt den gebauten
-Stand. Phase 13 ändert daran keine Fehlerklasse und keinen Pfad, aber fünf
-Zeilen bekommen einen anderen Wortlaut, weil der Knopf, auf den sie verweisen,
-anders heißt:
+Die Tabelle oben ist der **Befund vom 2026-09-12** und ist an den betroffenen
+Zeilen nachgezogen. Phase 13 hat daran keine Fehlerklasse und keinen Pfad
+geändert, aber **fünf** Zeilen haben einen anderen Wortlaut bekommen, weil der
+Knopf, auf den sie verweisen, anders heißt:
 
 | Zeile | was sich ändert |
 | --- | --- |
 | 11 (`unavailable`) | „Alles andere funktioniert weiter" bleibt; der Aufdeck-Knopf heißt auch hier *Aufgeben* — die Beschriftung ist in Modus A konstant, nur wieder eingestreut wird dort nichts |
-| 12 (`permissionDenied`) | „tippe auf „Antwort zeigen“" → *Aufgeben* |
+| 12 (`permissionDenied`) | „tippe auf „Antwort zeigen“" → „tippe auf „Aufgeben“" |
 | 15 (Aufnahme/Analyse bricht ab) | „erneut sprechen oder die Antwort zeigen" → *Aufgeben* |
 | 16 („nichts gesprochen") | „Noch einmal versuchen, oder die Antwort zeigen." → *Aufgeben*; ausdrücklich weiterhin **kein** Urteil über die Aussprache |
 | 20 (`save()` während einer Session) | „bleibt aufgedeckt und unbewertet" → die Karte bleibt aufgedeckt, und dieselbe Entscheidung (*Weiter*, *Bestätigen*, *Ablehnen*) ist erneut möglich |

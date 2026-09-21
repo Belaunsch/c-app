@@ -6,10 +6,11 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 12 implementiert. Finale Roadmap-Abnahme: ausstehend.**
+**Phasen 0 bis 12 implementiert, Phase 13 implementiert mit einem offenen
+Produktpunkt. Finale Roadmap-Abnahme: ausstehend.**
 
 Die Implementierung von v1 steht: Tests grün, Debug- und Release-Build sauber,
-zwei unabhängige Code Reviews und zwei Testaudits abgearbeitet. Physische
+drei unabhängige Code Reviews und drei Testaudits abgearbeitet. Physische
 Gerätetests hat es in jeder Phase gegeben, zuletzt am **2026-09-12** und
 **2026-09-13** auf einem iPhone 16 Pro (iOS 26.6) — sie sind
 **Entwicklungsbelege** für die jeweils geprüften Pfade.
@@ -33,8 +34,8 @@ Kartenverwaltung: Wörter und Sätze getrennt, Karten anlegen, bearbeiten und
 löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
 Lernstatus, Kategorien umbenennen und löschen.
 
-Build und Unit-Tests laufen grün: **603 Testfunktionen / 664 Einzelausführungen,
-0 Fehlschläge, 0 Compilerwarnungen** auf einem Debug-Build von null (iPhone-17-Simulator, iOS
+Build und Unit-Tests laufen grün: **633 Testfunktionen / 691 Einzelausführungen,
+0 Fehlschläge, 0 Compilerdiagnosen** auf einem Debug-Build von null (iPhone-17-Simulator, iOS
 26.5), Release-Build von null ebenso. Jede Phase ist zusätzlich auf einem
 echten iPhone belegt worden — zuletzt am **2026-09-12** und **2026-09-13** —,
 jeweils für die Pfade, die sich anders nicht prüfen ließen.
@@ -154,17 +155,16 @@ Testcode und in
 allen vier fehlt die entscheidende Information in den Daten, nicht im
 Algorithmus.
 
-Neu aus Phase 11: **Review-Historie und assistierte Bewertung.** Die App
-schreibt zu jedem Versuch einen Eintrag — Zeitpunkt, Richtung, Ausgangsstatus,
-ob gesprochen wurde, ob der Text übereinstimmte, ob von Hand aufgedeckt wurde,
-ob es ein zweiter Anlauf war, und die Bewertung, falls eine abgegeben wurde.
-Nach zwei sauberen Erstversuchen in Folge entfällt die Vierfachauswahl und die
-App geht von selbst weiter, **ohne den Lernstand zu ändern**; nach drei
-automatischen Reviews fragt sie wieder und hebt dabei eine Stufe hervor. Ein
-Erkennungs-Mismatch senkt nie etwas, ein einzelner Treffer trägt nichts, und
-die eigene Bewertung gewinnt immer. Die Historie ist die erste
-Schemaerweiterung seit Phase 1 — dass sie verlustfrei migriert, ist an einem
-echten Store gemessen (Q7).
+Neu aus Phase 11: **Review-Historie.** Die App schreibt zu jedem Versuch einen
+Eintrag — Zeitpunkt, Richtung, Ausgangsstatus, ob gesprochen wurde, ob der Text
+übereinstimmte, ob von Hand aufgedeckt wurde, ob es ein zweiter Anlauf war. Sie
+ist die erste Schemaerweiterung seit Phase 1, und dass sie verlustfrei migriert,
+ist an einem echten Store gemessen (Q7). Der Bewertungsteil derselben Phase —
+nach zwei sauberen Versuchen entfiel die Vierfachauswahl, nach drei automatischen
+Reviews wurde wieder gefragt — ist durch Phase 13 **ersetzt** (siehe unten).
+Unverändert gültig ist, was er nicht durfte: Ein Erkennungs-Mismatch senkt nie
+etwas, ein einzelner Treffer trägt nichts, und die Entscheidung des Nutzers
+gewinnt immer.
 
 Neu aus Phase 12: **Session-Sprachmodus.** Ein Tap aufs Mikrofon schaltet ihn
 ein; danach startet die Aufnahme auf jeder neuen Karte von selbst. **Beendet
@@ -173,17 +173,39 @@ keine Bequemlichkeit: Auf iOS 26.6 liefert Apples `SpeechDetector` trotz echter
 Sprache keine Ergebnisse, und `isFinal` kommt 3,9 bis 6,6 Sekunden zu spät. Eine
 eigene Stille-Regel hätte vier geratene Parameter gebraucht, und ein Endpointing,
 das mitten im Wort abschneidet, schadet mehr als ein Tap. Die Phase hieß deshalb
-ursprünglich „Hands-free" und heißt jetzt nicht mehr so. Sprachausgabe,
-Hintergrund, Unterbrechung, Fehler und Sessionende schalten den Modus ab; ein
-leerer Versuch startet auf derselben Karte nichts Neues.
+ursprünglich „Hands-free" und heißt jetzt nicht mehr so. Hintergrund, Unterbrechung, Fehler und Sessionende
+schalten den Modus ab; ein leerer Versuch startet auf derselben Karte nichts
+Neues. Sprachausgabe schaltet ihn seit Phase 13 nur noch bei verdeckter Karte ab
+— sonst hätte das Anhören der Antwort den Modus auf jeder Karte gekostet.
 
-Nächster Schritt: **Phase 13 — Lernflow & Assisted Classification UX**, am
-2026-09-21 spezifiziert und noch nicht implementiert: Die vier Bewertungstasten
-verlassen den Lernflow, *Antwort zeigen* wird in Modus A zu *Aufgeben*, die
-Aufnahme bekommt einen Abbruch, und aus dem Vorschlag wird eine
-Zustimmungsfrage („Neue Einstufung: Mittel → Gut"). Danach **Phase 14 —
-AI-Integration**, deren Umfang noch nicht entschieden ist, und **erst dann**
-die finale Geräte- und Release-Abnahme auf dem fertigen Produkt.
+Neu aus Phase 13: **der umgebaute Lernflow.** Die vier Bewertungstasten haben
+den Lernflow verlassen. Die verdeckte Karte zeigt den Aufnahmepfad und darunter
+**Aufgeben**; läuft eine Aufnahme, steht dort `[ Fertig ][ ■ ]` — die breite
+Taste schrumpft animiert auf die Stop-Fläche, und **■ verwirft** den Versuch,
+ohne etwas auszuwerten, aufzudecken oder zu protokollieren. *Aufgeben*
+übernimmt die Wiedereinstreuung von „Nochmal", genau einmal je Runde und nur,
+wo eine Aufnahme überhaupt möglich war. Nach dem Aufdecken steht `[ Weiter ]`
+oder eine Zustimmungsfrage: „Neue Einstufung — Mittel → Gut" mit *Ablehnen* und
+*Bestätigen*. **Kein Pfad senkt einen Status**, eine Ablehnung wird persistiert
+und wirkt über App-Neustarts hinweg, und eine neue Karte kann erstmals
+eingestuft werden. Ob die Tastatur beim Hanzi-Feld auf Chinesisch umschalten
+kann, ist geprüft und beantwortet: **nein**, nicht aus einer normalen App — die
+Einschränkung ist dokumentiert, statt ein Verhalten zu versprechen, das iOS
+nicht erlaubt.
+
+**Offen aus Phase 13, und es ist eine Produktentscheidung:** Mit dem Wegfall der
+vier Bewertungstasten gibt es im Produkt **derzeit keinen Weg, einen Lernstand zu
+senken.** Die Dokumentation verwies dafür auf das Setzen in der Kartenübersicht —
+das unabhängige Code Review hat gefunden, dass dieses Bedienelement seit Phase 1
+spezifiziert, aber nie gebaut wurde. Zu entscheiden ist: nachziehen, oder
+ausdrücklich festlegen, dass Version 1 keinen Weg nach unten hat. Bis dahin gilt
+Phase 13 nicht als abgeschlossen; Einzelheiten in
+[roadmap.md § Phase 13](docs/roadmap.md) und
+[learning-engine.md §13.11](docs/learning-engine.md).
+
+Nächster Schritt danach: **Phase 14 — AI-Integration**, deren Umfang noch nicht
+entschieden ist und die ohne Akzeptanzkriterien nicht begonnen wird, und **erst
+dann** die finale Geräte- und Release-Abnahme auf dem fertigen Produkt.
 
 ## Drittanbieter-Daten
 

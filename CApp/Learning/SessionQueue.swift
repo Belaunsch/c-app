@@ -5,44 +5,6 @@
 
 import Foundation
 
-/// What one self-assessment did, and what the feature layer has to write
-/// because of it.
-///
-/// Small on purpose. `docs/learning-engine.md` §7 lists exactly what phase 6
-/// needs after every answer, and this carries it without that layer having to
-/// reconstruct anything about the queue: no event bus, no command objects, no
-/// state machine.
-nonisolated struct AssessmentOutcome: Equatable, Sendable {
-
-    /// The card that was just rated.
-    let cardID: UUID
-
-    let assessment: SelfAssessment
-
-    /// Whether this was the card's **first** rating in this mini-batch.
-    let wasFirstAssessmentInBatch: Bool
-
-    /// The status to store, or `nil` when the status must stay as it is.
-    ///
-    /// Non-nil exactly on the first rating of a card per batch (§6.1): the
-    /// first attempt is the honest indicator, so a later "Gut" in the same
-    /// batch must not lift a card that was not known at first.
-    let newStatus: LearningStatus?
-
-    /// Whether the card was put back into the batch for another try.
-    let wasReinserted: Bool
-
-    /// Whether the batch is finished, meaning every card in it is resolved.
-    let isBatchFinished: Bool
-
-    /// Whether `correctCount` should go up (§7). `reviewCount` goes up for
-    /// every outcome, so it needs no flag.
-    var countsAsCorrect: Bool { assessment.countsAsCorrect }
-
-    /// The complement of `wasReinserted`: the card has left the batch.
-    var isResolved: Bool { wasReinserted == false }
-}
-
 /// The order the cards of one mini-batch are asked in, and how a card that
 /// was not known comes back.
 ///
@@ -50,22 +12,30 @@ nonisolated struct AssessmentOutcome: Equatable, Sendable {
 /// session simply shows its new text next time it comes up
 /// (`docs/learning-engine.md` §9).
 ///
-/// The rule from §5, in one sentence: **every** assessment removes the
-/// current card from the queue, and "Nochmal" then puts it back later.
-/// Because removal makes the next card slide into the current position, the
-/// index never advances — the current card is always the first one.
+/// The rule from §5, in one sentence: **every** finished attempt removes the
+/// current card from the queue, and giving up puts it back later. Because
+/// removal makes the next card slide into the current position, the index never
+/// advances — the current card is always the first one.
+///
+/// **Since phase 13 the trigger is an attempt, not a self-assessment.** The
+/// four ratings left the learning flow, so the only statement about not knowing
+/// a card is „Aufgeben", and that is what puts a card back. Everything else
+/// about this type is unchanged: where a repetition lands, how often, and when
+/// a batch ends. A mismatch deliberately does **not** reinsert — it is not
+/// negative evidence, and scheduling on it would be acting on a signal the app
+/// says it does not trust.
 ///
 /// How much later is the part the device test corrected. A repetition goes
 /// **after every card that has not had its first attempt yet**, and at least
 /// `reinsertGap` positions away. The fixed gap alone produced a cycle: with
-/// `A B C D E F G` and the first four answered "Nochmal", each repetition
+/// `A B C D E F G` and the first four given up on, each repetition
 /// landed three places on and the batch ran `A B C D A B C D` while E, F and
 /// G had never been shown. Technically finite, but it feels like a loop, and
 /// it drills four cards instead of introducing the other three.
 ///
 /// Termination is a property of this type, not of the UI driving it: a card
 /// may be reinserted at most `maxReinserts` times, after which it counts as
-/// resolved. A pool of one card answered "Nochmal" forever therefore ends
+/// resolved. A pool of one card given up on forever therefore ends
 /// after `maxReinserts + 1` questions.
 nonisolated struct SessionQueue: Equatable, Sendable {
 
@@ -75,8 +45,8 @@ nonisolated struct SessionQueue: Equatable, Sendable {
     /// How often each card has been put back so far.
     private var reinsertCounts: [UUID: Int] = [:]
 
-    /// The cards that have been rated at least once in this batch.
-    private var assessedCardIDs: Set<UUID> = []
+    /// The cards that have had at least one finished attempt in this batch.
+    private var attemptedCardIDs: Set<UUID> = []
 
     /// The ids of every card in this batch, for the next batch's recency
     /// damping (§3.2). Kept because the queue empties as cards resolve.
@@ -98,68 +68,66 @@ nonisolated struct SessionQueue: Equatable, Sendable {
     var isFinished: Bool { pending.isEmpty }
 
     /// How often `cardID` has been put back into this batch.
+    ///
+    /// Also the feature layer's answer to „is this a retry?" — a card that has
+    /// been put back is on its second run through the batch.
     func reinsertCount(for cardID: UUID) -> Int {
         reinsertCounts[cardID, default: 0]
     }
 
-    /// Records one self-assessment of the current card.
+    /// Closes the current card's attempt and moves the batch on.
     ///
-    /// - Parameter currentStatus: the card's status *now*, which only the
-    ///   feature layer knows — the queue holds no card contents. It is used
-    ///   for the status transition, and only on the card's first rating in
-    ///   this batch.
-    /// - Returns: what to write and what happened, or `nil` when the batch is
-    ///   already finished. Returning `nil` rather than trapping: a mis-wired
-    ///   caller should not crash in front of the user.
+    /// - Parameter reinserting: whether the card goes back into this batch for
+    ///   another try. The feature layer decides that from the learner's action
+    ///   („Aufgeben") and from whether a recording was possible at all — the
+    ///   queue holds no card contents and knows nothing about microphones
+    ///   (`docs/learning-engine.md` §13.5).
+    /// - Returns: whether a card was closed. `false` when the batch was already
+    ///   finished — returning rather than trapping, because a mis-wired caller
+    ///   should not crash in front of the user.
+    ///
+    /// **It deliberately returns no outcome object.** Phase 12 returned one
+    /// carrying the new status, whether this was the first rating and whether
+    /// the batch is finished. None of that has a reader any more: the status is
+    /// written only when the learner confirms a suggestion, „first attempt in
+    /// the batch" is answered by `reinsertCount(for:)` where it is needed, and
+    /// the caller asks `isFinished` directly. A returned value nobody reads is
+    /// a promise without cover.
     @discardableResult
-    mutating func assess(
-        _ assessment: SelfAssessment,
-        currentStatus: LearningStatus
-    ) -> AssessmentOutcome? {
-        guard let cardID = pending.first else { return nil }
+    mutating func closeCurrentCard(reinserting: Bool) -> Bool {
+        guard let cardID = pending.first else { return false }
 
-        let isFirstAssessment = assessedCardIDs.contains(cardID) == false
-        assessedCardIDs.insert(cardID)
+        attemptedCardIDs.insert(cardID)
 
-        // Every assessment removes the current card first. That is what makes
-        // the reinsert positions in §5 come out right, and it is why the
-        // index never has to move.
+        // Closing removes the current card first. That is what makes the
+        // reinsert positions in §5 come out right, and it is why the index
+        // never has to move.
         pending.removeFirst()
 
-        let reinserted = reinsert(cardID, after: assessment)
-
-        return AssessmentOutcome(
-            cardID: cardID,
-            assessment: assessment,
-            wasFirstAssessmentInBatch: isFirstAssessment,
-            newStatus: isFirstAssessment
-                ? StatusTransition.newStatus(from: currentStatus, for: assessment)
-                : nil,
-            wasReinserted: reinserted,
-            isBatchFinished: pending.isEmpty
-        )
+        reinsert(cardID, if: reinserting)
+        return true
     }
 
-    /// Drops the current card without rating it.
+    /// Drops the current card without it counting as an attempt.
     ///
     /// For the one case §9 names: a card deleted while the session runs. Its
     /// id can no longer be resolved, so it is skipped when moving on. It does
-    /// **not** count as a review — no outcome, no counters, no status change.
+    /// **not** count as a review — no counters, no status change, and unlike
+    /// `closeCurrentCard(reinserting:)` it does not mark the card as attempted.
     ///
-    /// Two things to know when driving this from the feature layer, because
-    /// both are easy to get wrong: it returns no outcome, so a caller that
-    /// follows `isBatchFinished` has to check `isFinished` after a skip; and
-    /// a card that had already been reinserted still sits in the queue a
-    /// second time, so it will come up again and has to be skipped again.
+    /// One thing to know when driving this from the feature layer: a card that
+    /// had already been reinserted still sits in the queue a second time, so it
+    /// will come up again and has to be skipped again.
     mutating func skipCurrentCard() {
         guard pending.isEmpty == false else { return }
         pending.removeFirst()
     }
 
-    /// Puts the card back if the answer asks for it and the limit allows.
+    /// Puts the card back if the caller asks for it and the limit allows.
     /// - Returns: whether it went back in.
-    private mutating func reinsert(_ cardID: UUID, after assessment: SelfAssessment) -> Bool {
-        guard assessment.keepsCardInBatch else { return false }
+    @discardableResult
+    private mutating func reinsert(_ cardID: UUID, if shouldReinsert: Bool) -> Bool {
+        guard shouldReinsert else { return false }
         guard reinsertCount(for: cardID) < LearningParameters.maxReinserts else {
             // The limit is reached: the card counts as resolved and leaves the
             // batch. Without this a batch could never end. Its low status
@@ -179,14 +147,14 @@ nonisolated struct SessionQueue: Equatable, Sendable {
     /// Where a repetition goes: behind every card still awaiting its first
     /// attempt, and never closer than `reinsertGap`.
     ///
-    /// Both halves matter. Without the unseen boundary a run of "Nochmal"
-    /// answers cycles the same few cards while others are never shown — the
+    /// Both halves matter. Without the unseen boundary a run of give-ups
+    /// cycles the same few cards while others are never shown — the
     /// device test found exactly that. Without the minimum gap a repetition
     /// in a batch whose cards have all been seen once would come straight
     /// back, which is what §5 rules out.
     private func reinsertPosition() -> Int {
         let behindUnseen = pending
-            .lastIndex { assessedCardIDs.contains($0) == false }
+            .lastIndex { attemptedCardIDs.contains($0) == false }
             .map { $0 + 1 } ?? 0
         return max(LearningParameters.reinsertGap, behindUnseen)
     }

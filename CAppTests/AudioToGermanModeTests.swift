@@ -104,7 +104,7 @@ struct AudioToGermanModeTests {
     @Test("Audio only means audio only — the writing is not on screen")
     func nothingIsVisibleAtFirst() {
         #expect(AudioPrompt.showsHanzi(at: .audioOnly) == false)
-        #expect(AudioPrompt.allowsAssessment(at: .audioOnly) == false)
+        #expect(AudioPrompt.allowsDecision(at: .audioOnly) == false)
         #expect(AudioPrompt.offersHanziStep(at: .audioOnly, in: .audioToGerman))
     }
 
@@ -122,7 +122,7 @@ struct AudioToGermanModeTests {
     @Test("Hanzi anzeigen shows the Hanzi and does not open the answer")
     func theMiddleStepShowsOnlyTheWriting() {
         #expect(AudioPrompt.showsHanzi(at: .hanziShown))
-        #expect(AudioPrompt.allowsAssessment(at: .hanziShown) == false,
+        #expect(AudioPrompt.allowsDecision(at: .hanziShown) == false,
                 "a half-open card cannot be rated, and the shared answer view is not reached")
         #expect(AudioPrompt.offersHanziStep(at: .hanziShown, in: .audioToGerman) == false,
                 "already taken")
@@ -131,7 +131,7 @@ struct AudioToGermanModeTests {
     @Test("Only the last stage allows a rating")
     func revealShowsEverything() {
         #expect(AudioPrompt.showsHanzi(at: .revealed))
-        #expect(AudioPrompt.allowsAssessment(at: .revealed))
+        #expect(AudioPrompt.allowsDecision(at: .revealed))
         #expect(AudioPrompt.offersHanziStep(at: .revealed, in: .audioToGerman) == false)
     }
 
@@ -142,7 +142,7 @@ struct AudioToGermanModeTests {
         // rule the session's own guard enforces — `submit` is bound to
         // `isRevealed` — so the two cannot drift apart unnoticed.
         for stage in PromptStage.allCases where stage != .revealed {
-            #expect(AudioPrompt.allowsAssessment(at: stage) == false, "\(stage)")
+            #expect(AudioPrompt.allowsDecision(at: stage) == false, "\(stage)")
         }
     }
 
@@ -200,7 +200,7 @@ struct AudioToGermanModeTests {
         let session = model()
         session.start(in: context)
         session.showHanzi()
-        session.reveal()
+        session.reveal(recordingWasPossible: false)
 
         #expect(session.promptStage == .revealed)
         #expect(session.isRevealed)
@@ -213,31 +213,32 @@ struct AudioToGermanModeTests {
 
         let session = model()
         session.start(in: context)
-        session.reveal()
+        session.reveal(recordingWasPossible: false)
 
         #expect(session.promptStage == .revealed, "the middle step is an offer, not a gate")
     }
 
-    @Test("A rating before the full answer does nothing")
-    func assessmentNeedsTheFullAnswer() throws {
+    @Test("Closing the attempt before the full answer does nothing")
+    func closingNeedsTheFullAnswer() throws {
         let card = insert("Apfel", status: .weak)
         try context.save()
 
         let session = model()
         session.start(in: context)
 
-        session.submit(.good, in: context)
-        #expect(session.answeredCount == 0, "not rateable while only audio is out")
+        session.moveOn(in: context)
+        #expect(session.answeredCount == 0, "not closeable while only audio is out")
         #expect(card.status == .weak, "and the status is untouched")
 
         session.showHanzi()
-        session.submit(.good, in: context)
+        session.moveOn(in: context)
         #expect(session.answeredCount == 0, "nor from the middle step")
         #expect(card.status == .weak)
 
-        session.reveal()
-        session.submit(.good, in: context)
+        session.reveal(recordingWasPossible: false)
+        session.moveOn(in: context)
         #expect(session.answeredCount == 1, "only now")
+        #expect(card.status == .weak, "and closing still changes no status (§13.3)")
     }
 
     @Test("The next card is covered again, and the middle step does not carry over")
@@ -252,10 +253,10 @@ struct AudioToGermanModeTests {
 
         let first = try #require(session.currentCard)
         session.showHanzi()
-        session.reveal()
+        session.reveal(recordingWasPossible: false)
         #expect(session.promptStage == .revealed)
 
-        session.submit(.good, in: context)
+        session.moveOn(in: context)
 
         #expect(session.currentCard != nil)
         #expect(session.currentCard !== first, "a different card")
@@ -357,22 +358,18 @@ struct AudioToGermanModeTests {
         #expect(words.contains { $0.type == .sentence } == false, "and no sentence slipped in")
     }
 
-    // MARK: - The engine answers the same in both directions
+    // MARK: - Both directions are status-neutral (phase 13)
 
-    @Test("The same assessment produces the same status change in both modes")
-    func statusTransitionsAreIdentical() throws {
-        // The acceptance criterion that matters most, because it is the one a
-        // second mode is most likely to break by accident: there must be no
-        // easier or harder path through the statuses for audio.
-        //
-        // **One card per container.** An earlier version put both cards in
-        // one session and rated its way forward until the queue offered the
-        // one it meant — which can end with nothing rated at all and a
-        // comparison of two untouched statuses. A test that passes because
-        // it did nothing is worse than no test, so each run has exactly one
-        // card and asserts that it really was rated.
-        func statusAfter(
-            _ assessment: SelfAssessment,
+    @Test("Closing an attempt changes no status, in either mode")
+    func closingIsStatusNeutralInBothModes() throws {
+        // Until phase 12 this test compared the four assessments across the two
+        // modes, because the risk was an easier or harder path through the
+        // statuses for audio. Phase 13 removed the assessments from the flow, so
+        // the property to protect changed shape: **no** closing action moves a
+        // status by itself, in either direction and from any starting point. The
+        // only way up is a confirmed suggestion, and the only way down is the
+        // card list.
+        func statusAfterClosing(
             from start: LearningStatus,
             in direction: SessionDirection
         ) throws -> LearningStatus {
@@ -393,28 +390,49 @@ struct AudioToGermanModeTests {
             session.start(in: context)
             #expect(session.currentCard === card, "\(direction) did not offer the card")
 
-            session.reveal()
-            session.submit(assessment, in: context)
+            session.reveal(recordingWasPossible: false)
+            #expect(session.proposedStatus == nil, "\(direction): a manual reveal earns no offer")
+            session.moveOn(in: context)
             #expect(session.answeredCount == 1, "\(direction) recorded nothing")
 
             return card.status
         }
 
-        for assessment in SelfAssessment.allCases {
-            for start in LearningStatus.allCases {
-                let viaGerman = try statusAfter(assessment, from: start, in: .germanToChinese)
-                let viaAudio = try statusAfter(assessment, from: start, in: .audioToGerman)
+        for start in LearningStatus.allCases {
+            let viaGerman = try statusAfterClosing(from: start, in: .germanToChinese)
+            let viaAudio = try statusAfterClosing(from: start, in: .audioToGerman)
 
-                #expect(viaAudio == viaGerman,
-                        "\(assessment) from \(start): A gave \(viaGerman), B gave \(viaAudio)")
-                // And it matches the engine's own answer, so the two modes
-                // agreeing on something wrong would still fail. Valid here
-                // because each run rates its card for the first time, which
-                // is exactly when the transition is applied.
-                #expect(viaGerman == StatusTransition.newStatus(from: start, for: assessment),
-                        "the engine's own rule")
-            }
+            #expect(viaGerman == start, "mode A moved \(start) on its own")
+            #expect(viaAudio == start, "mode B moved \(start) on its own")
+            #expect(viaAudio == viaGerman, "the two modes disagree from \(start)")
         }
+    }
+
+    @Test("Mode B never gets a classification offer, however much history it has")
+    func modeBNeverOffersAClassification() throws {
+        let card = insert("Apfel", status: .medium)
+        // A history that would earn a suggestion in mode A — but recorded in
+        // mode B, where there is no speech and therefore no evidence.
+        for index in 0..<5 {
+            context.insert(ReviewLog(
+                reviewedAt: Date(timeIntervalSince1970: Double(index)),
+                direction: .audioToGerman,
+                previousStatus: .medium,
+                usedSpeech: true,
+                speechMatched: true,
+                card: card
+            ))
+        }
+        try context.save()
+
+        let session = model()
+        session.start(in: context)
+        session.showHanzi()
+        session.reveal(recordingWasPossible: false)
+
+        #expect(session.proposedStatus == nil, "mode B is status-neutral in phase 13")
+        session.moveOn(in: context)
+        #expect(card.status == .medium)
     }
 
     // MARK: - The shared revealed answer
@@ -443,14 +461,14 @@ struct AudioToGermanModeTests {
             session.start(in: context)
 
             func gatesAgree(_ note: String) {
-                #expect(session.isRevealed == AudioPrompt.allowsAssessment(at: session.promptStage),
+                #expect(session.isRevealed == AudioPrompt.allowsDecision(at: session.promptStage),
                         "\(direction) at \(note)")
             }
 
             gatesAgree("start")
             session.showHanzi()
             gatesAgree("after the middle step")
-            session.reveal()
+            session.reveal(recordingWasPossible: false)
             gatesAgree("after revealing")
             #expect(session.isRevealed, "\(direction) reached the answer")
         }
@@ -467,9 +485,9 @@ struct AudioToGermanModeTests {
         session.start(in: context)
 
         #expect(session.hasShownHanzi == false)
-        session.reveal()
+        session.reveal(recordingWasPossible: false)
         #expect(session.promptStage == .revealed)
-        #expect(AudioPrompt.allowsAssessment(at: session.promptStage))
+        #expect(AudioPrompt.allowsDecision(at: session.promptStage))
         // `showHanzi` is reachable in mode A only by writing code that calls
         // it; the view never does. Even then it changes nothing that mode A
         // reads, because `isRevealed` is what its prompt is driven by.

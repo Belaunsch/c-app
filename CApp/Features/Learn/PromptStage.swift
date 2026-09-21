@@ -90,12 +90,16 @@ nonisolated enum AudioPrompt {
         direction == .audioToGerman && stage == .audioOnly
     }
 
-    /// Rating is possible only once everything is visible.
+    /// The closing decision — „Weiter", or the classification offer — is
+    /// possible only once everything is visible.
     ///
-    /// The same rule `LearnSessionModel.submit` enforces through
+    /// The same rule `LearnSessionModel.closeAttempt` enforces through
     /// `isRevealed` — stated here as well because this is the form the view
-    /// asks it in, and the two must not be able to disagree.
-    static func allowsAssessment(at stage: PromptStage) -> Bool {
+    /// asks it in, and the two must not be able to disagree. Named
+    /// `allowsAssessment` until phase 13; there is no assessment any more, and a
+    /// function whose name outlives its concept is how a reader ends up looking
+    /// for four buttons that are gone.
+    static func allowsDecision(at stage: PromptStage) -> Bool {
         stage == .revealed
     }
 }

@@ -7,7 +7,8 @@ import AVFoundation
 import SwiftData
 import SwiftUI
 
-/// One running session: a card, a way to reveal it, and four answers.
+/// One running session: a card, a way to attempt it, and one decision at the
+/// end.
 ///
 /// There is no progress bar and no finish line. Mini-batches are an internal
 /// detail of the engine and are never shown — the session runs until the user
@@ -57,7 +58,11 @@ struct LearnSessionView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Fertig") { dismiss() }
+                    // **„Beenden", not „Fertig".** Since phase 13 „Fertig" has
+                    // exactly one meaning on this screen: finalise the spoken
+                    // answer. The same word for „leave the session" would be two
+                    // meanings on one screen at the same time.
+                    Button(LearnFlow.endSessionTitle) { dismiss() }
                 }
                 if model.answeredCount > 0 {
                     ToolbarItem(placement: .status) {
@@ -78,11 +83,18 @@ struct LearnSessionView: View {
             // `SpeakButton` den Text vergleicht.
             // **Ein** Auslöser pro Kartenübergang, und deshalb ein
             // zusammengesetzter Schlüssel: Die Karten-ID allein übersieht die
-            // Wiedereinstreuung („Nochmal" auf der letzten Karte eines Batches
-            // legt dieselbe Karte zurück auf Position 0), `answeredCount`
-            // allein übersieht eine Karte, die mitten in der Session gelöscht
-            // wurde. Zwei getrennte `onChange` wären der Doppelstart, den das
-            // Review gefunden hat — ihre Reihenfolge ist nicht zugesichert.
+            // Wiedereinstreuung (ein Aufgeben auf der letzten Karte eines
+            // Batches legt dieselbe Karte zurück auf Position 0),
+            // `answeredCount` allein übersieht eine Karte, die mitten in der
+            // Session gelöscht wurde. Zwei getrennte `onChange` wären der
+            // Doppelstart, den das Phase-12-Review gefunden hat — ihre
+            // Reihenfolge ist nicht zugesichert.
+            // **Und die Reihenfolge innerhalb dieses einen Auslösers ist seit
+            // A44 tragend:** erst die Sprachausgabe stoppen, dann der
+            // Kartenwechsel, und erst danach die automatische Aufnahme. Weil
+            // Zuhören auf der aufgedeckten Karte den Modus nicht mehr
+            // entwaffnet, ist das die Stelle, die Ton und Mikrofon
+            // auseinanderhält — nie beides gleichzeitig.
             .onChange(of: cardCycleKey) { _, _ in
                 speech.stop()
                 advanceToNextAttempt()
@@ -126,7 +138,11 @@ struct LearnSessionView: View {
                 // keinen Sprachmodus, den sie beenden könnte.
                 guard model.configuration.direction == .germanToChinese else { return }
                 guard isSpeaking else { return }
-                handle(.speechOutputStarted)
+                // Seit Phase 13 (A44) entscheidet der Kartenzustand: Auf der
+                // aufgedeckten Karte entwaffnet Zuhören den Modus nicht mehr.
+                // Welche der beiden Ereignisse es ist, sagt die Fabrik am Typ —
+                // die Regel selbst steht in der Entscheidungstabelle.
+                handle(.speechOutputStarted(onRevealedCard: model.isRevealed))
             }
             // Ein technischer Fehler beendet den Modus. Ein Modus, der sich
             // durch einen kaputten Audiopfad weiterversucht, ist eine
@@ -222,8 +238,10 @@ struct LearnSessionView: View {
     // MARK: - Session speech mode (phase 12)
 
     /// Changes once per card transition — including the one the id misses.
+    ///
+    /// The rule itself is in `LearnFlow`, where a test can reach it.
     private var cardCycleKey: String {
-        "\(model.currentCard?.id.uuidString ?? "-")#\(model.answeredCount)"
+        LearnFlow.cardCycleKey(cardID: model.currentCard?.id, answeredCount: model.answeredCount)
     }
 
     /// The microphone tap: starts a recording **and** arms the session.
@@ -265,9 +283,21 @@ struct LearnSessionView: View {
     }
 
     /// Stops, and hands the result to the card it started on.
+    ///
+    /// Finalises **once**: `stopAndFinalize()` only finalises from `.recording`
+    /// and moves the phase on before its first suspension point, and the row
+    /// disables the control at `.finalizing`. The guard here states the same
+    /// intent at the call site rather than relying on the button's state.
     private func stopRecording() {
+        guard recognition.phase == .recording else { return }
+        let generation = recordingGeneration
         Task {
             let text = await recognition.stopAndFinalize()
+            // Something abandoned this attempt while it was finalising — a
+            // give-up, a card change, the session ending. Whatever comes back
+            // now belongs to nothing, and it must not reveal a card the learner
+            // has already moved past.
+            guard generation == recordingGeneration else { return }
             // No text is not a silent no-op: the service moves to
             // `.noSpeechDetected` and the button says so. The card stays
             // covered, because nothing was checked.
@@ -278,7 +308,7 @@ struct LearnSessionView: View {
                 handle(.nothingRecognized)
                 return
             }
-            model.applyRecognition(text, forCardWith: id, in: context)
+            model.applyRecognition(text, forCardWith: id)
             // **No start here.** Phase 11 may have advanced to the next card,
             // and if it did, the card-cycle observer starts the recording —
             // once. Starting here as well was a race with that observer: the
@@ -303,23 +333,23 @@ struct LearnSessionView: View {
 
     /// What can be done next.
     ///
-    /// Mode A is unchanged: reveal, then rate. Mode B adds the middle step
-    /// in front of it, and the rule for whether that step is still on offer
-    /// lives in `AudioPrompt` with the visibility rules it belongs to.
+    /// Covered: the optional recording plus the reveal. Revealed: exactly one
+    /// closing decision. Mode B adds its middle step in front, and the rule for
+    /// whether that step is still on offer lives in `AudioPrompt` with the
+    /// visibility rules it belongs to.
     @ViewBuilder
     private var controls: some View {
-        if AudioPrompt.allowsAssessment(at: model.promptStage) {
-            SelfAssessmentBar(
-                action: { assessment in
-                    // A rating can only follow a finished recording: the card
-                    // is revealed here, and revealing always ends one.
-                    model.submit(assessment, in: context)
-                    // The card cycle moved on — `answeredCount` went up even
-                    // when the same card comes straight back after „Nochmal".
-                    // The observer above does the rest.
-                },
-                suggestion: model.suggestedAssessment
+        if AudioPrompt.allowsDecision(at: model.promptStage), let card = model.currentCard {
+            RevealedDecisionBar(
+                currentStatus: card.status,
+                proposal: model.proposedStatus,
+                onContinue: { model.moveOn(in: context) },
+                onAccept: { model.acceptProposal(in: context) },
+                onDecline: { model.declineProposal(in: context) }
             )
+            // Each of the three closes the attempt and moves the card cycle on —
+            // `answeredCount` goes up even when the same card comes straight
+            // back after a give-up. The observer above does the rest.
         } else {
             VStack(spacing: 8) {
                 if AudioPrompt.offersHanziStep(
@@ -344,24 +374,44 @@ struct LearnSessionView: View {
                         progress: recognition.downloadProgress,
                         failure: recognition.failure,
                         start: { startRecordingAndArm(for: card) },
-                        stop: stopRecording
+                        stop: stopRecording,
+                        cancel: cancelRecordingByLearner
                     )
                 }
 
-                Button("Antwort zeigen") {
-                    // Revealing by hand ends a running recording rather than
-                    // racing it: a result arriving afterwards would attach
-                    // itself to a card the learner has already given up on.
-                    // The speech mode survives — revealing one card is not a
-                    // decision about the next.
-                    handle(.answerRevealedByHand)
-                    model.reveal()
+                Button(LearnFlow.revealTitle(in: model.configuration.direction)) {
+                    giveUp()
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
             }
         }
+    }
+
+    /// „Aufgeben" in mode A, „Antwort zeigen" in mode B.
+    ///
+    /// Ends a running recording rather than racing it: a result arriving
+    /// afterwards would attach itself to a card the learner has already given up
+    /// on, and the generation check in `stopRecording` drops one that is already
+    /// finalising. The speech mode survives — giving up on one card is not a
+    /// decision about the next.
+    private func giveUp() {
+        // Read **before** the recording is abandoned: cancelling moves the phase
+        // back to `.ready`, and by then it no longer says whether a recording had
+        // been possible on this card (§13.5).
+        let recordingWasPossible = LearnFlow.allowsRecording(at: recognition.phase)
+        handle(.answerRevealedByHand)
+        model.reveal(recordingWasPossible: recordingWasPossible)
+    }
+
+    /// The ■ beside „Fertig": throw this attempt away.
+    ///
+    /// Nothing is evaluated, nothing is revealed, nothing is written. The mode
+    /// stays armed, and the loop guard stays set — a further attempt on **this**
+    /// card takes a tap (A38, A45).
+    private func cancelRecordingByLearner() {
+        handle(.recordingCancelledByLearner)
     }
 
     /// Shown when the configuration has no usable card — including the case

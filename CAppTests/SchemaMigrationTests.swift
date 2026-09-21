@@ -37,6 +37,15 @@ import Testing
 /// migrates. That one is older, larger, has been through every release and
 /// lives on a device — and it is explicitly part of the final device and
 /// release acceptance at the end of the roadmap, not of this phase.
+///
+/// ## Phase 13: a different additive case
+///
+/// Phase 11 added a **new model** plus a relationship. Phase 13 adds two
+/// **properties to an existing model** (`ReviewLog.suggestedStatusRaw` and
+/// `suggestionDecisionRaw`), and the phase-11 test says nothing about that: it
+/// is additive too, but it is not the same change. So the phase-12 shape is
+/// reconstructed the same way and the same question asked again — measured, not
+/// assumed, which is what Q7 asks for.
 @MainActor
 struct SchemaMigrationTests {
 
@@ -75,6 +84,69 @@ struct SchemaMigrationTests {
             var cards: [Card] = []
 
             init(name: String) { self.name = name }
+        }
+    }
+
+    /// The data model exactly as phase 12 shipped it: `ReviewLog` **without** the
+    /// two suggestion fields.
+    ///
+    /// Declared separately for the same reason as `Phase10Schema` — the app's own
+    /// `ReviewLog` already carries the new properties, so the old shape has to be
+    /// rebuilt to write an old store. SwiftData maps by entity name, so what this
+    /// writes is byte-for-byte a store from the released phase-12 app.
+    enum Phase12Schema {
+        static var schema: Schema { Schema([Card.self, Tag.self, ReviewLog.self]) }
+
+        @Model
+        final class Card {
+            var id: UUID = UUID()
+            var typeRaw: String = CardType.word.rawValue
+            var statusRaw: Int = LearningStatus.new.rawValue
+            var german: String = ""
+            var hanzi: String = ""
+            var pinyin: String = ""
+            var createdAt: Date = Date()
+            var lastReviewedAt: Date?
+            var reviewCount: Int = 0
+            var correctCount: Int = 0
+            var hanziWasEditedManually: Bool = false
+            var pinyinWasEditedManually: Bool = false
+
+            @Relationship(deleteRule: .nullify, inverse: \Tag.cards)
+            var tags: [Tag] = []
+
+            @Relationship(deleteRule: .cascade, inverse: \ReviewLog.card)
+            var reviews: [ReviewLog] = []
+
+            init(german: String, hanzi: String, pinyin: String = "") {
+                self.german = german
+                self.hanzi = hanzi
+                self.pinyin = pinyin
+            }
+        }
+
+        @Model
+        final class Tag {
+            var name: String = ""
+            var cards: [Card] = []
+
+            init(name: String) { self.name = name }
+        }
+
+        @Model
+        final class ReviewLog {
+            var id: UUID = UUID()
+            var reviewedAt: Date = Date()
+            var directionRaw: String = SessionDirection.germanToChinese.rawValue
+            var previousStatusRaw: Int = LearningStatus.new.rawValue
+            var assessmentRaw: String?
+            var usedSpeech: Bool = false
+            var speechMatched: Bool?
+            var wasManualReveal: Bool = false
+            var wasRetry: Bool = false
+            var card: Card?
+
+            init() {}
         }
     }
 
@@ -190,6 +262,96 @@ struct SchemaMigrationTests {
         #expect(card.status == .medium)
         #expect(card.reviews.count == 1)
         #expect(card.reviews.first?.direction == .audioToGerman)
+    }
+
+    @Test("A phase-12 store opens under the phase-13 schema with nothing lost")
+    func phase13PropertiesMigrateLightly() throws {
+        let store = TemporaryStore()
+        defer { store.remove() }
+        let writtenAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+        // 1. A realistic phase-12 store: a card with real history, including an
+        //    entry that carries one of the four old self-assessments and one that
+        //    was written by the automatic path.
+        do {
+            let container = try store.openContainer(for: Phase12Schema.schema)
+            let context = container.mainContext
+
+            let card = Phase12Schema.Card(german: "Apfel", hanzi: "苹果", pinyin: "píngguǒ")
+            card.statusRaw = LearningStatus.medium.rawValue
+            card.reviewCount = 4
+            card.correctCount = 3
+            card.lastReviewedAt = writtenAt
+            context.insert(card)
+
+            let rated = Phase12Schema.ReviewLog()
+            rated.reviewedAt = writtenAt
+            rated.previousStatusRaw = LearningStatus.weak.rawValue
+            rated.assessmentRaw = SelfAssessment.good.rawValue
+            rated.usedSpeech = true
+            rated.speechMatched = true
+            rated.card = card
+            context.insert(rated)
+
+            let automatic = Phase12Schema.ReviewLog()
+            automatic.reviewedAt = writtenAt.addingTimeInterval(60)
+            automatic.directionRaw = SessionDirection.audioToGerman.rawValue
+            automatic.previousStatusRaw = LearningStatus.medium.rawValue
+            automatic.wasManualReveal = true
+            automatic.card = card
+            context.insert(automatic)
+
+            try context.save()
+        }
+
+        // 2. Open the very same file with the phase-13 schema. No
+        //    `SchemaMigrationPlan`, no `VersionedSchema`.
+        let container = try store.openContainer()
+        let context = container.mainContext
+        let card = try #require(try context.fetch(FetchDescriptor<CApp.Card>()).first)
+
+        // 3. Nothing lost.
+        #expect(card.german == "Apfel")
+        #expect(card.status == .medium)
+        #expect(card.reviewCount == 4)
+        #expect(card.correctCount == 3)
+        #expect(card.lastReviewedAt == writtenAt)
+        #expect(card.reviews.count == 2)
+
+        let rated = try #require(card.reviews.first { $0.reviewedAt == writtenAt })
+        #expect(rated.assessment == .good, "the historical self-assessment is still readable")
+        #expect(rated.previousStatus == .weak)
+        #expect(rated.speechMatched == true)
+
+        let automatic = try #require(card.reviews.first { $0.reviewedAt != writtenAt })
+        #expect(automatic.direction == .audioToGerman)
+        #expect(automatic.wasManualReveal)
+        #expect(automatic.assessment == nil)
+
+        // 4. The two new properties read as `nil` on every old entry — the only
+        //    honest starting value: nothing was ever suggested back then.
+        #expect(card.reviews.allSatisfy { $0.suggestedStatus == nil })
+        #expect(card.reviews.allSatisfy { $0.suggestionDecision == nil })
+        #expect(card.reviews.allSatisfy { $0.hasConsistentSuggestion })
+
+        // 5. And they are usable immediately: a new entry records an offer.
+        context.insert(ReviewLog(
+            reviewedAt: writtenAt.addingTimeInterval(120),
+            direction: .germanToChinese, previousStatus: .medium,
+            usedSpeech: true, speechMatched: true,
+            suggestedStatus: .good, suggestionDecision: .declined, card: card
+        ))
+        try context.save()
+
+        // 6. Reopened once more, because a migration that only appears to work
+        //    would show up here.
+        let reopened = try store.openContainer()
+        let again = try #require(try reopened.mainContext.fetch(FetchDescriptor<CApp.Card>()).first)
+        #expect(again.reviews.count == 3)
+        let declined = try #require(again.reviews.first { $0.suggestionDecision != nil })
+        #expect(declined.suggestedStatus == .good, "written and read back through the raw value")
+        #expect(declined.suggestionDecision == .declined)
+        #expect(declined.assessment == nil, "and it is not a self-assessment")
     }
 
     @Test("Deleting a card takes its history with it")

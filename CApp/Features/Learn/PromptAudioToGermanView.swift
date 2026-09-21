@@ -54,7 +54,7 @@ struct PromptAudioToGermanView: View {
     /// contains the German meaning — is on screen, which makes it the place
     /// where this mode's promise is actually kept. Written as
     /// `if AudioPrompt.someRule(at: stage)` it took a predicate, and swapping
-    /// in a similar-sounding one (`showsHanzi` for `allowsAssessment`, say)
+    /// in a similar-sounding one (`showsHanzi` for `allowsDecision`, say)
     /// would put the meaning into the middle step with every test still
     /// green. A `switch` has nothing to swap: each stage names its layout,
     /// and a stage added later stops compiling until someone decides where

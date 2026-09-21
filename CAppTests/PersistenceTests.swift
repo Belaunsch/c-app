@@ -232,6 +232,11 @@ struct PersistenceTests {
         #expect(reviewAttributes == [
             "id", "reviewedAt", "directionRaw", "previousStatusRaw", "assessmentRaw",
             "usedSpeech", "speechMatched", "wasManualReveal", "wasRetry",
+            // Seit Phase 13: der Vorschlag und was aus ihm wurde. Zwei Felder,
+            // weil „angenommen" und „was wurde angeboten" zwei Tatsachen sind —
+            // und ausdrücklich **nicht** in `assessmentRaw` eingeschmolzen, das
+            // allein die historische Selbsteinschätzung bedeutet.
+            "suggestedStatusRaw", "suggestionDecisionRaw",
         ])
         // Die harte Regel 7 als Schemaprüfung: Was nie gemessen wurde, darf
         // auch kein Feld haben — ein Feld, das existiert, wird irgendwann

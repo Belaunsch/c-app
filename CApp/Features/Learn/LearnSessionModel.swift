@@ -16,10 +16,10 @@ import SwiftData
 ///     Learning/          = selection, queue, status logic
 ///
 /// Not one rule of the learning logic lives here. Weights, recency, batch
-/// selection, the reinsert gap, `maxReinserts`, the transition matrix and
-/// "only the first assessment changes the status" all come from `Learning/`,
-/// which phase 5 tested on its own. Reimplementing any of it here would mean
-/// two sources of truth, and the one with tests would lose.
+/// selection, the reinsert gap, `maxReinserts`, the transition matrix and the
+/// classification rule all come from `Learning/`, which phase 5 tested on its
+/// own. Reimplementing any of it here would mean two sources of truth, and the
+/// one with tests would lose.
 @Observable
 final class LearnSessionModel {
 
@@ -43,28 +43,38 @@ final class LearnSessionModel {
     private(set) var currentCard: Card?
 
     /// Whether the answer is shown. This is also the one-shot token for
-    /// assessing: only a revealed card can be rated, and rating clears it.
+    /// closing an attempt: only a revealed card can be closed, and closing it
+    /// clears the flag.
     private(set) var isRevealed = false
 
     /// Mode B's middle step: the Hanzi is on screen, the meaning is not.
     ///
-    /// Beside `isRevealed` rather than replacing it, so mode A and `submit`
-    /// keep the exact token they have used since phase 6. Meaningless in
+    /// Beside `isRevealed` rather than replacing it, so mode A and the closing
+    /// paths keep the exact token they have used since phase 6. Meaningless in
     /// mode A, where nothing ever sets it.
     private(set) var hasShownHanzi = false
 
-    /// What the app suggests for the card on screen, or `nil` when the
-    /// evidence supports no highlight (phase 11).
+    /// The status the app offers for the card on screen, or `nil` when there is
+    /// nothing to offer (phase 13).
     ///
-    /// A highlight and nothing else: the status changes when the learner taps,
-    /// never because this is set.
-    private(set) var suggestedAssessment: SelfAssessment?
+    /// An offer and nothing else: the status changes when the learner taps
+    /// „Bestätigen", never because this is set.
+    private(set) var proposedStatus: LearningStatus?
 
     /// Whether the microphone was used for the attempt currently on screen.
     private var usedSpeechThisAttempt = false
 
     /// Whether the answer on screen was uncovered by hand rather than earned.
     private var revealedByHand = false
+
+    /// Whether a recording could have run on the card on screen.
+    ///
+    /// Captured **when the card is revealed**, not when the attempt is closed:
+    /// the recognition phase can change in between, and whether the learner had
+    /// the option to speak is not up for debate afterwards. It decides the
+    /// reinsertion and nothing else — which is why it is view state here rather
+    /// than a field in the store (`docs/learning-engine.md` §13.5, §13.10).
+    private var recordingWasPossible = false
 
     /// What the spoken answer came to, if the learner used the microphone.
     ///
@@ -83,12 +93,12 @@ final class LearnSessionModel {
         PromptStage.stage(isRevealed: isRevealed, hasShownHanzi: hasShownHanzi)
     }
 
-    /// How many assessments this session has recorded. Shown as a plain
-    /// number, never as a target — the session has no natural end.
+    /// How many attempts this session has closed. Shown as a plain number,
+    /// never as a target — the session has no natural end.
     private(set) var answeredCount = 0
 
     /// Set when writing failed. The card stays where it is so the same
-    /// answer can be given again.
+    /// decision can be made again.
     private(set) var saveFailure: AppError?
 
     // MARK: - Engine state
@@ -246,14 +256,30 @@ final class LearnSessionModel {
 
     // MARK: - Asking
 
-    func reveal() {
+    /// Uncovers the answer because the learner asked for it — „Aufgeben" in
+    /// mode A, „Antwort zeigen" in mode B.
+    ///
+    /// - Parameter recordingWasPossible: whether a recording could have run on
+    ///   this card. Only mode A ever passes `true`, and only there does it mean
+    ///   anything: it is the third condition of the reinsertion (§13.5).
+    ///
+    /// **No default value, deliberately.** A default of `false` would silently
+    /// switch the reinsertion off at any call site that forgot the argument —
+    /// which in mode A is a lost repetition nobody notices, because the card
+    /// simply does not come back. Mode B passes `false` explicitly, and that
+    /// reads as the statement it is.
+    func reveal(recordingWasPossible: Bool) {
         guard currentCard != nil else { return }
         // Uncovering by hand is not a recall (phase 11). It is remembered for
         // the review entry and it rules out every automatic shortcut: a
         // learner who reads the answer and then says it has demonstrated
         // reading aloud.
         revealedByHand = true
-        suggestedAssessment = nil
+        self.recordingWasPossible = recordingWasPossible
+        // No evidence, so no offer. The rule would reach the same conclusion —
+        // a manual reveal is never a clean attempt — but the app must not even
+        // look like it is weighing one up here.
+        proposedStatus = nil
         isRevealed = true
     }
 
@@ -283,7 +309,7 @@ final class LearnSessionModel {
     /// the card, so the card opens, and the one revealed state shows the
     /// result next to the answer. The self-assessment stays untouched and
     /// manual — recognition never rates anything.
-    func applyRecognition(_ recognized: String, forCardWith id: UUID, in context: ModelContext) {
+    func applyRecognition(_ recognized: String, forCardWith id: UUID) {
         guard let card = currentCard, card.id == id else {
             Self.logger.info("recognition result dropped: the session moved on")
             return
@@ -293,32 +319,74 @@ final class LearnSessionModel {
         usedSpeechThisAttempt = true
         isRevealed = true
 
-        // Phase 11: enough repeated clean evidence means the learner is not
-        // asked again. The rule lives in `Learning/`; this only carries out
-        // what it decided.
-        switch AssistedAssessment.decision(
+        // Phase 13: enough repeated clean evidence means the app offers one step
+        // up. The rule lives in `Learning/`; this only carries out what it
+        // decided, and it decides nothing else — no status moves here.
+        proposedStatus = AssistedAssessment.decision(
             currentStatus: card.status,
             current: attemptSignal(for: card),
             history: recentSignals(for: card)
-        ) {
-        case .autoAdvance:
-            autoAdvance(card, in: context)
-        case .ask(let suggestion):
-            suggestedAssessment = suggestion.flatMap {
-                AssistedAssessment.assessment(leadingTo: $0, from: card.status)
+        ).proposedStatus
+    }
+
+    /// Closes the attempt with a plain „Weiter": nothing was offered, or the
+    /// learner is simply moving on.
+    func moveOn(in context: ModelContext) {
+        closeAttempt(.none, in: context)
+    }
+
+    /// The learner accepted the offered classification.
+    ///
+    /// Takes **exactly** the status the rule proposed — not a second derivation
+    /// of it. `StatusTransition` is where that value comes into being; two
+    /// routes to the same value would be two truths.
+    func acceptProposal(in context: ModelContext) {
+        guard let proposal = proposedStatus else { return }
+        closeAttempt(.accepted(proposal), in: context)
+    }
+
+    /// The learner declined the offered classification.
+    ///
+    /// **The neutral way out.** The status stays exactly as it is; what changes
+    /// is that the decline is recorded, so the evidence for this particular step
+    /// starts over and the same offer does not come back on the next clean
+    /// attempt (`docs/learning-engine.md` §13.7, rule 4).
+    func declineProposal(in context: ModelContext) {
+        guard let proposal = proposedStatus else { return }
+        closeAttempt(.declined(proposal), in: context)
+    }
+
+    /// What became of an offered classification, if one was offered.
+    private enum ProposalOutcome {
+        case none
+        case accepted(LearningStatus)
+        case declined(LearningStatus)
+
+        var suggestedStatus: LearningStatus? {
+            switch self {
+            case .none: nil
+            case .accepted(let status), .declined(let status): status
+            }
+        }
+
+        var decision: SuggestionDecision? {
+            switch self {
+            case .none: nil
+            case .accepted: .accepted
+            case .declined: .declined
             }
         }
     }
 
-    /// Records one self-assessment: engine first, then the store, then the
+    /// Records one finished attempt: engine first, then the store, then the
     /// session state.
     ///
     /// The order is the whole point. `SessionQueue` is a value type, so the
     /// engine's advance happens on a copy and is only kept once the write
     /// succeeded. A failed save therefore leaves the queue exactly where it
-    /// was: the same card comes up again, and answering it a second time
-    /// counts once, not twice. That is the simplest arrangement that cannot
-    /// drift apart — no transactions, no event log.
+    /// was: the same card comes up again, the offer is still on screen, and
+    /// answering it a second time counts once, not twice. That is the simplest
+    /// arrangement that cannot drift apart — no transactions, no event log.
     ///
     /// The failure path has no automated test: a read-only store provokes it
     /// reliably on its own but not inside the parallel suite, for reasons I
@@ -326,37 +394,66 @@ final class LearnSessionModel {
     /// exists purely so a test can throw. What *is* pinned is the property
     /// this order rests on — advancing a copy leaves the original alone, see
     /// `SessionQueueTests.advancingACopyDoesNotAffectTheOriginal`.
-    /// `LearnSessionModelTests` records the full reasoning.
-    func submit(_ assessment: SelfAssessment, in context: ModelContext) {
-        // Only a revealed card can be rated, and rating clears the flag.
+    private func closeAttempt(_ outcome: ProposalOutcome, in context: ModelContext) {
+        // Only a revealed card can be closed, and closing clears the flag.
         // That makes this the double-tap guard as well: a second tap arriving
         // before the view redraws finds nothing revealed and does nothing.
         guard isRevealed, let card = currentCard, var advanced = queue else { return }
-        guard let outcome = advanced.assess(assessment, currentStatus: card.status) else { return }
-        // Cleared only once there is an outcome. If the queue ever had nothing
-        // to rate, the card would otherwise sit there covered, unrated and
-        // without any feedback.
+
+        // Whether the card comes back in this batch is decided **before** the
+        // queue moves, because it depends on how this attempt ended (§13.5).
+        let reinserting = LearnFlow.reinserts(
+            in: configuration.direction,
+            wasManualReveal: revealedByHand,
+            recordingWasPossible: recordingWasPossible
+        )
+        // Read **before** the queue closes the card: afterwards the reinsert
+        // count has already moved on, and the entry has to say whether *this*
+        // attempt was a repeat.
+        let wasRetry = isRetryOfCurrentCard(card)
+        guard advanced.closeCurrentCard(reinserting: reinserting) else { return }
         isRevealed = false
 
-        // Read **before** `apply` moves it: the entry records the status the
-        // card had going into this review, which is what later evidence has
-        // to be read against.
+        // Read **before** an accepted proposal moves it: the entry records the
+        // status the card had going into this review, which is what later
+        // evidence has to be read against.
         let previousStatus = card.status
-        apply(outcome, to: card)
+
+        card.reviewCount += 1
+        card.lastReviewedAt = now()
+        // **`correctCount` deliberately does not move — on any path.** §7 defines
+        // it through a self-assessment, and the new flow gives none: „Weiter"
+        // and „Ablehnen" rate nothing, and „Bestätigen" is agreement with the
+        // app rather than a rating. What lay before the app was a text
+        // comparison whose false-accept property phase 9 never measured. The
+        // consequence for `accuracy` — a derived value no view reads — is named
+        // in `docs/learning-engine.md` §13.11 rather than papered over.
+        if case .accepted(let newStatus) = outcome {
+            card.status = newStatus
+        }
+
         // The review entry is written **before** the save, so the card's new
         // status and its history are one transaction: a failed save rolls
-        // both back together and the learner rates the same card again.
-        context.insert(reviewLog(for: card, previousStatus: previousStatus, assessment: assessment))
+        // both back together and the learner decides on the same card again.
+        context.insert(reviewLog(
+            for: card,
+            previousStatus: previousStatus,
+            wasRetry: wasRetry,
+            outcome: outcome
+        ))
         do {
             try context.save()
         } catch {
             // Undo the card's changes so the alert cannot claim failure while
             // a later save commits them anyway — and leave the queue alone,
-            // so the user rates the same card again rather than a new one.
+            // so the user decides on the same card again rather than a new one.
             context.rollback()
             isRevealed = true
+            // `proposedStatus` stays as it was: the offer has to be back on
+            // screen, or an alert would leave the learner on a revealed card
+            // with the question gone.
             saveFailure = .cardSaveFailed(error)
-            Self.logger.error("Answer could not be saved: \(error.localizedDescription, privacy: .public)")
+            Self.logger.error("Attempt could not be saved: \(error.localizedDescription, privacy: .public)")
             return
         }
 
@@ -370,64 +467,6 @@ final class LearnSessionModel {
         advanceToNextAnswerableCard(in: context)
     }
 
-    // MARK: - Assisted assessment (phase 11)
-
-    /// Records the attempt and moves on without asking.
-    ///
-    /// **The status is not touched.** That is the whole of the roadmap's
-    /// „keine Neubewertung nötig": the app spares the learner a question it
-    /// cannot justify asking, it does not hand out a promotion nobody granted.
-    /// Only a tap — or the recalibration this run is counting towards — can
-    /// move a card along the ladder.
-    private func autoAdvance(_ card: Card, in context: ModelContext) {
-        guard var advanced = queue else { return }
-        isRevealed = false
-
-        card.reviewCount += 1
-        card.lastReviewedAt = now()
-        // **`correctCount` deliberately does not move.** A review happened, so
-        // `reviewCount` does; whether it was *correct* is a judgement, and the
-        // only thing that happened here is a text match whose false-accept
-        // property phase 9 never measured. §7 defines `correctCount` in terms
-        // of a self-assessment, and there was none.
-        //
-        // This makes `accuracy` (a derived value, read nowhere today)
-        // under-report for cards that auto-advance rather than over-report.
-        // Of the two directions that is the one to be wrong in: it can only
-        // understate what the learner knows, never overstate it.
-        // `learning-engine.md` §7 says so too.
-        // Nothing moved the status here, so „before" and „after" are the same
-        // value — it is still read explicitly rather than implied.
-        context.insert(reviewLog(for: card, previousStatus: card.status, assessment: nil))
-
-        do {
-            try context.save()
-        } catch {
-            context.rollback()
-            isRevealed = true
-            // Back on the same card, so the learner needs the four buttons —
-            // and the suggestion that would have been shown had the app asked
-            // in the first place. Without this they get four identical
-            // buttons on a card the app was confident about.
-            suggestedAssessment = AssistedAssessment.suggestedStatus(
-                currentStatus: card.status,
-                current: attemptSignal(for: card),
-                history: recentSignals(for: card)
-            ).flatMap { AssistedAssessment.assessment(leadingTo: $0, from: card.status) }
-            saveFailure = .cardSaveFailed(error)
-            Self.logger.error("Auto-advanced review could not be saved: \(error.localizedDescription, privacy: .public)")
-            return
-        }
-
-        // The card leaves the batch without a rating. `skipCurrentCard()` is
-        // exactly that: no reinsertion, no assessment recorded in the queue.
-        advanced.skipCurrentCard()
-        queue = advanced
-        answeredCount += 1
-        resetAttemptState()
-        advanceToNextAnswerableCard(in: context)
-    }
-
     /// The attempt on screen, as the engine sees it.
     private func attemptSignal(for card: Card) -> ReviewSignal {
         ReviewSignal(
@@ -437,7 +476,10 @@ final class LearnSessionModel {
             speechMatched: speechCheck?.isMatch,
             wasManualReveal: revealedByHand,
             wasRetry: isRetryOfCurrentCard(card),
-            assessment: nil
+            // The running attempt carries no declined offer of its own — a
+            // decline is recorded on the entry this attempt produces, and it is
+            // the *history* that carries it into the next decision.
+            declinedSuggestion: nil
         )
     }
 
@@ -461,10 +503,19 @@ final class LearnSessionModel {
         (queue?.reinsertCount(for: card.id) ?? 0) > 0
     }
 
+    /// One finished attempt, as the store records it.
+    ///
+    /// **`assessment` is always `nil` here**, and that is the point: the field
+    /// means „the learner picked one of the four buttons of the old flow", and
+    /// this flow has none. An accepted classification goes into its own two
+    /// fields instead, because it is agreement with the app rather than a
+    /// self-assessment — merging them would make the two indistinguishable
+    /// retroactively (`docs/learning-engine.md` §13.10).
     private func reviewLog(
         for card: Card,
         previousStatus: LearningStatus,
-        assessment: SelfAssessment?
+        wasRetry: Bool,
+        outcome: ProposalOutcome
     ) -> ReviewLog {
         ReviewLog(
             reviewedAt: now(),
@@ -473,8 +524,10 @@ final class LearnSessionModel {
             usedSpeech: usedSpeechThisAttempt,
             speechMatched: speechCheck?.isMatch,
             wasManualReveal: revealedByHand,
-            wasRetry: isRetryOfCurrentCard(card),
-            assessment: assessment,
+            wasRetry: wasRetry,
+            assessment: nil,
+            suggestedStatus: outcome.suggestedStatus,
+            suggestionDecision: outcome.decision,
             card: card
         )
     }
@@ -483,31 +536,14 @@ final class LearnSessionModel {
     private func resetAttemptState() {
         hasShownHanzi = false
         speechCheck = nil
-        suggestedAssessment = nil
+        proposedStatus = nil
         usedSpeechThisAttempt = false
         revealedByHand = false
+        recordingWasPossible = false
     }
 
     func dismissSaveFailure() {
         saveFailure = nil
-    }
-
-    /// Writes what one answer changes (`docs/learning-engine.md` §7).
-    ///
-    /// The counters move on every assessment, repetitions included. The
-    /// status moves only when the engine says this was the card's first
-    /// assessment in the batch — reported as `newStatus`, which is `nil`
-    /// otherwise. That decision is not reconstructed here: a second opinion
-    /// on it is exactly how the rule would get lost.
-    private func apply(_ outcome: AssessmentOutcome, to card: Card) {
-        card.reviewCount += 1
-        card.lastReviewedAt = now()
-        if outcome.countsAsCorrect {
-            card.correctCount += 1
-        }
-        if let newStatus = outcome.newStatus {
-            card.status = newStatus
-        }
     }
 
     // MARK: - Moving on

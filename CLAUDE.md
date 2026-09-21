@@ -6,12 +6,13 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phasen 0–12 implementiert.** Stand des Gates: **603
-Testfunktionen / 664 Einzelausführungen grün** — parametrisierte Tests machen
+**Aktueller Stand: Phasen 0–12 implementiert, Phase 13 implementiert mit einem
+offenen Produktpunkt** (§13.11 Punkt 1, unten). Stand des Gates: **633
+Testfunktionen / 691 Einzelausführungen grün** — parametrisierte Tests machen
 daraus zwei Zahlen, also immer mit Einheit nennen —, 0 fehlgeschlagen, 0
-Compilerwarnungen auf einem Debug-Build von null, Release-Build von null
-ebenso, dazu zwei unabhängige Code Reviews, zwei Testaudits und zehn
-Gegenmutationen.
+Compilerdiagnosen auf einem Debug-Build von null, Release-Build von null
+ebenso, dazu ein unabhängiges Code Review, ein Testaudit und **vierzehn
+Gegenmutationen, die alle greifen**.
 
 **Die vollständige Geräteprüfung und der mehrtägige Alltagstest sind seit dem
 2026-09-13 kein Gate der einzelnen Phase mehr**, sondern ein gemeinsames Gate
@@ -26,46 +27,71 @@ vollständig in der Roadmap und wird nicht hierher kopiert.
 abgenommen, solange dieses Gate offene Punkte hat.
 
 Seit Phase 11 gibt es die **Review-Historie** (`ReviewLog`, erste
-Schemaerweiterung seit Phase 1 — Q7 ist daran gemessen und beantwortet) und die
-**assistierte Bewertung**: Nach zwei sauberen Erstversuchen in Folge entfällt
-die Vierfachauswahl, der Lernstand bleibt dabei **unverändert**; nach drei
-automatischen Reviews wird wieder gefragt, mit hervorgehobenem Vorschlag. Ein
-Mismatch senkt nie etwas, ein einzelner Treffer trägt nichts, die eigene
-Bewertung gewinnt immer. Regel und die drei als Produktentscheidung
-gekennzeichneten Parameter: [learning-engine.md §12](docs/learning-engine.md).
+Schemaerweiterung seit Phase 1 — Q7 ist daran gemessen und beantwortet). Die
+**assistierte Bewertung** derselben Phase — zwei saubere Erstversuche sparen die
+Vierfachauswahl, nach drei automatischen Reviews wird wieder gefragt — ist durch
+Phase 13 **ersetzt**; was davon ersetzt ist und was weitergilt, steht einzeln in
+[learning-engine.md §13.9](docs/learning-engine.md). Unverändert gültig: Ein
+Mismatch senkt nie etwas, ein einzelner Treffer trägt nichts, und die
+Entscheidung des Nutzers gewinnt immer. Die als Produktentscheidung
+gekennzeichneten Parameter sind seit Phase 13 **zwei** — Fenstergröße und
+Schwelle; das Rekalibrierungsintervall ist entfallen.
 
 Seit Phase 12 gibt es den **Session-Sprachmodus**: Ein Mikrofon-Tap armiert
 ihn, danach startet die Aufnahme auf jeder neuen Karte von selbst — **beendet
 wird sie weiterhin per Tap.** Kein eigenes Endpointing, und das ist gemessen
 statt vermutet (Q11): `SpeechDetector` liefert auf iOS 26.6 nichts, `isFinal`
 kommt Sekunden zu spät. Genau **ein** automatischer Versuch pro Karte, sonst
-entstünde nach „Nichts erkannt" eine Schleife. Sprachausgabe, Hintergrund,
-Unterbrechung, technischer Fehler und Sessionende entwaffnen den Modus; ein
-Neustart braucht immer einen Tap. Regeln in
+entstünde nach „Nichts erkannt" eine Schleife. Hintergrund, Unterbrechung,
+technischer Fehler und Sessionende entwaffnen den Modus; ein Neustart braucht
+immer einen Tap. **Sprachausgabe entwaffnet ihn seit Phase 13 nur noch bei
+verdeckter Karte** (A44) — und vom Lernbildschirm aus ist dieser Fall gar nicht
+erreichbar, die Regel ist damit faktisch stillgelegt. Regeln in
 `CApp/Features/Learn/SessionSpeechMode.swift`, Entscheidungen A37 bis A39.
 
-**Nächster Schritt: Phase 13 — Lernflow & Assisted Classification UX**
-(`/implement-phase 13`). Die Phase ist am 2026-09-21 vollständig spezifiziert
-worden, **Produktcode gibt es dafür noch keinen**: Der Lernflow der Karte wird
-umgebaut, und die Abschnitte oben über Phase 11 und 12 beschreiben bis dahin
-weiterhin das laufende Produkt. In Stichworten — Aufnahme mit Stop-Button,
-*Antwort zeigen* heißt in Modus A **in jedem Zustand** *Aufgeben* und übernimmt
-die Wiedereinstreuung von „Nochmal" (genau einmal pro Batch, und nur, wenn eine
-Aufnahme möglich war), die vier Bewertungstasten verlassen den Lernflow, danach
-steht dort *Weiter* oder eine Zustimmungsfrage („Neue Einstufung: Mittel → Gut",
-*Ablehnen* / *Bestätigen*), `.new` kann einen ersten Vorschlag bekommen, und es
-gibt **keinen** Pfad, auf dem die App einen Status senkt. Vorschlag, Annahme
-und Ablehnung werden in **zwei neuen `ReviewLog`-Feldern** festgehalten
-(`suggestedStatus`, `suggestionDecision`); `assessment` bleibt ausschließlich
-die historische Selbsteinschätzung des alten Flows und wird im neuen Flow
-**nie** geschrieben. Verbindlich sind
-[roadmap.md § Phase 13](docs/roadmap.md) und
-[learning-engine.md §13](docs/learning-engine.md) — §13.9 listet einzeln auf,
-welche Phase-11-Regeln dadurch ersetzt werden.
+Seit Phase 13 ist der **Lernflow** umgebaut. Die verdeckte Karte hat zwei
+Zeilen: der Aufnahmepfad und darunter **Aufgeben** — in Modus A in *jedem*
+Erkennungszustand so beschriftet, auch ohne Mikrofonfreigabe; Modus B heißt
+weiter „Antwort zeigen". Läuft eine Aufnahme, steht dort `[ Fertig ][ ■ ]`: die
+breite Taste schrumpft animiert nach rechts auf die Stop-Fläche. **■ verwirft**
+den Versuch — keine Auswertung, kein Aufdecken, kein `ReviewLog`, kein Zähler,
+und der Sprachmodus bleibt armiert (A45). *Aufgeben* übernimmt die Rolle von
+„Nochmal": es streut die Karte **genau einmal** je Mini-Batch wieder ein, aber
+nur, wenn eine Aufnahme möglich war — sonst würde auf einem Gerät ohne
+Erkennung jeder Batch doppelt so lang (A41). Ein Mismatch streut **nicht**
+wieder ein.
 
-**Die Reihenfolge danach: Phase 14 — AI-Integration** (Umfang noch nicht
-entschieden, keine Akzeptanzkriterien, also auch keine Implementierung), und
-**erst dann** die finale Geräte- und Release-Abnahme.
+Nach dem Aufdecken sind die vier Bewertungstasten **weg**. Dort steht
+`[ Weiter ]` oder eine Zustimmungsfrage: „Neue Einstufung — Mittel → Gut" mit
+*Ablehnen* und *Bestätigen*, nie beides. **Es gibt keinen Pfad, auf dem die App
+einen Status senkt** — und, weil das in
+[learning-engine.md §6.2](docs/learning-engine.md) seit Phase 1 spezifizierte
+Setzen in der Kartenübersicht nie gebaut wurde, derzeit auch keinen, auf dem der
+Nutzer ihn senkt. Das ist der **offene Punkt der Phase 13**, benannt in §13.11
+Punkt 1, und er ist zu entscheiden, bevor die Phase als abgeschlossen gilt.
+`correctCount` wächst nicht mehr — auch *Bestätigen* ist keine
+Selbsteinschätzung. Die Regel zählt einen Lauf nur über **vergleichbare**
+Versuche: gleiche Richtung, gleicher Ausgangsstatus, Abbruch am ersten
+unsauberen Versuch und an einer Ablehnung, die selbst nicht mitzählt. Damit
+kann `.new` einen ersten Vorschlag bekommen (`Neu → Mittel`), und eine von Hand
+auf *Neu* zurückgesetzte Karte benutzt ihre alte Evidenz nicht. Vorschlag,
+Annahme und Ablehnung liegen in **zwei neuen `ReviewLog`-Feldern**
+(`suggestedStatus`, `suggestionDecision`); `assessmentRaw` bedeutet weiter
+ausschließlich die historische Selbsteinschätzung und wird im neuen Flow
+**nie** geschrieben. Regeln und Begründungen:
+[learning-engine.md §13](docs/learning-engine.md), Entscheidungen A40 bis A45.
+
+**Q12 ist beantwortet und nichts dazu gebaut:** Die Tastatursprache lässt sich
+aus einer normalen App nicht erzwingen, und SwiftUI hat dafür überhaupt keine
+API. Die Einschränkung steht dokumentiert in
+[apple-frameworks.md](docs/apple-frameworks.md) Q12; der Weg zum Hanzi bleibt
+die Kette `Deutsch → Hanzi → Pinyin`.
+
+**Nächster Schritt: Phase 14 — AI-Integration.** Ihr **Umfang ist nicht
+entschieden**, sie hat keine Akzeptanzkriterien, und ohne die wird nichts
+implementiert — zu klären sind die vier Fragen in
+[roadmap.md § Phase 14](docs/roadmap.md). **Erst danach** die finale Geräte-
+und Release-Abnahme.
 
 Die Kette `Deutsch → Hanzi → Pinyin` läuft mit Return oder beim Verlassen des
 Feldes automatisch, beide Werte bleiben editierbar, und ein von Hand gesetzter

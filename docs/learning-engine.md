@@ -47,12 +47,17 @@ gleich lauten.
 
 Seit Phase 6 verlangt der Karteneditor den `LearningStatus` **nicht mehr**
 manuell: Beim Anlegen einer Karte kann niemand ihn sinnvoll beantworten. Neue
-Karten starten auf `new`, bestehende behalten ihren Wert, und die Engine
-schreibt ihn aus den Selbsteinschätzungen fort (§6). Langfristig soll er
-stärker automatisch abgeleitet werden — Produktidee in
-[architecture.md §9.1](architecture.md#91-automatische-mastery-einschätzung-produktidee-nicht-gebaut),
-noch nicht gebaut. Die fünfstufige Skala bleibt vorerst unverändert; sie ist
-ein Engine-Zustand, kein Pflichtfeld für den Nutzer.
+Karten starten auf `new`, bestehende behalten ihren Wert, und bis Phase 12
+schrieb die Engine ihn aus den Selbsteinschätzungen fort (§6). **Seit Phase 13
+gibt es die Selbsteinschätzungen im Lernflow nicht mehr:** Der Status bewegt
+sich nur noch über eine vom Nutzer bestätigte Einstufung
+([§13](#13-lernflow-und-assistierte-einstufung-phase-13)) oder von Hand in der
+Kartenliste. Die Idee, ihn stärker automatisch abzuleiten, war in
+[architecture.md §9.1](architecture.md#91-automatische-mastery-einschätzung-produktidee-nicht-gebaut)
+als Produktidee beschrieben und ist damit der Regelfall geworden — mit der dort
+benannten Einschränkung, dass von den vier Signalen nur der
+Recognition-Match trägt. Die fünfstufige Skala bleibt unverändert; sie ist ein
+Engine-Zustand, kein Pflichtfeld für den Nutzer.
 
 
 | Begriff | Bedeutung |
@@ -283,11 +288,26 @@ konnte, wäre nach dem Batch besser bewertet als vorher. Der ehrliche Indikator
 ist der erste Versuch. Weitere Einschätzungen derselben Karte im selben Batch
 aktualisieren nur die Zähler (§7).
 
-### 6.2 Manuelle Bearbeitung
+### 6.2 Manuelle Bearbeitung — spezifiziert, **nicht gebaut**
 
-Der Nutzer kann den Lernstatus in der Kartenübersicht direkt setzen. Ein
-manuell gesetzter Status verhält sich anschließend wie jeder andere Status —
-es gibt keine Sonderbehandlung und keine Sperre.
+Vorgesehen ist: Der Nutzer kann den Lernstatus in der Kartenübersicht direkt
+setzen; ein manuell gesetzter Status verhält sich anschließend wie jeder andere
+— keine Sonderbehandlung, keine Sperre.
+
+**Am 2026-09-21 im Code nachgesehen: dieses Bedienelement existiert nicht.**
+`card.status` wird in der gesamten App an **genau einer** Stelle geschrieben —
+`LearnSessionModel.closeAttempt`, ausschließlich im Fall einer bestätigten
+Einstufung. Die Kartenübersicht zeigt den Lernstand als farbigen Punkt und
+filtert danach; setzen kann sie ihn nicht. Der Picker im Editor ist in Phase 6
+(Task 6.10) entfernt worden, weil ihn beim Anlegen einer Karte niemand
+beantworten kann.
+
+Bis Phase 12 war das folgenlos: *Nochmal* (−2) und *Schwer* (−1) waren ein
+funktionierender Weg nach unten. **Phase 13 entfernt diesen Weg** — und damit
+gibt es im Produkt derzeit **überhaupt keinen** Pfad, auf dem ein Lernstand
+sinkt. Die Konsequenz ist in
+[§13.11](#1311-was-das-kostet) benannt und **ist eine offene
+Produktentscheidung**, keine getroffene.
 
 ---
 
@@ -465,11 +485,12 @@ Funktion herausgezogen.
 ## 12. Assistierte Bewertung (Phase 11)
 
 > **Teilweise überholt durch [§13](#13-lernflow-und-assistierte-einstufung-phase-13)
-> (Phase 13, spezifiziert am 2026-09-21).** Dieser Abschnitt beschreibt das
-> **implementierte** Produkt und bleibt gültig, bis Phase 13 umgesetzt ist.
-> Welche Regeln danach ersetzt sind und welche unverändert weitergelten, steht
-> einzeln in [§13.9](#139-welche-phase-11-regeln-damit-ersetzt-sind); §12.1,
-> §12.2, §12.4 und §12.5 gelten in beiden Fassungen.
+> (Phase 13, implementiert am 2026-09-21).** Dieser Abschnitt beschreibt den
+> Stand der Phasen 11 und 12 und bleibt als Erklärung der bis dahin
+> geschriebenen Historie gültig — das laufende Produkt folgt §13. Welche Regeln
+> ersetzt sind und welche unverändert weitergelten, steht einzeln in
+> [§13.9](#139-welche-phase-11-regeln-damit-ersetzt-sind); §12.1, §12.2, §12.4
+> und §12.5 gelten in beiden Fassungen.
 
 Seit Phase 11 sammelt die App Evidenz über eine Karte und **fragt an geeigneten
 Stellen nicht mehr**. Die Regel ist rein, deterministisch und liegt in
@@ -566,11 +587,12 @@ Datenmenge, nicht das Ergebnis, und genau so steht es jetzt auch im Code.
 
 ## 13. Lernflow und assistierte Einstufung (Phase 13)
 
-**Status: spezifiziert am 2026-09-21, nicht implementiert.** Dieser Abschnitt
-ist die verbindliche Regel für Phase 13 und **ersetzt §12 dort, wo die beiden
-sich widersprechen** — die Ersetzungen stehen einzeln in
-[§13.9](#139-welche-phase-11-regeln-damit-ersetzt-sind). Bis Phase 13
-implementiert ist, beschreibt §12 das laufende Produkt und §13 den Plan.
+**Status: spezifiziert und implementiert am 2026-09-21.** Dieser Abschnitt ist
+die verbindliche Regel des laufenden Produkts und **ersetzt §12 dort, wo die
+beiden sich widersprechen** — die Ersetzungen stehen einzeln in
+[§13.9](#139-welche-phase-11-regeln-damit-ersetzt-sind). §12 bleibt als
+Beschreibung des Stands der Phasen 11 und 12 stehen; §12.1, §12.2, §12.4 und
+§12.5 gelten in beiden Fassungen weiter.
 
 ### 13.1 Warum die vier Tasten den normalen Flow verlassen
 
@@ -669,9 +691,10 @@ Vier Dinge daran sind Entscheidungen, nicht Mechanik:
   ([§13.10](#1310-die-schemaänderung-zwei-felder-und-warum-genau-zwei)) —
   nicht als die Bewertung, die denselben Übergang erzeugt hätte. Der Unterschied
   ist später nicht rekonstruierbar, wenn er jetzt eingeschmolzen wird.
-- **`correctCount` bewegt sich im neuen Flow nie.** Es ist in §7 über die
-  Selbsteinschätzung definiert, und die gibt es hier nicht mehr — auch
-  *Bestätigen* ist keine. Die Begründung ist unverändert die aus §7.1:
+- **`correctCount` bewegt sich im neuen Flow nie** — auf keinem der drei
+  Abschlusswege. Es ist in §7 über die Selbsteinschätzung definiert, und die
+  gibt es hier nicht mehr; auch *Bestätigen* ist keine, sondern Zustimmung zu
+  einem Vorschlag der App. Die Begründung ist unverändert die aus §7.1:
   „richtig" ist eine Bewertung, und vorgelegen hat ein Textvergleich, dessen
   False-Accept-Eigenschaft nicht gemessen ist. `correctCount` wird damit ein
   Aggregat der Phasen 1 bis 12, das stehen bleibt und nicht mehr wächst; die
@@ -798,8 +821,15 @@ vom laufenden Versuch rückwärts gezählt und berücksichtigt nur
    der letzten Statusänderung* entstanden ist.
 3. **Abbruch am ersten unsauberen Versuch.** Mismatch, Aufgeben, Retry oder
    „ohne Sprache" beenden den Lauf.
-4. **Abbruch an einer Ablehnung**, und der ablehnende Versuch selbst zählt
-   **nicht** mit.
+4. **Abbruch an einer Ablehnung genau dieses Schritts**, und der ablehnende
+   Versuch selbst zählt **nicht** mit. „Genau dieses Schritts" ist die engere
+   Lesart und die umgesetzte: Der Eintrag trägt den abgelehnten Status, und
+   verglichen wird gegen den Status, der jetzt vorgeschlagen würde (A42, „für
+   genau diesen nächsten Status"). Für jede heute erreichbare Historie fallen
+   beide Lesarten zusammen, weil der Vorschlag deterministisch aus dem Status
+   folgt und ein vergleichbarer Eintrag denselben Ausgangsstatus hat — die
+   engere Regel ist der Schutz für eine spätere Fassung, die etwas anderes
+   vorschlägt.
 
 Ist der Lauf mindestens `cleanRunBeforeSuggestion` lang und gibt es überhaupt
 einen Schritt nach oben, wird vorgeschlagen; sonst steht *Weiter* da.
@@ -857,8 +887,10 @@ Roadmap:
 - **Aufdecken und Aufgeben sind keine positive Evidenz.**
 - **Keine automatische Herabstufung**, unter keinen Umständen, auch nicht über
   mehrere Mismatches. Es gibt in Phase 13 **keinen** Pfad, auf dem die App
-  einen Status senkt. Nach unten kommt eine Karte nur über die Kartenliste
-  (§6.2).
+  einen Status senkt — und, weil das Bedienelement aus §6.2 nie gebaut wurde,
+  derzeit auch keinen, auf dem der **Nutzer** ihn senkt. Das ist die offene
+  Entscheidung aus [§13.11](#1311-was-das-kostet), nicht eine Eigenschaft, mit
+  der diese Phase zufrieden ist.
 - **Eine tatsächliche Statusänderung braucht die Zustimmung des Nutzers.** Der
   Vorschlag ändert nichts; er wird zu einer Änderung durch den Tap auf
   *Bestätigen* und durch nichts sonst.
@@ -995,21 +1027,36 @@ Annahmequote ist also erst **ab Phase 13** messbar, nicht rückwirkend.
 
 ### 13.11 Was das kostet
 
-Vier Folgen, alle bewusst in Kauf genommen und keine davon versteckt:
+Fünf Folgen. Vier sind bewusst in Kauf genommen; die erste ist beim Review
+aufgefallen, ist **nicht** entschieden und blockiert den Abschluss der Phase.
 
-1. **Ohne Mikrofon bewegt sich kein Lernstand mehr von selbst.** Die einzige
+1. **Es gibt im Produkt derzeit keinen Weg nach unten — und das ist eine offene
+   Entscheidung, keine Inkaufnahme.** Bis Phase 12 senkten *Nochmal* (−2) und
+   *Schwer* (−1) einen Lernstand. Phase 13 entfernt sie, verbietet jede
+   automatische Herabstufung und verweist für die Korrektur auf das Setzen in
+   der Kartenübersicht — **das laut §6.2 seit Phase 1 spezifiziert, aber nie
+   gebaut wurde.** Damit kann eine Karte, die zwei zufällige
+   Erkennungstreffer nach oben getragen haben, dauerhaft auf *Gut* oder
+   *Sicher* stehen bleiben; sie bekommt das niedrige Gewicht aus §3.1, wird
+   selten gezogen, und der Lernende hat kein Mittel dagegen. Wie oft ein
+   Treffer zufällig entsteht, ist **ungemessen** (§13.8) — genau deshalb ist
+   das keine Randbemerkung. **Zu entscheiden ist eines von beiden:** das
+   Bedienelement aus §6.2 nachziehen, oder ausdrücklich festlegen, dass es in
+   Version 1 keinen Weg nach unten gibt. Beides ist eine Produktentscheidung
+   und steht dem Nutzer zu.
+2. **Ohne Mikrofon bewegt sich kein Lernstand mehr von selbst.** Die einzige
    automatische positive Evidenz ist der Textvergleich. Wer in Modus A nie
    spricht oder auf einem Gerät ohne Mandarin-Erkennung lernt, bekommt nie
-   einen Vorschlag; der Status ändert sich dann ausschließlich über die
-   Kartenliste (§6.2). Das ist die ehrliche Konsequenz aus „keine neue
-   Ersatzheuristik erfinden".
-2. **Dasselbe gilt für Modus B**, dauerhaft und unabhängig vom Gerät.
-3. **Die Gewichtung folgt einem Status, der sich seltener bewegt** (§3.1). Eine
+   einen Vorschlag; nach oben geht es dann gar nicht mehr, und nach unten —
+   siehe Punkt 1 — ebenfalls nicht. Das ist die ehrliche Konsequenz aus „keine
+   neue Ersatzheuristik erfinden".
+3. **Dasselbe gilt für Modus B**, dauerhaft und unabhängig vom Gerät.
+4. **Die Gewichtung folgt einem Status, der sich seltener bewegt** (§3.1). Eine
    gut gelernte, aber nie gesprochene Karte behält ihr hohes Gewicht und kommt
    weiter häufig. Das ist die richtige Fehlerrichtung — sie fragt zu viel,
    nicht zu wenig —, aber es ist eine Änderung am Sessiongefühl und gehört auf
    die Geräteliste.
-4. **`correctCount` wächst ab Phase 13 nicht mehr** und wird damit ein
+5. **`correctCount` wächst ab Phase 13 nicht mehr** und wird damit ein
    eingefrorenes Aggregat der Phasen 1 bis 12. Es ist in §7 über die
    Selbsteinschätzung definiert, und die gibt es im Lernflow nicht mehr — auch
    *Bestätigen* ist keine (§13.4). Das abgeleitete `accuracy` wird dadurch auf
@@ -1061,9 +1108,36 @@ Weiter / Bestätigen / Ablehnen
 unverändert. Die drei Schritte gehören an **eine** Stelle und an **einen**
 Beobachter je Kartenübergang; zwei getrennte Beobachter wären der Doppelstart,
 den das Phase-12-Review schon einmal gefunden hat, und ihre Reihenfolge ist
-nicht zugesichert. Die Reihenfolge ist ein Akzeptanzkriterium und über
-`SessionSpeechState` als Sequenz prüfbar, ohne View.
+nicht zugesichert.
+
+**Wie weit das prüfbar ist — korrigiert am 2026-09-21.** Die erste Fassung
+dieses Abschnitts behauptete, die Reihenfolge sei „über `SessionSpeechState` als
+Sequenz prüfbar, ohne View". **Das ist falsch, und das Testaudit hat es gefunden:**
+`SessionSpeechState` kennt kein Sprachausgabe-Ereignis und keine Reihenfolge
+gegenüber `speech.stop()`. Was tatsächlich gilt:
+
+- **Prüfbar und geprüft:** „genau ein neuer Schlüssel je Kartenübergang", über
+  `LearnFlow.cardCycleKey(cardID:answeredCount:)` — inklusive der
+  wiedereingestreuten Karte, deren ID sich nicht ändert, und der gelöschten
+  Karte (`LearnFlowTests.theCycleKeyChangesOncePerTransition`). Genau diese
+  Hälfte war in Phase 12 schon einmal kaputt.
+- **Nur strukturell:** dass `speech.stop()` **vor** dem Kartenwechsel läuft. Das
+  steht in einem `onChange` in `LearnSessionView`, und kein Unit-Test erreicht
+  einen `body`. Die Zusicherung ruht auf zwei Stellen — der ersten Anweisung
+  dieses Beobachters und darauf, dass `startRecording(for:)` selbst mit
+  `speech.stop()` beginnt —, sie hängt also nicht an der Anweisungsreihenfolge
+  allein. Der reale Beleg gehört auf die Geräteliste.
 
 Alles andere aus Phase 12 bleibt: Hintergrund, Audio-Unterbrechung,
 technischer Fehler, dauerhaft unmögliche Erkennung und Sessionende entwaffnen
 den Modus weiterhin, und ein Neustart braucht immer einen Tap.
+
+**Und eine Genauigkeit, die das Review verlangt hat:** „Verengt" ist für die
+Sprachausgabe-Regel zu freundlich. Vom Lernbildschirm aus ist der verdeckte Fall
+**nicht erreichbar** — Modus A zeigt vor dem Aufdecken keinen Lautsprecher, und
+Modus B, der einen zeigt, ist am Beobachter durch die Richtungsprüfung
+ausgeschlossen. Die Phase-12-Regel ist damit faktisch **stillgelegt**, nicht nur
+eingeschränkt. Der Fall bleibt in der Entscheidungstabelle stehen, weil er die
+ehrliche Antwort wäre, sobald auf einer verdeckten Modus-A-Karte ein
+Lautsprecher erschiene — ihn zu löschen würde „wir haben das entschieden" in
+„daran hat niemand gedacht" verwandeln.

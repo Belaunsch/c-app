@@ -109,13 +109,72 @@ struct SessionSpeechModeTests {
 
     // MARK: - What ends the mode
 
-    @Test("Speech output ends the mode")
-    func speechOutputEndsTheMode() {
+    @Test("Speech output on a covered card ends the mode")
+    func speechOutputOnACoveredCardEndsTheMode() {
         // The roadmap's own product rule: somebody who is listening is not
         // speaking, and a mode that records again right afterwards takes that
         // decision away from them. Re-arming needs a deliberate tap.
-        #expect(SessionSpeechRules.keepsModeActive(after: .speechOutputStarted) == false)
-        #expect(SessionSpeechRules.cancelsRecording(on: .speechOutputStarted))
+        #expect(SessionSpeechRules.keepsModeActive(after: .speechOutputStartedWhileCovered) == false)
+        #expect(SessionSpeechRules.cancelsRecording(on: .speechOutputStartedWhileCovered))
+    }
+
+    @Test("Speech output on the revealed card does not end the mode (A44)")
+    func speechOutputOnARevealedCardKeepsTheMode() {
+        // The phase-13 narrowing. Without it phase 13 would have abolished the
+        // phase-12 feature: the learner now lands on **every** card in the
+        // revealed state, where the big speaker sits, so listening to one answer
+        // would have cost the speech mode every single time.
+        //
+        // The reason the covered case ends the mode does not apply here: this
+        // attempt's recording is over, and the next one cannot start before the
+        // card changes — which stops speech first.
+        #expect(SessionSpeechRules.keepsModeActive(after: .speechOutputStartedWhileRevealed))
+        #expect(
+            SessionSpeechRules.cancelsRecording(on: .speechOutputStartedWhileRevealed) == false,
+            "there is no recording on a revealed card to cancel"
+        )
+
+        var state = SessionSpeechState(mode: .armed)
+        let cancels = state.apply(.speechOutputStartedWhileRevealed)
+        #expect(cancels == false)
+        #expect(state.mode == .armed, "still armed after listening to the answer")
+    }
+
+    @Test("Which speech-output event it is comes from the card state, not the view")
+    func speechOutputFactoryMapsTheCardState() {
+        // A factory rather than an `if` in the `body`: the mapping belongs next
+        // to the cases, and then the rules stay entirely inside the decision
+        // table where a test can drive them.
+        #expect(SessionSpeechEvent.speechOutputStarted(onRevealedCard: true)
+            == .speechOutputStartedWhileRevealed)
+        #expect(SessionSpeechEvent.speechOutputStarted(onRevealedCard: false)
+            == .speechOutputStartedWhileCovered)
+    }
+
+    @Test("The learner's ■ throws the recording away and keeps the mode (A45)")
+    func cancellingKeepsTheModeAndTheLoopGuard() {
+        // An abandoned attempt is not an attempt: nothing is evaluated, nothing
+        // is revealed, nothing is written. Cancelling one recording is not a
+        // decision about the next card, so the mode survives.
+        #expect(SessionSpeechRules.keepsModeActive(after: .recordingCancelledByLearner))
+        #expect(SessionSpeechRules.cancelsRecording(on: .recordingCancelledByLearner))
+        #expect(
+            SessionSpeechEvent.recordingCancelledByLearner.startsANewAttempt == false,
+            "and the loop guard stays set: a further attempt on this card takes a tap (A38)"
+        )
+
+        let card = UUID()
+        var state = SessionSpeechState()
+        state.armStartingRecording(on: card)
+        let cancelled = state.apply(.recordingCancelledByLearner)
+        #expect(cancelled, "the recording is thrown away")
+        #expect(state.mode == .armed, "the mode survives")
+        #expect(
+            state.shouldStartRecording(
+                for: card, direction: .germanToChinese, isRevealed: false, phase: .ready
+            ) == false,
+            "and nothing restarts on this card by itself"
+        )
     }
 
     @Test("Leaving the foreground and being interrupted both end the mode")
@@ -149,7 +208,8 @@ struct SessionSpeechModeTests {
         // the mode feel broken.
         for event: SessionSpeechEvent in [
             .nothingRecognized, .answerRevealedByHand,
-            .cardChanged, .assessmentSubmitted,
+            .cardChanged,
+            .speechOutputStartedWhileRevealed, .recordingCancelledByLearner,
         ] {
             #expect(SessionSpeechRules.keepsModeActive(after: event), "\(event)")
         }
@@ -168,7 +228,7 @@ struct SessionSpeechModeTests {
     @Test("Events that happen after a recording do not cancel one")
     func postRecordingEventsCancelNothing() {
         for event: SessionSpeechEvent in [
-            .nothingRecognized, .assessmentSubmitted,
+            .nothingRecognized, .speechOutputStartedWhileRevealed,
         ] {
             #expect(SessionSpeechRules.cancelsRecording(on: event) == false, "\(event)")
         }
@@ -195,7 +255,7 @@ struct SessionSpeechModeTests {
         #expect(ending.isEmpty == false, "at least one event has to end the mode")
         #expect(ending.count < SessionSpeechEvent.allCases.count, "and at least one must not")
 
-        #expect(SessionSpeechEvent.allCases.count == 10, "a new event needs a decision above")
+        #expect(SessionSpeechEvent.allCases.count == 11, "a new event needs a decision above")
     }
 
     // MARK: - The sequences the roadmap describes
@@ -220,12 +280,13 @@ struct SessionSpeechModeTests {
         ) == false, "and it does not immediately ask for a second one")
     }
 
-    @Test("After an automatic advance the next card records on its own")
-    func autoAdvanceLeadsToTheNextRecording() {
-        // The real sequence: a card was recorded, phase 11 advanced by itself,
-        // and the new card must get a recording. The first version of this test
-        // compared two unrelated UUIDs and proved nothing — it was a duplicate
-        // of `armedStartsOnAFreshCard` in disguise. Found by the audit.
+    @Test("After the attempt is closed the next card records on its own")
+    func closingLeadsToTheNextRecording() {
+        // The real sequence: a card was recorded, the learner closed the attempt
+        // („Weiter", „Bestätigen" or „Ablehnen"), and the new card must get a
+        // recording. The first version of this test compared two unrelated UUIDs
+        // and proved nothing — it was a duplicate of `armedStartsOnAFreshCard` in
+        // disguise. Found by the audit.
         let first = UUID()
         let second = UUID()
         var state = SessionSpeechState()
@@ -247,18 +308,23 @@ struct SessionSpeechModeTests {
 
     @Test("The same card coming straight back is recorded again")
     func reinsertedCardRecordsAgain() {
-        // „Nochmal" on the **last** card of a batch puts the same card back at
-        // position zero — the id never changes, so a card-change observer
-        // misses it entirely. Without `assessmentSubmitted` clearing the marker
-        // the session would sit armed and silent on a card it is meant to
-        // record. Found in review.
+        // „Aufgeben" on the **last** card of a batch puts the same card back at
+        // position zero — the card id never changes, so an id-only observer would
+        // miss it entirely and the session would sit armed and silent on a card it
+        // is meant to record. Found in the phase-12 review.
+        //
+        // What makes it a card change anyway is the composite key: it counts
+        // closed attempts as well as the id
+        // (`LearnFlowTests.theCycleKeyChangesOncePerTransition`). Phase 13 could
+        // therefore drop the separate „a rating was recorded" event, which never
+        // had a production caller.
         let card = UUID()
         var state = SessionSpeechState()
         state.armStartingRecording(on: card)
 
-        let cancels = state.apply(.assessmentSubmitted)
+        let cancels = state.apply(.cardChanged)
 
-        #expect(cancels == false, "the recording ended long before the rating")
+        #expect(cancels, "whatever was running belonged to the previous appearance")
         #expect(state.mode == .armed)
         #expect(state.shouldStartRecording(
             for: card, direction: .germanToChinese, isRevealed: false, phase: .ready
@@ -287,7 +353,7 @@ struct SessionSpeechModeTests {
         var state = SessionSpeechState()
         state.armStartingRecording(on: card)
 
-        let cancelled = state.apply(.speechOutputStarted)
+        let cancelled = state.apply(.speechOutputStartedWhileCovered)
         #expect(cancelled, "a running recording ends")
         #expect(state.mode == .off)
 
@@ -302,7 +368,7 @@ struct SessionSpeechModeTests {
     @Test("Every event that ends the mode ends it for the rest of the session")
     func disarmingEventsAreFinal() {
         for event: SessionSpeechEvent in [
-            .speechOutputStarted, .appLeftForeground, .audioInterrupted,
+            .speechOutputStartedWhileCovered, .appLeftForeground, .audioInterrupted,
             .recognitionFailed, .speechUnavailable, .sessionEnded,
         ] {
             var state = SessionSpeechState()
@@ -348,11 +414,14 @@ struct SessionSpeechModeTests {
 
     @Test("A running recording is offered as a stop, not as a start")
     func recordingIsStoppedByTheSameControl() {
-        // Requirement of the phase: the learner ends the recording, and the
-        // control has to say so. Phase 9 already does this; pinned here
-        // because phase 12 depends on it.
-        #expect(RecordAnswerButton.isStopping(at: .recording))
-        #expect(RecordAnswerButton.title(for: .recording) == "Aufnahme beenden")
-        #expect(RecordAnswerButton.isStopping(at: .ready) == false)
+        // Requirement of phase 12: the learner ends the recording, and the
+        // control has to say so. **Phase 13 split the job in two** — „Fertig"
+        // finalises and evaluates, the ■ beside it throws the attempt away — so
+        // the wide control now cancels while recording, and its title says that
+        // rather than „Aufnahme beenden".
+        #expect(RecordAnswerButton.showsStopControl(at: .recording))
+        #expect(RecordAnswerButton.title(for: .recording) == "Aufnahme abbrechen")
+        #expect(RecordAnswerButton.showsStopControl(at: .recording), "and Fertig sits beside it")
+        #expect(RecordAnswerButton.showsStopControl(at: .ready) == false)
     }
 }

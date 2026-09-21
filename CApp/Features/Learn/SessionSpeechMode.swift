@@ -36,9 +36,19 @@ nonisolated enum SessionSpeechMode: Equatable, Sendable {
 nonisolated enum SessionSpeechEvent: CaseIterable, Sendable {
     // MARK: Events that end the mode
 
-    /// The learner tapped the speaker. Deliberate listening, and this app
-    /// never records and speaks at once.
-    case speechOutputStarted
+    /// The learner tapped the speaker **while the card was still covered**.
+    /// Deliberate listening, and this app never records and speaks at once.
+    ///
+    /// **Unreachable from the learning screen as it stands, and that is worth
+    /// saying plainly.** Mode A shows no speaker before the reveal, and mode B —
+    /// which does, because there the audio *is* the question — never reaches this
+    /// state machine at all: the observer guards on mode A. So after the phase-13
+    /// narrowing (A44) the phase-12 rule „speech output disarms the mode" is in
+    /// practice **retired**, not merely narrowed. The case stays because the rule
+    /// is the honest answer should a speaker ever appear on a covered mode-A card,
+    /// and because deleting it would quietly turn „we decided this" into „nobody
+    /// thought about it".
+    case speechOutputStartedWhileCovered
     /// The app left the foreground. There is no background recording.
     case appLeftForeground
     /// Another app took the audio session — a call, an alarm.
@@ -54,27 +64,60 @@ nonisolated enum SessionSpeechEvent: CaseIterable, Sendable {
 
     // MARK: Events that do not
 
+    /// The learner tapped the speaker **on the revealed card** (phase 13).
+    ///
+    /// Its own case rather than a condition in the view, so the decision table
+    /// below stays the one place these rules live. On a revealed card the
+    /// attempt's recording is over and the next one cannot start before the card
+    /// changes — which stops speech anyway — so the reason the covered case ends
+    /// the mode does not apply here. Without this distinction phase 13 would
+    /// have abolished the phase-12 feature: the learner now lands on **every**
+    /// card in the revealed state, where the big speaker sits, so listening to
+    /// one answer would cost the speech mode every time.
+    case speechOutputStartedWhileRevealed
+
+    /// The learner threw the running recording away with the ■ (phase 13).
+    ///
+    /// An abandoned attempt is not an attempt: nothing is evaluated, nothing is
+    /// revealed, nothing is written. The mode stays armed — cancelling one
+    /// recording is not a decision about the next card — but the loop guard
+    /// stays set, so **this** card gets no automatic retry (A38).
+    case recordingCancelledByLearner
+
     /// The recording finished with no usable text.
     case nothingRecognized
     /// The learner revealed the answer instead of speaking.
     case answerRevealedByHand
     /// The session moved to another card.
     case cardChanged
-    /// A self-assessment was recorded.
-    case assessmentSubmitted
 }
 
 nonisolated extension SessionSpeechEvent {
+
+    /// Which speech-output event this is, given where the card stands.
+    ///
+    /// A factory rather than an `if` in the view: the *mapping* belongs next to
+    /// the cases, and then the rules stay entirely inside the decision table
+    /// below where a test can drive them.
+    static func speechOutputStarted(onRevealedCard isRevealed: Bool) -> SessionSpeechEvent {
+        isRevealed ? .speechOutputStartedWhileRevealed : .speechOutputStartedWhileCovered
+    }
     /// Whether the card in front of the learner is now open for a fresh
     /// attempt.
     ///
-    /// **Both are needed, and the second one is easy to miss.** A card change
-    /// is the obvious case. But „Nochmal" on the **last** card of a batch puts
-    /// the same card back at position zero — the id does not change, no card
-    /// change is observed, and without this the session would sit armed and
-    /// silent on a card it is supposed to record. Found in review.
+    /// **One event, and the reason there is only one is `cardCycleKey`.** Giving
+    /// up on the **last** card of a batch puts the same card back at position
+    /// zero, so the card id does not change — an id-only observer would sit armed
+    /// and silent on a card it is supposed to record. Phase 12 fixed that with a
+    /// composite key that also counts closed attempts, so that case *is* a card
+    /// change as far as this state is concerned.
+    ///
+    /// Phase 12 carried a second case for „a rating was recorded" as well. It
+    /// never had a production caller — the composite key already covers it — and
+    /// phase 13 removed it rather than keeping an enum case, two table rows and
+    /// three tests for a transition the app never makes.
     var startsANewAttempt: Bool {
-        self == .cardChanged || self == .assessmentSubmitted
+        self == .cardChanged
     }
 }
 
@@ -86,9 +129,11 @@ nonisolated enum SessionSpeechRules {
     /// **The list of `false`s is the product decision of this phase.** Each one
     /// makes the learner tap the microphone again, deliberately:
     ///
-    /// - **Speech output** — the roadmap's own rule. Somebody who is listening
-    ///   is not speaking, and a mode that records again right afterwards takes
-    ///   that decision away from them.
+    /// - **Speech output on a covered card** — the roadmap's own rule. Somebody
+    ///   who is listening is not speaking, and a mode that records again right
+    ///   afterwards takes that decision away from them. **On the revealed card
+    ///   it does not end the mode** (A44): the attempt is over, and the next
+    ///   recording cannot begin before the card changes.
     /// - **Background and interruption** — nothing records while the app is not
     ///   on screen, and coming back to an open microphone would be a surprise.
     ///   Apple's `shouldResume` is documented as a *playback* hint; it is not
@@ -102,11 +147,11 @@ nonisolated enum SessionSpeechRules {
     /// the learner out of a mode they switched on.
     static func keepsModeActive(after event: SessionSpeechEvent) -> Bool {
         switch event {
-        case .speechOutputStarted, .appLeftForeground, .audioInterrupted,
+        case .speechOutputStartedWhileCovered, .appLeftForeground, .audioInterrupted,
              .recognitionFailed, .speechUnavailable, .sessionEnded:
             false
-        case .nothingRecognized, .answerRevealedByHand,
-             .cardChanged, .assessmentSubmitted:
+        case .speechOutputStartedWhileRevealed, .recordingCancelledByLearner,
+             .nothingRecognized, .answerRevealedByHand, .cardChanged:
             true
         }
     }
@@ -118,12 +163,13 @@ nonisolated enum SessionSpeechRules {
     /// result arriving for a card the learner has moved on from.
     static func cancelsRecording(on event: SessionSpeechEvent) -> Bool {
         switch event {
-        case .speechOutputStarted, .appLeftForeground, .audioInterrupted,
+        case .speechOutputStartedWhileCovered, .appLeftForeground, .audioInterrupted,
              .recognitionFailed, .speechUnavailable, .sessionEnded,
-             .answerRevealedByHand, .cardChanged:
+             .answerRevealedByHand, .cardChanged, .recordingCancelledByLearner:
             true
-        // These happen **after** a recording has already finished.
-        case .nothingRecognized, .assessmentSubmitted:
+        // These happen **after** a recording has already finished, or — for
+        // speech output on a revealed card — while there is none to cancel.
+        case .nothingRecognized, .speechOutputStartedWhileRevealed:
             false
         }
     }

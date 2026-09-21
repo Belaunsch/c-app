@@ -50,7 +50,7 @@ struct SpeechIntegrationTests {
         model.start(in: context)
 
         #expect(model.isRevealed == false)
-        model.reveal()
+        model.reveal(recordingWasPossible: true)
         #expect(model.isRevealed, "and only then does the answer exist")
     }
 

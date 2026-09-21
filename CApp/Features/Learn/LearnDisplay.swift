@@ -9,34 +9,13 @@ import Foundation
 // than in `Learning/`, which holds no presentation concerns and no German
 // text — the same split `CardDisplay` makes for the models.
 
-extension SelfAssessment {
-    /// The four buttons, in the order they are shown.
-    ///
-    /// `allCases` already has this order, but the bar depends on it, so it is
-    /// stated where the titles are rather than left to the enum's
-    /// declaration order.
-    static var displayOrder: [SelfAssessment] { [.again, .hard, .good, .secure] }
-
-    var title: String {
-        switch self {
-        case .again: "Nochmal"
-        case .hard: "Schwer"
-        case .good: "Gut"
-        case .secure: "Sicher"
-        }
-    }
-
-    /// Spoken by VoiceOver. The plain title would be ambiguous out of
-    /// context — "Gut" alone does not say what it applies to.
-    var accessibilityLabel: String {
-        switch self {
-        case .again: "Nochmal, nicht gewusst"
-        case .hard: "Schwer, mit Mühe gewusst"
-        case .good: "Gut gewusst"
-        case .secure: "Sicher gewusst"
-        }
-    }
-}
+// `SelfAssessment` has no presentation left: phase 13 took the four buttons out
+// of the learning flow, so nothing displays Nochmal / Schwer / Gut / Sicher any
+// more. The titles and VoiceOver labels are gone with them rather than kept as
+// decoration — a string nothing renders is not a translation, it is a guess
+// about a screen that does not exist. What a learner now reads after the reveal
+// lives in `RevealedDecisionBar`, and the status names come from
+// `LearningStatus.title` in `CardDisplay`.
 
 extension SessionDirection {
     /// Both halves named, with the arrow doing the explaining. "Modus A" and

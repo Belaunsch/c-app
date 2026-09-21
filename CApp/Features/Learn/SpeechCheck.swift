@@ -19,9 +19,12 @@ import Foundation
 /// how it was said. That is hard rule 7 in `CLAUDE.md` and it is the reason
 /// this type has exactly two cases.
 ///
-/// The self-assessment stays the judgement. A `SpeechCheck` never changes a
-/// learning status — it is shown next to the revealed answer and the learner
-/// still decides between Nochmal, Schwer, Gut and Sicher.
+/// **A `SpeechCheck` never changes a learning status.** It is shown next to the
+/// revealed answer, and what the learner does with it is theirs: until phase 12
+/// they picked one of four self-assessments, since phase 13 they tap *Weiter* or
+/// decide on an offered classification. Either way the judgement is the
+/// learner's, and a match is only ever permission for the app to *offer* a step
+/// (`docs/learning-engine.md` §13.7).
 ///
 /// Free of Speech-framework types on purpose: by the time a value of this
 /// type exists, the recognition is over and what is left is two strings.

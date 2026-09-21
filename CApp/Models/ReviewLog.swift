@@ -31,6 +31,17 @@ import SwiftData
 /// Wortlaut zu behalten wäre eine Sammlung gesprochener Äußerungen ohne
 /// Zweck.
 ///
+/// ## Seit Phase 13: Vorschlag und Entscheidung, getrennt von der Bewertung
+///
+/// `assessmentRaw` bedeutet **ausschließlich** „der Lernende hat eine der vier
+/// Selbsteinschätzungen des alten Flows abgegeben" und wird vom Phase-13-Flow
+/// **niemals** geschrieben. Ein bestätigter Einstufungsvorschlag ist etwas
+/// anderes — die Zustimmung zu einem Vorschlag der App — und liegt deshalb in
+/// eigenen Feldern (``suggestedStatus``, ``suggestionDecision``). Beides in ein
+/// Feld zu legen, weil es denselben Statusübergang erzeugt, würde die
+/// Unterscheidung rückwirkend und dauerhaft vernichten; die Gegenrechnung steht
+/// in `docs/learning-engine.md` §13.10.
+///
 /// Alle Properties haben einen Default — Konvention aus Task 1.9 und
 /// Voraussetzung der leichtgewichtigen Migration.
 @Model
@@ -72,6 +83,14 @@ final class ReviewLog {
     /// Mini-Batches war.
     var wasRetry: Bool = false
 
+    /// RawValue von ``suggestedStatus`` (Phase 13). `nil` heißt: Die App hat
+    /// bei diesem Versuch nichts vorgeschlagen.
+    private(set) var suggestedStatusRaw: Int?
+
+    /// RawValue von ``suggestionDecision`` (Phase 13). `nil` heißt: Es gab
+    /// keinen Vorschlag.
+    private(set) var suggestionDecisionRaw: String?
+
     /// Die Karte. Die Gegenrichtung steht auf `Card.reviews` mit
     /// `.cascade`: Eine gelöschte Karte nimmt ihre Historie mit, denn ohne
     /// die Karte beschreibt sie nichts mehr.
@@ -102,8 +121,57 @@ final class ReviewLog {
         set { previousStatusRaw = newValue.rawValue }
     }
 
+    /// Der Status, den die App bei diesem Versuch vorgeschlagen hat, oder
+    /// `nil`, wenn sie nichts vorgeschlagen hat. Liegt als
+    /// ``suggestedStatusRaw`` im Store.
+    ///
+    /// Aufgezeichnet statt hergeleitet: Aus `previousStatus` wäre er nur über
+    /// die **jeweils aktuelle** Fassung der Einstufungsregel rekonstruierbar,
+    /// und eine Historie, deren Bedeutung an der heutigen Regel hängt, ist
+    /// keine Historie.
+    var suggestedStatus: LearningStatus? {
+        get {
+            guard let suggestedStatusRaw else { return nil }
+            guard let status = LearningStatus(rawValue: suggestedStatusRaw) else {
+                assertionFailure("Unbekannter LearningStatus-RawValue: \(suggestedStatusRaw)")
+                return nil
+            }
+            return status
+        }
+        set { suggestedStatusRaw = newValue?.rawValue }
+    }
+
+    /// Was aus dem Vorschlag wurde, oder `nil`, wenn es keinen gab. Liegt als
+    /// ``suggestionDecisionRaw`` im Store.
+    ///
+    /// Immer gemeinsam mit ``suggestedStatus`` gesetzt oder gemeinsam `nil` —
+    /// siehe ``hasConsistentSuggestion``.
+    var suggestionDecision: SuggestionDecision? {
+        get {
+            guard let suggestionDecisionRaw else { return nil }
+            guard let decision = SuggestionDecision(rawValue: suggestionDecisionRaw) else {
+                assertionFailure("Unbekannter SuggestionDecision-RawValue: \(suggestionDecisionRaw)")
+                return nil
+            }
+            return decision
+        }
+        set { suggestionDecisionRaw = newValue?.rawValue }
+    }
+
+    /// Ob die beiden Vorschlagsfelder zusammenpassen.
+    ///
+    /// Die Invariante des Paares: entweder beide gesetzt oder beide `nil`. Ein
+    /// halb gesetzter Zustand hätte keine Bedeutung — ein Vorschlag ohne
+    /// Ausgang ist kein abgeschlossener Versuch, und ein Ausgang ohne Vorschlag
+    /// ist kein Ausgang. Als lesbare Eigenschaft statt als Kommentar, damit ein
+    /// Test sie festnageln kann.
+    var hasConsistentSuggestion: Bool {
+        (suggestedStatusRaw == nil) == (suggestionDecisionRaw == nil)
+    }
+
     /// Die abgegebene Selbsteinschätzung, oder `nil` bei einem automatisch
-    /// weitergereichten Versuch.
+    /// weitergereichten Versuch — und ab Phase 13 bei **jedem** Versuch aus
+    /// dem neuen Flow.
     var assessment: SelfAssessment? {
         get {
             guard let assessmentRaw else { return nil }
@@ -126,6 +194,8 @@ final class ReviewLog {
         wasManualReveal: Bool = false,
         wasRetry: Bool = false,
         assessment: SelfAssessment? = nil,
+        suggestedStatus: LearningStatus? = nil,
+        suggestionDecision: SuggestionDecision? = nil,
         card: Card? = nil
     ) {
         self.id = id
@@ -137,6 +207,8 @@ final class ReviewLog {
         self.wasManualReveal = wasManualReveal
         self.wasRetry = wasRetry
         self.assessment = assessment
+        self.suggestedStatus = suggestedStatus
+        self.suggestionDecision = suggestionDecision
         self.card = card
     }
 
@@ -152,7 +224,12 @@ final class ReviewLog {
             speechMatched: speechMatched,
             wasManualReveal: wasManualReveal,
             wasRetry: wasRetry,
-            assessment: assessment
+            // Nur die Ablehnung erreicht die Engine, und zwar abgeleitet: Eine
+            // Annahme hat den Status bewegt, ihr Eintrag trägt also einen
+            // anderen `previousStatus` und fällt schon durch die
+            // Gleichstatus-Regel heraus. Ein Wert, den die Regel nie liest,
+            // gehört nicht in `ReviewSignal`.
+            declinedSuggestion: suggestionDecision == .declined ? suggestedStatus : nil
         )
     }
 }

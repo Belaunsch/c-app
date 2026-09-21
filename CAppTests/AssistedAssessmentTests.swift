@@ -4,374 +4,421 @@
 //
 
 import Foundation
-import SwiftUI
 import Testing
 @testable import CApp
 
-/// The rule that decides whether the learner is asked, and what is suggested.
+/// The phase-13 classification rule: `docs/learning-engine.md` §13.7.
 ///
-/// The point of these tests is not that the current numbers come out — it is
-/// that the **boundaries** hold: automatic evidence may shorten a question, it
-/// may never lower a status, a single match is worth nothing, and the learner's
-/// own rating always wins. Those four survive a recalibration of the window or
-/// the thresholds; the numbers may not.
+/// Pure values throughout — no store, no container, no clock. Every test here
+/// states one of the rule's promises, and the ones that matter most are the
+/// promises about what the rule may **not** conclude (§13.8).
 struct AssistedAssessmentTests {
 
-    // MARK: - Fixtures
+    // MARK: - Builders, so the tests read like the rule
 
-    private func clean(assessment: SelfAssessment? = nil) -> ReviewSignal {
+    private func clean(
+        at status: LearningStatus,
+        direction: SessionDirection = .germanToChinese
+    ) -> ReviewSignal {
         ReviewSignal(
-            direction: .germanToChinese, previousStatus: .good,
-            usedSpeech: true, speechMatched: true, assessment: assessment
+            direction: direction,
+            previousStatus: status,
+            usedSpeech: true,
+            speechMatched: true
         )
     }
 
-    private func mismatch() -> ReviewSignal {
+    private func mismatch(at status: LearningStatus) -> ReviewSignal {
         ReviewSignal(
-            direction: .germanToChinese, previousStatus: .good,
-            usedSpeech: true, speechMatched: false
+            direction: .germanToChinese,
+            previousStatus: status,
+            usedSpeech: true,
+            speechMatched: false
         )
     }
 
-    private func manual(_ assessment: SelfAssessment) -> ReviewSignal {
+    private func gaveUp(at status: LearningStatus) -> ReviewSignal {
+        ReviewSignal(direction: .germanToChinese, previousStatus: status, wasManualReveal: true)
+    }
+
+    private func declined(_ proposal: LearningStatus, at status: LearningStatus) -> ReviewSignal {
         ReviewSignal(
-            direction: .germanToChinese, previousStatus: .good,
-            assessment: assessment
+            direction: .germanToChinese,
+            previousStatus: status,
+            usedSpeech: true,
+            speechMatched: true,
+            declinedSuggestion: proposal
         )
     }
 
-    // MARK: - No evidence at all
-
-    @Test("A card nobody has ever rated is rated by a person")
-    func freshCardAlwaysAsks() {
-        // Status `new` means no evidence exists. An exact match on such a card
-        // shows the learner could say the word, not that they have learned it.
-        //
-        // The history is deliberately one **rated** clean review: that gives a
-        // run of two without tripping the recalibration guard, so the only
-        // thing that can produce a question here is the rule about `new`
-        // itself. A counter-mutation found the first version of this test
-        // passing for the wrong reason — recalibration caught it, and removing
-        // the `new` guard changed nothing.
-        let decision = AssistedAssessment.decision(
-            currentStatus: .new, current: clean(), history: [clean(assessment: .good)]
-        )
-        // **And with no suggestion.** The reset to „Neu" is a statement by the
-        // learner, and the old history is still attached to the card — without
-        // this the app would highlight a promotion on exactly the card its
-        // owner had just declared unlearned.
-        #expect(decision == .ask(suggestion: nil))
-
-        // The same history on a card that is **not** new does skip the
-        // question, which is what makes the line above about `new` and not
-        // about the history.
-        #expect(AssistedAssessment.decision(
-            currentStatus: .weak, current: clean(), history: [clean(assessment: .good)]
-        ) == .autoAdvance)
+    private func decision(
+        at status: LearningStatus,
+        current: ReviewSignal,
+        history: [ReviewSignal] = []
+    ) -> AssistedClassificationDecision {
+        AssistedAssessment.decision(currentStatus: status, current: current, history: history)
     }
 
-    @Test("Without any history the learner is asked")
-    func noHistoryAsks() {
-        let decision = AssistedAssessment.decision(
-            currentStatus: .good, current: clean(), history: []
-        )
-        #expect(decision == .ask(suggestion: nil), "one match is not evidence")
+    // MARK: - The threshold
+
+    @Test("A single exact match carries no statement")
+    func singleMatchSuggestsNothing() {
+        // The false-accept property of the comparison was never measured: the
+        // phase-9 benchmark stopped after the positive pass, so how often a
+        // match happens by accident is unknown. One match must therefore mean
+        // nothing at all.
+        #expect(decision(at: .medium, current: clean(at: .medium)) == .continueOnly)
     }
 
-    @Test("Without speech there is nothing automatic to go on", arguments: [
-        LearningStatus.weak, .medium, .good, .secure,
-    ])
-    func withoutSpeechAsks(status: LearningStatus) {
-        // The whole feature rests on one automatic signal. A learner who never
-        // taps the microphone sees exactly the app of phase 10.
-        let attempt = ReviewSignal(direction: .germanToChinese, previousStatus: status)
-        let decision = AssistedAssessment.decision(
-            currentStatus: status, current: attempt,
-            history: [clean(), clean(), clean(), clean()]
-        )
-        #expect(decision == .ask(suggestion: nil))
+    @Test("Two clean attempts in a row offer exactly one step up")
+    func twoCleanAttemptsProposeOneStep() {
+        let result = decision(at: .medium, current: clean(at: .medium), history: [clean(at: .medium)])
+        #expect(result == .propose(.good))
+        #expect(result.proposedStatus == .good)
     }
 
-    // MARK: - A single match versus a repeated one
+    @Test("The threshold is the documented two, not one and not three")
+    func thresholdIsTwo() {
+        // Pinned against the constant *and* against its value, because the
+        // counter-mutation that matters is „2 → 1".
+        #expect(AssistedAssessment.cleanRunBeforeSuggestion == 2)
 
-    @Test("A single exact match carries nothing")
-    func singleMatchIsNotEnough() {
-        // Phase 9 measured that the exact comparison is brittle, and the
-        // false-accept property was never measured at all. One match must
-        // therefore neither skip the question nor highlight an answer.
-        let decision = AssistedAssessment.decision(
-            currentStatus: .good, current: clean(), history: [manual(.good)]
+        let history = Array(repeating: clean(at: .medium), count: AssistedAssessment.cleanRunBeforeSuggestion - 2)
+        #expect(
+            decision(at: .medium, current: clean(at: .medium), history: history) == .continueOnly,
+            "one short of the threshold"
         )
-        #expect(decision == .ask(suggestion: nil))
+        #expect(
+            decision(at: .medium, current: clean(at: .medium), history: history + [clean(at: .medium)])
+                == .propose(.good),
+            "exactly at the threshold"
+        )
     }
 
-    @Test("Two clean attempts in a row are enough to stop asking")
-    func repeatedMatchAdvances() {
-        let decision = AssistedAssessment.decision(
-            currentStatus: .good, current: clean(), history: [clean(assessment: .good)]
-        )
-        #expect(decision == .autoAdvance)
-    }
+    // MARK: - The ladder
 
-    @Test("The run has to be unbroken")
-    func aMismatchBreaksTheRun() {
-        // The mismatch sits between two clean attempts. It does not lower
-        // anything — it means the evidence is not a run any more, so the
-        // learner is asked.
-        let decision = AssistedAssessment.decision(
-            currentStatus: .good, current: clean(),
-            history: [mismatch(), clean(), clean(), clean()]
-        )
-        #expect(decision == .ask(suggestion: nil))
-    }
-
-    // MARK: - What a mismatch may and may not do
-
-    @Test("A mismatch never lowers anything and never suggests a downgrade")
-    func mismatchIsNotNegativeEvidence() {
-        for status in LearningStatus.allCases {
-            let decision = AssistedAssessment.decision(
-                currentStatus: status, current: mismatch(),
-                history: [mismatch(), mismatch(), mismatch()]
-            )
-            // Asked, plainly — and with no suggestion at all. Any suggestion
-            // here would be the app proposing a downgrade from a signal that
-            // phase 9 showed cannot carry one.
-            #expect(decision == .ask(suggestion: nil), "\(status) must not be talked down")
-        }
-    }
-
-    @Test("Three mismatches in a row still suggest nothing")
-    func repeatedMismatchIsStillNotEvidence() {
-        let suggestion = AssistedAssessment.suggestedStatus(
-            currentStatus: .secure, current: mismatch(),
-            history: [mismatch(), mismatch()]
-        )
-        #expect(suggestion == nil)
-    }
-
-    // MARK: - Manual reveal and retry
-
-    @Test("Reading the answer first is not a recall")
-    func manualRevealAsks() {
-        let peeked = ReviewSignal(
-            direction: .germanToChinese, previousStatus: .good,
-            usedSpeech: true, speechMatched: true, wasManualReveal: true
-        )
-        let decision = AssistedAssessment.decision(
-            currentStatus: .good, current: peeked, history: [clean(), clean(), clean()]
-        )
-        #expect(decision == .ask(suggestion: nil))
-    }
-
-    @Test("A second attempt at the same card is not a first attempt")
-    func retryAsks() {
-        let retry = ReviewSignal(
-            direction: .germanToChinese, previousStatus: .good,
-            usedSpeech: true, speechMatched: true, wasRetry: true
-        )
-        let decision = AssistedAssessment.decision(
-            currentStatus: .good, current: retry, history: [clean(), clean(), clean()]
-        )
-        #expect(decision == .ask(suggestion: nil))
-    }
-
-    // MARK: - Recalibration
-
-    @Test("After enough automatic reviews the app asks again")
-    func recalibrationAsks() {
-        // Three in a row were decided by the app; the fourth goes back to the
-        // learner even though the run continues. Without this a card with a
-        // long streak would never be re-rated and its status would freeze.
-        let skipped = Array(repeating: clean(), count: AssistedAssessment.autoAdvancesBeforeRecalibration)
-        let decision = AssistedAssessment.decision(
-            currentStatus: .good, current: clean(), history: skipped
-        )
-        #expect(decision.asksTheLearner)
-        #expect(decision == .ask(suggestion: .secure), "and it says what it would pick")
-    }
-
-    @Test("A rating by the learner restarts the count")
-    func ownRatingRestartsRecalibration() {
-        // Same three automatic reviews, but the learner rated the newest one.
-        // The count is measured from the most recent rating, so there is room
-        // again.
-        var history = Array(repeating: clean(), count: AssistedAssessment.autoAdvancesBeforeRecalibration)
-        history[0] = clean(assessment: .good)
-        let decision = AssistedAssessment.decision(
-            currentStatus: .good, current: clean(), history: history
-        )
-        #expect(decision == .autoAdvance)
-    }
-
-    // MARK: - The suggestion itself
-
-    @Test("The suggestion is one step up, never two and never down")
-    func suggestionIsOneStep() {
-        // Literal expectations, not `StatusTransition.newStatus(…)` again —
-        // the first version restated the implementation and would have
-        // followed it into any change. These three come from the matrix in
-        // §6 by hand.
-        let expected: [LearningStatus: LearningStatus] = [
-            .weak: .medium, .medium: .good, .good: .secure,
+    @Test("The suggestion ladder is the Gut column of §6 and nothing else")
+    func suggestionLadder() {
+        let expected: [LearningStatus: LearningStatus?] = [
+            .new: .medium,
+            .weak: .medium,
+            .medium: .good,
+            .good: .secure,
+            .secure: nil,
         ]
-        for (status, target) in expected {
-            let suggestion = AssistedAssessment.suggestedStatus(
-                currentStatus: status, current: clean(), history: [clean()]
+        for (status, proposal) in expected {
+            #expect(AssistedAssessment.proposedStatus(from: status) == proposal, "\(status)")
+            #expect(
+                decision(at: status, current: clean(at: status), history: [clean(at: status)])
+                    == (proposal.map { AssistedClassificationDecision.propose($0) } ?? .continueOnly),
+                "\(status)"
             )
-            #expect(suggestion == target, "from \(status)")
-            #expect(suggestion.map { $0 > status } == true, "up, and only up")
+        }
+    }
+
+    @Test("A secure card is never offered anything")
+    func topOfTheLadderOffersNothing() {
+        let history = Array(repeating: clean(at: .secure), count: 9)
+        #expect(decision(at: .secure, current: clean(at: .secure), history: history) == .continueOnly)
+    }
+
+    @Test("A suggestion is never more than one step and never downwards")
+    func neverMoreThanOneStepAndNeverDown() {
+        for status in LearningStatus.allCases {
+            let history = Array(repeating: clean(at: status), count: 9)
+            guard let proposal = decision(at: status, current: clean(at: status), history: history).proposedStatus
+            else { continue }
+
+            #expect(proposal > status, "\(status): a suggestion may only point up")
+            // One rung on the ladder of §6, measured through the ladder itself
+            // rather than through a second table.
+            #expect(
+                proposal == StatusTransition.newStatus(from: status, for: .good),
+                "\(status): more than one step"
+            )
+        }
+    }
+
+    // MARK: - What the rule may not conclude (§13.8)
+
+    @Test("A mismatch suggests nothing, lowers nothing and ends the run")
+    func mismatchIsNotNegativeEvidence() {
+        // Of 16 normally spoken target answers, 8 came back as a different
+        // Chinese text (phase 9). A mismatch is therefore not a statement about
+        // the learner — it just ends the run.
+        #expect(decision(at: .medium, current: mismatch(at: .medium), history: [clean(at: .medium)]) == .continueOnly)
+
+        // And as history it breaks a run rather than contributing to one.
+        #expect(
+            decision(
+                at: .medium,
+                current: clean(at: .medium),
+                history: [mismatch(at: .medium), clean(at: .medium), clean(at: .medium)]
+            ) == .continueOnly,
+            "the clean attempts behind the mismatch cannot be reached"
+        )
+
+        // There is no downgrade anywhere in the rule.
+        for status in LearningStatus.allCases {
+            let onlyMismatches = Array(repeating: mismatch(at: status), count: 9)
+            let result = decision(at: status, current: mismatch(at: status), history: onlyMismatches)
+            #expect(result == .continueOnly, "\(status)")
+            #expect(result.proposedStatus == nil, "\(status): no proposal at all, least of all a lower one")
         }
     }
 
-    @Test("At the top of the ladder there is nothing to suggest")
-    func noSuggestionAtTheTop() {
-        // `secure` plus „Gut" is still `secure`. Highlighting a button that
-        // changes nothing would be noise.
-        #expect(AssistedAssessment.suggestedStatus(
-            currentStatus: .secure, current: clean(), history: [clean()]
-        ) == nil)
+    @Test("A retry is no positive evidence")
+    func retryCarriesNothing() {
+        let retry = ReviewSignal(
+            direction: .germanToChinese,
+            previousStatus: .medium,
+            usedSpeech: true,
+            speechMatched: true,
+            wasRetry: true
+        )
+        #expect(decision(at: .medium, current: retry, history: [clean(at: .medium)]) == .continueOnly)
+
+        // As history it ends the run too — the first attempt is the honest
+        // indicator, the same principle §6.1 rests on.
+        #expect(
+            decision(
+                at: .medium,
+                current: clean(at: .medium),
+                history: [retry, clean(at: .medium), clean(at: .medium)]
+            ) == .continueOnly
+        )
     }
 
-    @Test("The suggested status maps back to the gentlest answer that reaches it")
-    func suggestionMapsToAnAnswer() {
-        for status in [LearningStatus.new, .weak, .medium, .good] {
-            let target = StatusTransition.newStatus(from: status, for: .good)
-            let assessment = AssistedAssessment.assessment(leadingTo: target, from: status)
-            #expect(assessment == .good, "from \(status)")
-        }
+    @Test("Giving up is no positive evidence, and it breaks the run without speech")
+    func givingUpCarriesNothing() {
+        #expect(decision(at: .medium, current: gaveUp(at: .medium), history: [clean(at: .medium)]) == .continueOnly)
+
+        // The phase-13 trap: a give-up in the new flow carries **neither** an
+        // assessment **nor** speech. Phase 11's `isUsable` would have skipped it
+        // as „no information" — and „match, gave up, match" would have produced
+        // a suggestion. It has to break the run.
+        #expect(
+            decision(
+                at: .medium,
+                current: clean(at: .medium),
+                history: [gaveUp(at: .medium), clean(at: .medium), clean(at: .medium)]
+            ) == .continueOnly,
+            "a give-up must break the run, not be skipped over"
+        )
     }
 
-    // MARK: - Both directions, same rule
-
-    @Test("The rule does not care which way round the card was asked")
-    func bothDirectionsBehaveAlike() {
-        // Phase 8 made the direction presentation-only, and phase 11 does not
-        // change that: it is recorded so that evidence can later be told
-        // apart, not so that one mode learns faster than the other.
-        func run(_ direction: SessionDirection) -> AssistedAssessmentDecision {
-            let attempt = ReviewSignal(
-                direction: direction, previousStatus: .good,
-                usedSpeech: true, speechMatched: true
-            )
-            return AssistedAssessment.decision(
-                currentStatus: .good, current: attempt,
-                history: [ReviewSignal(direction: direction, previousStatus: .good,
-                                       usedSpeech: true, speechMatched: true)]
-            )
-        }
-        // The value is pinned, not just compared: the first version only
-        // asserted that the two agree, so a regression to „both ask" would
-        // have stayed green. The audit found it.
-        #expect(run(.germanToChinese) == .autoAdvance)
-        #expect(run(.audioToGerman) == .autoAdvance)
+    @Test("An attempt without speech at all suggests nothing")
+    func withoutSpeechNothingHappens() {
+        let silent = ReviewSignal(direction: .germanToChinese, previousStatus: .medium)
+        #expect(decision(at: .medium, current: silent, history: [clean(at: .medium)]) == .continueOnly)
     }
 
-    // MARK: - The parameters are named as decisions, not measurements
+    @Test("Mode B is status-neutral in both roles")
+    func modeBIsStatusNeutral() {
+        // As the current attempt: there is no speech in mode B, so there is
+        // never a clean attempt and never a suggestion.
+        let modeB = ReviewSignal(direction: .audioToGerman, previousStatus: .medium, wasManualReveal: true)
+        let modeBHistory = Array(repeating: modeB, count: 9)
+        #expect(decision(at: .medium, current: modeB, history: modeBHistory) == .continueOnly)
 
-    @Test("The three free parameters are the documented ones")
-    func parametersArePinned() {
-        // Pinned so a change is a decision someone makes, not a drift. None of
-        // these is measured — the roadmap left them open until real review
-        // history exists, and this phase is what starts collecting it.
+        // Even an (impossible) clean mode-B attempt gets nothing out of mode-A
+        // history, because the run only counts the same direction.
+        let cleanModeB = clean(at: .medium, direction: .audioToGerman)
+        #expect(
+            decision(at: .medium, current: cleanModeB, history: [clean(at: .medium)]) == .continueOnly,
+            "mode-A evidence does not carry into mode B"
+        )
+    }
+
+    @Test("An attempt in the other direction does not break the run")
+    func otherDirectionIsSkippedNotCounted() {
+        // Skipped, not counted as a break: practising mode B must not destroy
+        // mode-A evidence — and it must not create any either.
+        let modeB = ReviewSignal(direction: .audioToGerman, previousStatus: .medium, wasManualReveal: true)
+        #expect(
+            decision(
+                at: .medium,
+                current: clean(at: .medium),
+                history: [modeB, modeB, clean(at: .medium)]
+            ) == .propose(.good),
+            "the mode-B reviews in between are simply not comparable"
+        )
+
+        // And they do not stand in for a clean attempt either.
+        #expect(
+            decision(at: .medium, current: clean(at: .medium), history: [modeB, modeB]) == .continueOnly,
+            "skipping is not counting"
+        )
+    }
+
+    // MARK: - The same-status rule (§13.7, rule 2)
+
+    @Test("Only evidence gathered at the current status counts")
+    func evidenceIsBoundToTheStatusItWasGatheredAt() {
+        #expect(
+            decision(
+                at: .medium,
+                current: clean(at: .medium),
+                history: [clean(at: .weak), clean(at: .weak), clean(at: .weak)]
+            ) == .continueOnly,
+            "evidence from another status cannot count"
+        )
+    }
+
+    @Test("A card reset to Neu by hand does not use its old evidence")
+    func manualResetDiscardsOldEvidence() {
+        // The phase-11 review found this hole, and phase 13 closes it at the
+        // right place: the card's history is real, but all of it was recorded at
+        // other statuses, so none of it is comparable. The reset is a statement,
+        // and „die manuelle Bewertung hat Vorrang" covers that one too.
+        let oldHistory = Array(repeating: clean(at: .good), count: 9)
+        #expect(decision(at: .new, current: clean(at: .new), history: oldHistory) == .continueOnly)
+
+        // What it does *not* do is lock `.new` out for good — two clean attempts
+        // at `.new` earn the first suggestion (§13.7).
+        #expect(
+            decision(at: .new, current: clean(at: .new), history: [clean(at: .new)] + oldHistory)
+                == .propose(.medium),
+            "a genuinely new card can be classified for the first time"
+        )
+    }
+
+    @Test("Accepting a suggestion does not chain into the next one")
+    func noChainPromotion() {
+        // After a confirmed Mittel → Gut the card sits at Gut, and the entries
+        // that earned it carry `previousStatus == .medium`. They cannot count
+        // towards Gut → Sicher, so the next step needs two fresh clean attempts.
+        let earnedAtMedium = [clean(at: .medium), clean(at: .medium)]
+        #expect(
+            decision(at: .good, current: clean(at: .good), history: earnedAtMedium) == .continueOnly,
+            "one promotion must not immediately unlock the next"
+        )
+        #expect(
+            decision(at: .good, current: clean(at: .good), history: [clean(at: .good)] + earnedAtMedium)
+                == .propose(.secure),
+            "two fresh attempts at the new status do earn it"
+        )
+    }
+
+    // MARK: - The decline (§13.7, rule 4)
+
+    @Test("A decline resets the evidence for that step to zero")
+    func declineResetsTheRun() {
+        // The documented sequence: match, match → suggestion → declined, then
+        // one match is not enough and the second one brings it back.
+        let history1 = [declined(.good, at: .medium), clean(at: .medium)]
+        #expect(
+            decision(at: .medium, current: clean(at: .medium), history: history1) == .continueOnly,
+            "one clean attempt after the decline is not enough"
+        )
+
+        let history2 = [clean(at: .medium), declined(.good, at: .medium), clean(at: .medium)]
+        #expect(
+            decision(at: .medium, current: clean(at: .medium), history: history2) == .propose(.good),
+            "two clean attempts after the decline bring it back"
+        )
+    }
+
+    @Test("The declining attempt does not count itself")
+    func theDecliningAttemptDoesNotCount() {
+        // The decline sits on a review that was itself a clean attempt. If it
+        // counted, „decline → one match" would already be a run of two and the
+        // suggestion would come straight back — which is precisely the „no" the
+        // learner just gave, ignored.
+        #expect(
+            decision(at: .medium, current: clean(at: .medium), history: [declined(.good, at: .medium)])
+                == .continueOnly
+        )
+    }
+
+    @Test("A decline only resets the step that was declined")
+    func declineIsScopedToItsStep() {
+        // Recorded per suggested status, so a decline of one step does not mute a
+        // different one. **Production data cannot reach this today** — a comparable
+        // entry has the same `previousStatus`, and the proposal follows
+        // deterministically from it, so a comparable decline always names the same
+        // step. It is a guard for a later rule that proposes something else, and it
+        // is why the field carries the status rather than a `Bool`.
+        let declinedSomethingElse = ReviewSignal(
+            direction: .germanToChinese,
+            previousStatus: .medium,
+            usedSpeech: true,
+            speechMatched: true,
+            declinedSuggestion: .secure
+        )
+        #expect(
+            decision(at: .medium, current: clean(at: .medium), history: [declinedSomethingElse])
+                == .propose(.good),
+            "a decline of another step is still a clean attempt"
+        )
+    }
+
+    // MARK: - The window
+
+    @Test("The window bounds how much history is read")
+    func windowBoundsTheRead() {
         #expect(AssistedAssessment.windowSize == 10)
-        #expect(AssistedAssessment.cleanRunBeforeAutoAdvance == 2)
-        #expect(AssistedAssessment.autoAdvancesBeforeRecalibration == 3)
+
+        // With the threshold at two, capping a run of *comparable* attempts cannot
+        // change a decision — what it bounds there is the work.
+        let ancient = Array(repeating: clean(at: .medium), count: AssistedAssessment.windowSize * 3)
+        #expect(decision(at: .medium, current: clean(at: .medium), history: ancient) == .propose(.good))
+
+        // **But there is one case where the bound really decides**, and it is the
+        // consequence the type's own documentation names: the window is applied to
+        // the raw history, before the direction rule skips anything. A learner who
+        // does a windowful of mode-B reviews hides their older mode-A evidence
+        // behind it. Without the `prefix` this would be `.propose`.
+        let modeB = ReviewSignal(direction: .audioToGerman, previousStatus: .medium, wasManualReveal: true)
+        let buried = Array(repeating: modeB, count: AssistedAssessment.windowSize)
+            + [clean(at: .medium), clean(at: .medium)]
+        #expect(
+            decision(at: .medium, current: clean(at: .medium), history: buried) == .continueOnly,
+            "evidence pushed out of the window cannot count"
+        )
+        // The counter-probe: one mode-B review fewer and the same evidence is
+        // reachable again, so what carries above is the bound and not the skipping.
+        let justReachable = Array(repeating: modeB, count: AssistedAssessment.windowSize - 1)
+            + [clean(at: .medium), clean(at: .medium)]
+        #expect(decision(at: .medium, current: clean(at: .medium), history: justReachable) == .propose(.good))
     }
 
-    @Test("Recency comes from the run breaking, not from the window")
-    func recencyComesFromTheRun() {
-        // The audit was right about the first version of this test: it claimed
-        // to pin the window and pinned the mismatch instead. So here is what
-        // actually governs the decision.
-        //
-        // An old clean history with **one** recent slip in front of it: the
-        // run ends at the slip, and everything older cannot bring it back.
-        // The newest entry is rated, so the recalibration count is zero and
-        // cannot be what decides either case — the only difference between
-        // the two runs below is the slip.
-        let older = [clean(assessment: .good)] + [ReviewSignal](repeating: clean(), count: 5)
-        #expect(AssistedAssessment.decision(
-            currentStatus: .good, current: clean(), history: [mismatch()] + older
-        ) == .ask(suggestion: nil))
+    // MARK: - The decision type
 
-        #expect(AssistedAssessment.decision(
-            currentStatus: .good, current: clean(), history: older
-        ) == .autoAdvance)
+    @Test("continueOnly carries no status, propose carries exactly one")
+    func decisionTypeIsUnambiguous() {
+        #expect(AssistedClassificationDecision.continueOnly.proposedStatus == nil)
+        #expect(AssistedClassificationDecision.propose(.good).proposedStatus == .good)
     }
 
-    @Test("The window bounds what is read, and is honest about not deciding")
-    func windowIsAnUpperBoundOnly() {
-        // Documented rather than pretended: with a threshold of two, capping a
-        // run at ten cannot push it below the threshold, so `windowSize`
-        // cannot change a decision. It bounds how much history the feature
-        // layer maps out of the store, which is a real bound on data that
-        // grows for as long as the app is used.
-        let long = [ReviewSignal](repeating: clean(), count: AssistedAssessment.windowSize * 3)
-        #expect(AssistedAssessment.decision(
-            currentStatus: .good, current: clean(assessment: .good), history: long
-        ) == .ask(suggestion: .secure), "recalibration is what stops this, not the window")
+    // MARK: - The clean attempt itself
 
-        #expect(AssistedAssessment.windowSize >= AssistedAssessment.cleanRunBeforeAutoAdvance,
-                "a window below the threshold would silently disable the feature")
+    @Test("A clean attempt is all four conditions together")
+    func cleanAttemptNeedsAllFourConditions() {
+        #expect(clean(at: .medium).isCleanAutomaticSuccess)
+
+        let variants: [(String, ReviewSignal)] = [
+            ("no speech", ReviewSignal(direction: .germanToChinese, previousStatus: .medium)),
+            ("mismatch", mismatch(at: .medium)),
+            ("retry", ReviewSignal(
+                direction: .germanToChinese, previousStatus: .medium,
+                usedSpeech: true, speechMatched: true, wasRetry: true
+            )),
+            ("revealed first", ReviewSignal(
+                direction: .germanToChinese, previousStatus: .medium,
+                usedSpeech: true, speechMatched: true, wasManualReveal: true
+            )),
+        ]
+        for (name, signal) in variants {
+            #expect(signal.isCleanAutomaticSuccess == false, "\(name)")
+        }
     }
 
-    @Test("A decision either asks or does not")
-    func asksTheLearnerIsNotAlwaysTrue() {
-        // `asksTheLearner` had no assertion for `false` anywhere, so making it
-        // constant would have gone unnoticed.
-        #expect(AssistedAssessment.decision(
-            currentStatus: .good, current: clean(), history: [clean()]
-        ).asksTheLearner == false)
-        #expect(AssistedAssessment.decision(
-            currentStatus: .good, current: mismatch(), history: [clean()]
-        ).asksTheLearner)
-    }
-
-    @Test("A card the learner keeps getting wrong is simply asked about")
-    func steadilyNegativeHistoryAsks() {
-        // The stable negative history the roadmap lists. Nothing dramatic
-        // happens — a rated history breaks the run, so the learner is asked,
-        // and no suggestion appears. What must **not** happen is a downgrade
-        // proposal.
-        let history = [manual(.again), manual(.again), manual(.hard)]
-        #expect(AssistedAssessment.decision(
-            currentStatus: .weak, current: clean(), history: history
-        ) == .ask(suggestion: nil))
-    }
-
-    @Test("A run is only counted from reviews that carry information")
-    func unusableReviewsAreSkippedNotCounted() {
-        // The definition the app cannot produce today — every stored entry has
-        // an assessment or a speech attempt — kept deliberately: „no
-        // information" is not the same as „a break in the run". Pinned so the
-        // choice is visible if a later phase ever writes such an entry.
-        let empty = ReviewSignal(direction: .germanToChinese, previousStatus: .good)
-        #expect(empty.isUsable == false)
-        #expect(clean().isUsable)
-        #expect(mismatch().isUsable)
-        #expect(manual(.again).isUsable)
-
-        // Skipped, not counted as a success: the run is current + the one
-        // clean entry behind the empty one, which is exactly two.
-        #expect(AssistedAssessment.decision(
-            currentStatus: .good, current: clean(), history: [empty, clean(assessment: .good)]
-        ) == .autoAdvance)
-        // And not counted as a run of its own either.
-        #expect(AssistedAssessment.decision(
-            currentStatus: .good, current: clean(), history: [empty, empty, empty]
-        ) == .ask(suggestion: nil))
-    }
-
-    @Test("The highlight rule is the one the bar uses")
-    func highlightRule() {
-        // Pulled out of the view so it cannot be deleted with the suite
-        // staying green — the phase-7 audit's lesson about conditions that
-        // live only inside a `body`.
-        #expect(SelfAssessmentBar.isSuggested(.good, suggestion: .good))
-        #expect(SelfAssessmentBar.isSuggested(.again, suggestion: .good) == false)
-        #expect(SelfAssessment.allCases.allSatisfy {
-            SelfAssessmentBar.isSuggested($0, suggestion: nil) == false
-        }, "no suggestion means no highlight anywhere")
+    @Test("Comparability is direction and status together")
+    func comparabilityNeedsBoth() {
+        let signal = clean(at: .medium)
+        #expect(signal.isComparable(inDirection: .germanToChinese, at: .medium))
+        #expect(signal.isComparable(inDirection: .audioToGerman, at: .medium) == false, "direction half")
+        #expect(signal.isComparable(inDirection: .germanToChinese, at: .good) == false, "status half")
     }
 }

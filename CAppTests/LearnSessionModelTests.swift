@@ -65,6 +65,20 @@ struct LearnSessionModelTests {
     /// What is isolated is **this suite**; the tests below all write the value
     /// they then read, so nothing depends on whether a suite also reads
     /// through to the app's own domain.
+    /// This card's reviews, newest first.
+    ///
+    /// A SwiftData relationship is unordered, so anything that asserts on „the
+    /// entry that was just written" has to sort — the phase-11 audit found a test
+    /// reading `card.reviews.first` where a seeded entry carried the same values,
+    /// and „write no entry at all" stayed green.
+    private func reviews(of card: Card) -> [ReviewLog] {
+        card.reviews.sorted { $0.reviewedAt > $1.reviewedAt }
+    }
+
+    private func newestReview(of card: Card) -> ReviewLog? {
+        reviews(of: card).first
+    }
+
     private func withScratchDefaults(_ name: String, _ body: (UserDefaults) throws -> Void) throws {
         let suite = "LearnSessionModelTests.\(name)"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -351,7 +365,7 @@ struct LearnSessionModelTests {
         #expect(session.currentCard?.german == "Apfel")
         #expect(session.isRevealed == false)
 
-        session.reveal()
+        session.reveal(recordingWasPossible: true)
         #expect(session.isRevealed)
     }
 
@@ -362,7 +376,7 @@ struct LearnSessionModelTests {
 
         let session = model()
         session.start(in: context)
-        session.reveal()
+        session.reveal(recordingWasPossible: true)
 
         #expect(card.reviewCount == 0)
         #expect(card.correctCount == 0)
@@ -371,43 +385,69 @@ struct LearnSessionModelTests {
         #expect(context.hasChanges == false)
     }
 
-    @Test("Assessing without revealing does nothing")
-    func assessmentRequiresReveal() throws {
+    @Test("Closing the attempt without revealing does nothing")
+    func closingRequiresReveal() throws {
         let card = insert("Apfel")
         try context.save()
 
         let session = model()
         session.start(in: context)
-        session.submit(.good, in: context)
+        session.moveOn(in: context)
 
-        #expect(card.reviewCount == 0, "the four answers only exist after revealing")
+        #expect(card.reviewCount == 0, "the decision only exists after revealing")
         #expect(session.answeredCount == 0)
     }
 
-    // MARK: - Counters per answer (learning-engine.md §7)
+    // MARK: - Counters per closed attempt (learning-engine.md §7.1, §13.4)
 
-    @Test("Nochmal counts as a review but not as correct")
-    func againCountsReviewOnly() throws {
+    @Test("Weiter counts a review and nothing else")
+    func continuingCountsAReviewOnly() throws {
         let card = insert("Apfel", status: .medium)
         try context.save()
 
         let session = model()
         session.start(in: context)
-        session.reveal()
-        session.submit(.again, in: context)
+        session.reveal(recordingWasPossible: true)
+        session.moveOn(in: context)
 
-        #expect(card.reviewCount == 1)
-        #expect(card.correctCount == 0, "Nochmal means not known")
+        #expect(card.reviewCount == 1, "an attempt happened")
+        #expect(card.correctCount == 0, "correctness is a rating, and nobody rated")
+        #expect(card.status == .medium, "and continuing never moves a status")
         #expect(card.lastReviewedAt == Self.reviewDate)
     }
 
-    @Test("Schwer, Gut and Sicher all count as correct")
-    func resolvingAnswersCountAsCorrect() throws {
-        for assessment in [SelfAssessment.hard, .good, .secure] {
+    @Test("correctCount moves on no path of the new flow")
+    func correctCountNeverMovesAgain() throws {
+        // §13.11: `correctCount` is defined through a self-assessment, and the
+        // flow gives none — not even „Bestätigen", which is agreement with the
+        // app rather than a rating. It becomes a frozen phase-1-to-12 aggregate.
+        //
+        // **One container per path**, because the three paths interfere: the
+        // give-up's entry becomes the newest history and breaks the run for
+        // whatever follows, so the „Bestätigen" leg would never get its offer.
+        //
+        // And the counters are read **inside** the helper, while the container is
+        // still alive. Returning the `Card` instead took the whole test process
+        // down: the container is a local, it deallocates when the helper returns,
+        // and the model object's backing store goes with it.
+        struct Counters: Equatable {
+            var reviewCount: Int
+            var correctCount: Int
+            var status: LearningStatus
+        }
+
+        func counters(after close: (LearnSessionModel, ModelContext, Card) -> Void) throws -> Counters {
             let container = try makeInMemoryContainer()
             let context = container.mainContext
             let card = Card(type: .word, german: "Apfel", hanzi: "苹果", pinyin: "píngguǒ", status: .medium)
             context.insert(card)
+            // One clean attempt at this status, so one more match earns an offer —
+            // needed by the accept and decline legs, harmless for „Weiter".
+            context.insert(ReviewLog(
+                reviewedAt: Self.reviewDate.addingTimeInterval(-60),
+                direction: .germanToChinese, previousStatus: .medium,
+                usedSpeech: true, speechMatched: true, card: card
+            ))
             try context.save()
 
             let session = LearnSessionModel(
@@ -416,100 +456,208 @@ struct LearnSessionModelTests {
                 now: { Self.reviewDate }
             )
             session.start(in: context)
-            session.reveal()
-            session.submit(assessment, in: context)
+            close(session, context, card)
 
-            #expect(card.reviewCount == 1, "\(assessment)")
-            #expect(card.correctCount == 1, "\(assessment) means known — Schwer with effort, but known")
-            #expect(card.lastReviewedAt == Self.reviewDate)
-        }
-    }
-
-    @Test("The status follows the transition matrix")
-    func statusFollowsTheMatrix() throws {
-        // Spot-checked against the matrix in §6; the full 20 cells are tested
-        // in `StatusTransitionTests`. What matters here is that the model
-        // writes what the engine returns instead of computing its own.
-        let cases: [(LearningStatus, SelfAssessment, LearningStatus)] = [
-            (.new, .good, .medium),
-            (.weak, .again, .weak),
-            (.medium, .secure, .secure),
-            (.good, .again, .weak),
-            (.secure, .again, .medium),
-        ]
-
-        for (before, assessment, expected) in cases {
-            let container = try makeInMemoryContainer()
-            let context = container.mainContext
-            let card = Card(type: .word, german: "Apfel", hanzi: "苹果", status: before)
-            context.insert(card)
-            try context.save()
-
-            let session = LearnSessionModel(
-                configuration: SessionConfiguration(cardType: .word),
-                generator: AnyRandomNumberGenerator(SeededGenerator(seed: 1)),
-                now: { Self.reviewDate }
+            return Counters(
+                reviewCount: card.reviewCount,
+                correctCount: card.correctCount,
+                status: card.status
             )
-            session.start(in: context)
-            session.reveal()
-            session.submit(assessment, in: context)
-
-            #expect(card.status == expected, "\(before) + \(assessment)")
         }
+
+        // „Weiter" after a give-up.
+        let continued = try counters { session, context, _ in
+            session.reveal(recordingWasPossible: true)
+            session.moveOn(in: context)
+        }
+        #expect(continued == Counters(reviewCount: 1, correctCount: 0, status: .medium), "Weiter")
+
+        // „Bestätigen" on a real offer.
+        let accepted = try counters { session, context, card in
+            session.applyRecognition("苹果", forCardWith: card.id)
+            #expect(session.proposedStatus == .good, "the history has to earn an offer")
+            session.acceptProposal(in: context)
+        }
+        #expect(
+            accepted == Counters(reviewCount: 1, correctCount: 0, status: .good),
+            "Bestätigen writes the status and still leaves correctCount alone"
+        )
+
+        // „Ablehnen" on a real offer.
+        let declined = try counters { session, context, card in
+            session.applyRecognition("苹果", forCardWith: card.id)
+            #expect(session.proposedStatus == .good)
+            session.declineProposal(in: context)
+        }
+        #expect(declined == Counters(reviewCount: 1, correctCount: 0, status: .medium), "Ablehnen")
     }
 
-    // MARK: - The rule this phase could most easily break
+    // MARK: - The three closing actions (§13.4)
 
-    @Test("Nochmal and later Gut: counters both times, status only from the first")
-    func laterGoodDoesNotLiftTheStatus() throws {
-        // The product rule from §6.1. Without it, a card the learner did not
-        // know at first would end the batch rated better than it started —
-        // and the feature layer is exactly where that gets lost, by asking a
-        // second time instead of using what the engine reported.
-        let card = insert("Apfel", status: .weak)
+    @Test("Bestätigen writes exactly the offered status")
+    func acceptingWritesTheOfferedStatus() throws {
+        let card = insert("Apfel", status: .medium)
+        context.insert(ReviewLog(
+            reviewedAt: Date(timeIntervalSince1970: 1),
+            direction: .germanToChinese,
+            previousStatus: .medium,
+            usedSpeech: true,
+            speechMatched: true,
+            card: card
+        ))
         try context.save()
 
         let session = model()
         session.start(in: context)
+        session.applyRecognition("苹果", forCardWith: card.id)
 
-        session.reveal()
-        session.submit(.again, in: context)
-        #expect(card.status == .weak, "first assessment decides")
+        #expect(session.proposedStatus == .good, "Mittel → Gut")
+        session.acceptProposal(in: context)
+
+        #expect(card.status == .good, "exactly what was offered, not a second derivation")
         #expect(card.reviewCount == 1)
-        #expect(card.correctCount == 0)
+        #expect(session.answeredCount == 1)
 
-        // A pool of one card means the repetition is the same card again.
-        #expect(session.currentCard?.id == card.id)
-        session.reveal()
-        session.submit(.good, in: context)
-
-        #expect(card.reviewCount == 2, "every assessment is a review")
-        #expect(card.correctCount == 1, "the later Gut does count as correct")
-        #expect(card.lastReviewedAt == Self.reviewDate)
-        #expect(card.status == .weak, "but it must not improve the status in the same batch")
+        let entry = try #require(newestReview(of: card))
+        #expect(entry.suggestedStatus == .good)
+        #expect(entry.suggestionDecision == .accepted)
+        #expect(entry.assessment == nil, "a confirmation is not a self-assessment")
+        #expect(entry.previousStatus == .medium, "the status going in")
     }
 
-    @Test("A two-step improvement later in the batch is also ignored")
-    func laterSecureDoesNotLiftTheStatusEither() throws {
-        // A second case for §6.1, because the rule hung on one assertion.
-        // Two rungs of visible difference: weak + secure would be `good`, so
-        // if the later answer were allowed to count, the card would end the
-        // batch two steps better than the first attempt showed.
-        let card = insert("Apfel", status: .weak)
+    @Test("Ablehnen leaves the status alone and is recorded as such")
+    func decliningChangesNothingButIsRemembered() throws {
+        let card = insert("Apfel", status: .medium)
+        context.insert(ReviewLog(
+            reviewedAt: Date(timeIntervalSince1970: 1),
+            direction: .germanToChinese,
+            previousStatus: .medium,
+            usedSpeech: true,
+            speechMatched: true,
+            card: card
+        ))
         try context.save()
 
         let session = model()
         session.start(in: context)
-        session.reveal()
-        session.submit(.again, in: context)
-        #expect(card.status == .weak)
+        session.applyRecognition("苹果", forCardWith: card.id)
+        #expect(session.proposedStatus == .good)
 
-        session.reveal()
-        session.submit(.secure, in: context)
+        session.declineProposal(in: context)
 
-        #expect(card.status == .weak, "still what the first attempt showed")
-        #expect(card.reviewCount == 2, "but both are reviews")
-        #expect(card.correctCount == 1)
+        #expect(card.status == .medium, "a decline is the neutral way out")
+        #expect(card.reviewCount == 1, "it is still an attempt")
+        #expect(session.answeredCount == 1, "and the session moves on")
+
+        let entry = try #require(newestReview(of: card))
+        #expect(entry.suggestedStatus == .good, "what was offered")
+        #expect(entry.suggestionDecision == .declined)
+        #expect(entry.assessment == nil)
+    }
+
+    @Test("Weiter records no offer at all")
+    func continuingRecordsNoOffer() throws {
+        let card = insert("Apfel", status: .medium)
+        try context.save()
+
+        let session = model()
+        session.start(in: context)
+        session.reveal(recordingWasPossible: true)
+        session.moveOn(in: context)
+
+        let entry = try #require(newestReview(of: card))
+        #expect(entry.suggestedStatus == nil)
+        #expect(entry.suggestionDecision == nil)
+        #expect(entry.assessment == nil)
+        #expect(entry.hasConsistentSuggestion, "both fields nil together")
+    }
+
+    @Test("Accepting or declining without an offer does nothing")
+    func theClosingActionsNeedAnOffer() throws {
+        let card = insert("Apfel", status: .medium)
+        try context.save()
+
+        let session = model()
+        session.start(in: context)
+        session.reveal(recordingWasPossible: true)
+        #expect(session.proposedStatus == nil)
+
+        session.acceptProposal(in: context)
+        session.declineProposal(in: context)
+
+        #expect(card.reviewCount == 0, "neither may close an attempt that was never offered one")
+        #expect(session.answeredCount == 0)
+        #expect(session.isRevealed, "and the card stays as it was")
+    }
+
+    // MARK: - Giving up (§13.5)
+
+    @Test("Aufgeben puts the card back exactly once")
+    func givingUpReinsertsOnce() throws {
+        // A pool of one card, so the repetition can only be the same card again.
+        let card = insert("Apfel", status: .medium)
+        try context.save()
+
+        let session = model()
+        session.start(in: context)
+
+        session.reveal(recordingWasPossible: true)
+        session.moveOn(in: context)
+        #expect(card.reviewCount == 1)
+        #expect(card.status == .medium, "giving up lowers nothing")
+        #expect(session.currentCard?.id == card.id, "and the card comes back")
+
+        // The repetition. `maxReinserts` is 1, so this one closes the batch even
+        // though it is another give-up.
+        session.reveal(recordingWasPossible: true)
+        session.moveOn(in: context)
+        #expect(card.reviewCount == 2)
+
+        let entries = reviews(of: card)
+        #expect(entries.count == 2, "one entry per attempt")
+        #expect(entries.contains { $0.wasRetry }, "the second one knows it was a repeat")
+        #expect(entries.allSatisfy { $0.wasManualReveal }, "both were uncovered by hand")
+        #expect(entries.allSatisfy { $0.usedSpeech == false }, "and neither used the microphone")
+    }
+
+    @Test("Without a possible recording, giving up does not lengthen the batch")
+    func givingUpOnADeviceWithoutRecognitionDoesNotReinsert() throws {
+        // The device without Mandarin recognition: revealing is the only way
+        // forward, so reinserting would make every batch twice as long.
+        insert("Apfel")
+        insert("Wasser", hanzi: "水", pinyin: "shuǐ")
+        try context.save()
+
+        let session = model()
+        session.start(in: context)
+        let first = try #require(session.currentCard?.id)
+
+        session.reveal(recordingWasPossible: false)
+        session.moveOn(in: context)
+
+        #expect(session.currentCard?.id != first, "the card is done, not repeated")
+    }
+
+    @Test("A mismatch does not put the card back")
+    func mismatchDoesNotReinsert() throws {
+        // A mismatch is explicitly not negative evidence, so it must not drive a
+        // repetition either. The card is revealed by the recognition path rather
+        // than by hand, which is what the reinsertion rule reads.
+        insert("Apfel")
+        insert("Wasser", hanzi: "水", pinyin: "shuǐ")
+        try context.save()
+
+        let session = model()
+        session.start(in: context)
+        let first = try #require(session.currentCard)
+
+        session.applyRecognition("香蕉", forCardWith: first.id)
+        #expect(session.speechCheck?.isMatch == false, "it really was a mismatch")
+        #expect(session.proposedStatus == nil, "and no offer")
+        session.moveOn(in: context)
+
+        #expect(session.currentCard?.id != first.id, "no repetition")
+        #expect(first.status == .weak, "and no downgrade")
     }
 
     // MARK: - Double tap
@@ -521,13 +669,13 @@ struct LearnSessionModelTests {
 
         let session = model()
         session.start(in: context)
-        session.reveal()
+        session.reveal(recordingWasPossible: true)
 
-        session.submit(.good, in: context)
-        session.submit(.good, in: context)
+        session.moveOn(in: context)
+        session.moveOn(in: context)
 
-        #expect(card.reviewCount == 1, "the second tap must not be a second answer")
-        #expect(card.correctCount == 1)
+        #expect(card.reviewCount == 1, "the second tap must not be a second attempt")
+        #expect(card.correctCount == 0)
         #expect(session.answeredCount == 1)
         #expect(session.isRevealed == false, "and the card comes up covered again")
     }
@@ -542,9 +690,9 @@ struct LearnSessionModelTests {
         session.start(in: context)
         let first = try #require(session.currentCard?.id)
 
-        session.reveal()
-        session.submit(.good, in: context)
-        session.submit(.good, in: context)
+        session.reveal(recordingWasPossible: true)
+        session.moveOn(in: context)
+        session.moveOn(in: context)
 
         let second = try #require(session.currentCard?.id)
         #expect(second != first, "we moved on")
@@ -554,19 +702,19 @@ struct LearnSessionModelTests {
 
     // MARK: - Persistence
 
-    @Test("Every answer is written immediately, not at the end of the session")
-    func answersAreSavedImmediately() throws {
+    @Test("Every closed attempt is written immediately, not at the end of the session")
+    func attemptsAreSavedImmediately() throws {
         insert("Apfel")
         insert("Wasser", hanzi: "水", pinyin: "shuǐ")
         try context.save()
 
         let session = model()
         session.start(in: context)
-        session.reveal()
-        session.submit(.good, in: context)
+        session.reveal(recordingWasPossible: true)
+        session.moveOn(in: context)
 
         // Nothing outstanding: the session could be abandoned right here
-        // without losing the answer.
+        // without losing the attempt.
         #expect(context.hasChanges == false)
     }
 
@@ -588,15 +736,15 @@ struct LearnSessionModelTests {
                 now: { Self.reviewDate }
             )
             session.start(in: context)
-            session.reveal()
-            session.submit(.good, in: context)
+            session.reveal(recordingWasPossible: true)
+            session.moveOn(in: context)
         }
 
         let reopened = try store.openContainer()
         let card = try #require(try reopened.mainContext.fetch(FetchDescriptor<Card>()).first)
         #expect(card.reviewCount == 1)
-        #expect(card.correctCount == 1)
-        #expect(card.status == .medium, "weak + good")
+        #expect(card.correctCount == 0, "no rating was given")
+        #expect(card.status == .weak, "and no closing action moves a status by itself")
         #expect(card.lastReviewedAt == Self.reviewDate)
     }
 
@@ -644,14 +792,28 @@ struct LearnSessionModelTests {
         session.start(in: context)
         #expect(session.pool.allSatisfy { $0.status == .weak })
 
-        // Resolve the whole batch with Sicher, which lifts every card.
-        for _ in 0..<count {
-            session.reveal()
-            session.submit(.secure, in: context)
+        // Close the whole batch. Since phase 13 no closing action moves a status
+        // by itself, so the change has to come from somewhere the session does
+        // not control — which is the realistic case anyway: the learner edits the
+        // status in the card list, or another card's confirmation happens between
+        // batches. Written directly here, so this test measures the **refresh**
+        // and not the flow.
+        for index in 0..<count {
+            if index == count - 1 {
+                // Just before the last card is closed — and therefore before the
+                // next batch is drawn — every card is lifted behind the session's
+                // back.
+                for card in try context.fetch(FetchDescriptor<Card>()) {
+                    card.status = .good
+                }
+                try context.save()
+            }
+            session.reveal(recordingWasPossible: false)
+            session.moveOn(in: context)
         }
 
         // A new batch has been selected by now, from the refreshed pool.
-        #expect(session.pool.allSatisfy { $0.status == .good }, "weak + secure = good")
+        #expect(session.pool.allSatisfy { $0.status == .good }, "the refreshed statuses, not the start-of-session ones")
         #expect(session.pool.count == count, "membership is unchanged, only the statuses")
     }
 
@@ -672,8 +834,8 @@ struct LearnSessionModelTests {
         // Answer through the batch so the next one is selected.
         // Enough answers to get past the first batch of two cards.
         while session.currentCard != nil, session.answeredCount < 2 * 2 {
-            session.reveal()
-            session.submit(.good, in: context)
+            session.reveal(recordingWasPossible: false)
+            session.moveOn(in: context)
         }
 
         #expect(
@@ -701,8 +863,8 @@ struct LearnSessionModelTests {
         context.delete(toDelete)
         try context.save()
 
-        session.reveal()
-        session.submit(.good, in: context)
+        session.reveal(recordingWasPossible: false)
+        session.moveOn(in: context)
 
         // The deleted card cannot be the one now on screen, and the session
         // is still running.
@@ -723,8 +885,8 @@ struct LearnSessionModelTests {
         try context.save()
 
         // The next advance cannot resolve anything any more.
-        session.reveal()
-        session.submit(.good, in: context)
+        session.reveal(recordingWasPossible: false)
+        session.moveOn(in: context)
 
         #expect(session.state == .empty)
         #expect(session.currentCard == nil)
@@ -749,8 +911,8 @@ struct LearnSessionModelTests {
         for _ in 0..<LearningParameters.batchSize {
             let id = try #require(session.currentCard?.id)
             seen.append(id)
-            session.reveal()
-            session.submit(.good, in: context)
+            session.reveal(recordingWasPossible: false)
+            session.moveOn(in: context)
         }
 
         #expect(Set(seen).count == LearningParameters.batchSize, "no card twice inside a batch")
@@ -790,8 +952,8 @@ struct LearnSessionModelTests {
             var firstBatch: Set<UUID> = []
             for _ in 0..<LearningParameters.batchSize {
                 firstBatch.insert(try #require(session.currentCard?.id))
-                session.reveal()
-                session.submit(.good, in: context)
+                session.reveal(recordingWasPossible: false)
+                session.moveOn(in: context)
             }
 
             // The second batch is running now. Count how many of its cards
@@ -799,8 +961,8 @@ struct LearnSessionModelTests {
             var secondBatch: Set<UUID> = []
             for _ in 0..<LearningParameters.batchSize {
                 secondBatch.insert(try #require(session.currentCard?.id))
-                session.reveal()
-                session.submit(.good, in: context)
+                session.reveal(recordingWasPossible: false)
+                session.moveOn(in: context)
             }
             repeats += secondBatch.intersection(firstBatch).count
         }
@@ -827,8 +989,8 @@ struct LearnSessionModelTests {
         for _ in 0..<count {
             let id = try #require(session.currentCard?.id)
             seen.append(id)
-            session.reveal()
-            session.submit(.good, in: context)
+            session.reveal(recordingWasPossible: false)
+            session.moveOn(in: context)
         }
 
         #expect(Set(seen).count == count, "all of them, none twice")
@@ -851,8 +1013,8 @@ struct LearnSessionModelTests {
         let answers = (LearningParameters.maxReinserts + 1) * 3
         for _ in 0..<answers {
             #expect(session.currentCard?.id == card.id)
-            session.reveal()
-            session.submit(.again, in: context)
+            session.reveal(recordingWasPossible: false)
+            session.moveOn(in: context)
         }
 
         #expect(session.state == .asking, "the session does not end on its own")
@@ -878,8 +1040,8 @@ struct LearnSessionModelTests {
         session.start(in: context)
         let repeated = try #require(session.currentCard?.id)
 
-        session.reveal()
-        session.submit(.again, in: context)
+        session.reveal(recordingWasPossible: true)
+        session.moveOn(in: context)
         #expect(session.currentCard?.id != repeated, "never straight away")
 
         // Every other card of the batch comes first, each of them for the
@@ -890,8 +1052,8 @@ struct LearnSessionModelTests {
             #expect(seen.contains(current) == false, "an unseen card, not a repetition")
             seen.insert(current)
             between += 1
-            session.reveal()
-            session.submit(.good, in: context)
+            session.reveal(recordingWasPossible: false)
+            session.moveOn(in: context)
         }
 
         #expect(between == size - 1, "all the others first")
@@ -967,8 +1129,8 @@ struct LearnSessionModelTests {
                 for answer in 1...first {
                     let card = try #require(session.currentCard)
                     seen.append(card.id)
-                    session.reveal()
-                    session.submit(.secure, in: context)
+                    session.reveal(recordingWasPossible: false)
+                    session.moveOn(in: context)
 
                     if answer < first {
                         #expect(session.currentBatchSize == first,
@@ -1001,8 +1163,8 @@ struct LearnSessionModelTests {
 
         // Two cards in, the learner changes their mind.
         for _ in 0..<2 {
-            session.reveal()
-            session.submit(.secure, in: context)
+            session.reveal(recordingWasPossible: false)
+            session.moveOn(in: context)
         }
         defaults.set(10, forKey: Preferences.batchSizeKey)
         #expect(session.currentBatchSize == 5, "the round in progress keeps its size")
@@ -1011,15 +1173,15 @@ struct LearnSessionModelTests {
         // assertion the audit asked for: without it the test could not tell
         // „read once at the start of the batch" from „read again on every
         // answer" — an implementation that refreshed the size inside
-        // `submit(_:in:)` would still have shown 5 above and 10 at the end.
-        session.reveal()
-        session.submit(.secure, in: context)
+        // `moveOn(in:)` would still have shown 5 above and 10 at the end.
+        session.reveal(recordingWasPossible: false)
+        session.moveOn(in: context)
         #expect(session.currentBatchSize == 5, "still the same round, still its own size")
 
         // Finish the round. Only now does the new size apply.
         for _ in 0..<2 {
-            session.reveal()
-            session.submit(.secure, in: context)
+            session.reveal(recordingWasPossible: false)
+            session.moveOn(in: context)
         }
         #expect(session.currentBatchSize == 10, "the next round picks it up")
         }

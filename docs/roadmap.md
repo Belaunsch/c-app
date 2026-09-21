@@ -2427,10 +2427,13 @@ Bewertung verlangen und damit seinen eigenen Zweck verfehlen.
 
 ## Phase 13 — Lernflow & Assisted Classification UX
 
-**Spezifiziert am 2026-09-21, nicht implementiert.** Diese Phase ist vor dem
+**Spezifiziert und implementiert am 2026-09-21.** Diese Phase ist vor dem
 Produktcode vollständig ausgeschrieben worden — Flow, UI-Zustände, Regel,
 Schemaänderung und Akzeptanzkriterien —, damit bei der Umsetzung keine
-Designentscheidung implizit getroffen werden muss. Die verbindliche
+Designentscheidung implizit getroffen werden muss. Das hat gehalten: Bei der
+Umsetzung ist keine Produktentscheidung neu aufgemacht worden. Was sich
+geändert hat, steht unter „Stand am 2026-09-21" und ist jeweils eine Folge
+schon getroffener Entscheidungen, nicht eine neue. Die verbindliche
 Lernlogik steht in
 [learning-engine.md §13](learning-engine.md#13-lernflow-und-assistierte-einstufung-phase-13);
 hier steht, was gebaut wird und woran es gemessen wird.
@@ -2647,10 +2650,12 @@ Diese sechs Punkte standen im Spezifikationsdurchgang zur Klärung und sind
 
 1. **Modus A ohne verwertbare Speech-Evidenz und Modus B sind in Phase 13
    statusneutral.** Ohne sauberen Versuch gibt es keinen Vorschlag, also bewegt
-   sich der Lernstand dort nicht von selbst — er ändert sich ausschließlich
-   über die Kartenliste (§6.2). Das ist die angenommene Folge aus „keine neue
-   Ersatzheuristik erfinden", keine Lücke. Die Rückfallebene liegt im Backlog
-   und wird erst nach dem Alltagstest bewertet.
+   sich der Lernstand dort nicht von selbst. Das ist die angenommene Folge aus
+   „keine neue Ersatzheuristik erfinden", keine Lücke. Die Rückfallebene liegt
+   im Backlog und wird erst nach dem Alltagstest bewertet. **Nachtrag vom
+   2026-09-21:** Dieser Punkt verwies ursprünglich auf das Setzen des Status in
+   der Kartenübersicht — das Review hat gefunden, dass dieses Bedienelement
+   nicht existiert. Siehe den offenen Punkt am Ende dieser Phase.
 2. **`Neu → Mittel` ist der erste Vorschlag** nach ausreichender sauberer
    Evidenz — die *Gut*-Spalte der Matrix aus §6, keine neue Leiter. *Schwach*
    wird dabei übersprungen, weil *Neu* laut §6 mit Stufe 1 verrechnet wird und
@@ -2693,8 +2698,9 @@ Phase-13-Entscheidung.
   durch `closeCurrentCard(reinserting:)` und ein `AttemptOutcome` ohne
   `assessment`/`newStatus` ersetzen. Position, `maxReinserts` und
   „ungesehene zuerst" bleiben unverändert — nur der Auslöser ändert sich.
-  `SelfAssessment.keepsCardInBatch` verliert damit seinen Aufrufer und
-  entfällt; `statusDelta` und `countsAsCorrect` bleiben.
+  `SelfAssessment.keepsCardInBatch` und `countsAsCorrect` verlieren damit ihre
+  Aufrufer und entfallen (§13.9); `statusDelta` bleibt — es trägt die Matrix aus
+  §6, aus der der Vorschlag gebildet wird.
 - **13.4** Neue reine Regeln in `Features/Learn/LearnFlow.swift`: Beschriftung
   des Aufdeck-Knopfes (*Aufgeben* in Modus A immer, *Antwort zeigen* in Modus B)
   und — **davon getrennt** — „streut wieder ein" aus Richtung und
@@ -2741,114 +2747,117 @@ Phase-13-Entscheidung.
 
 **Flow und UI**
 
-- [ ] In Modus A stehen auf der verdeckten Karte zwei Zeilen, und Zeile 1
+- [x] In Modus A stehen auf der verdeckten Karte zwei Zeilen, und Zeile 1
       folgt in allen zehn Erkennungsphasen der Tabelle oben.
-- [ ] Ein Tap auf *Antwort sprechen* startet die Aufnahme **und** armiert den
+- [x] Ein Tap auf *Antwort sprechen* startet die Aufnahme **und** armiert den
       Sprachmodus, und Zeile 1 zeigt danach `[ Fertig ][ ■ ]`.
-- [ ] *■* verwirft den Versuch: keine Auswertung, kein Aufdecken, **kein**
+- [x] *■* verwirft den Versuch: keine Auswertung, kein Aufdecken, **kein**
       `ReviewLog`-Eintrag, kein Zähler bewegt sich, der Sprachmodus bleibt
       aktiv, und auf derselben Karte startet keine Aufnahme von selbst.
-- [ ] *Fertig* finalisiert, vergleicht über den unveränderten Phase-9-Pfad und
+- [x] *Fertig* finalisiert, vergleicht über den unveränderten Phase-9-Pfad und
       deckt die Karte auf.
-- [ ] *Aufgeben* während `finalizing` gewinnt: Das Ergebnis der laufenden
+- [x] *Aufgeben* während `finalizing` gewinnt: Das Ergebnis der laufenden
       Analyse erreicht die Karte nicht mehr, und der Versuch gilt als von Hand
       aufgedeckt.
-- [ ] Scheitert das Speichern bei *Bestätigen* oder *Ablehnen*, bleibt die
+- [x] Scheitert das Speichern bei *Bestätigen* oder *Ablehnen*, bleibt die
       Karte aufgedeckt **und der Vorschlag stehen**; dieselbe Entscheidung ist
       erneut möglich.
-- [ ] Startet die Aufnahme einer neuen Karte von selbst, erscheint direkt
+- [x] Startet die Aufnahme einer neuen Karte von selbst, erscheint direkt
       `[ Fertig ][ ■ ]` und nicht *Antwort sprechen*.
 - [ ] Der Übergang zwischen den beiden Aufnahmezuständen ist **eine**
-      Animation; Zeile 2 bewegt sich dabei nicht.
-- [ ] *Aufgeben* verwirft eine laufende Aufnahme, deckt auf, zählt als
+      Animation; Zeile 2 bewegt sich dabei nicht. **Gerätebeleg offen** — der
+      Code hat genau ein `.animation` auf dem aus der Phase abgeleiteten Wert
+      und Zeile 2 liegt außerhalb des animierten `HStack`, aber wie ein
+      Übergang *wirkt*, erreicht kein Unit-Test.
+- [x] *Aufgeben* verwirft eine laufende Aufnahme, deckt auf, zählt als
       manueller Reveal, liefert **keine** positive Evidenz und verbessert
       **keinen** Status.
-- [ ] Die Vierfachauswahl erscheint in keinem Zustand des Lernflows mehr.
-- [ ] Nach dem Aufdecken steht entweder `[ Weiter ]` oder die Einstufungsfrage
+- [x] Die Vierfachauswahl erscheint in keinem Zustand des Lernflows mehr.
+- [x] Nach dem Aufdecken steht entweder `[ Weiter ]` oder die Einstufungsfrage
       mit *Ablehnen* und *Bestätigen* — nie beides, nie ein drittes Element.
-- [ ] Modus B: `[ Weiter ]` nach dem Aufdecken, **nie** ein Vorschlag, **nie**
+- [x] Modus B: `[ Weiter ]` nach dem Aufdecken, **nie** ein Vorschlag, **nie**
       eine Statusänderung, **nie** eine Wiedereinstreuung.
-- [ ] Zeile 2 heißt in Modus A in **jedem** Erkennungszustand *Aufgeben* —
+- [x] Zeile 2 heißt in Modus A in **jedem** Erkennungszustand *Aufgeben* —
       auch bei `permissionDenied` und `unavailable`. Nur Modus B heißt
       *Antwort zeigen*.
-- [ ] Wieder eingestreut wird genau dann, wenn in Modus A von Hand aufgedeckt
+- [x] Wieder eingestreut wird genau dann, wenn in Modus A von Hand aufgedeckt
       wurde **und** eine Aufnahme auf dieser Karte möglich war — und dann
       **genau einmal** pro Mini-Batch (`maxReinserts`).
-- [ ] Auf einem Gerät ohne Erkennung wird **nichts** wieder eingestreut; ein
+- [x] Auf einem Gerät ohne Erkennung wird **nichts** wieder eingestreut; ein
       Batch bleibt so lang wie seine Kartenzahl.
-- [ ] Läuft beim Verlassen der Karte noch eine Sprachausgabe, ist die
+- [x] Läuft beim Verlassen der Karte noch eine Sprachausgabe, ist die
       Reihenfolge: **Sprachausgabe stoppen → Kartenwechsel → erst danach die
       automatische Aufnahme.** Nie Sprachausgabe und Mikrofon gleichzeitig,
       und **ein** Auslöser je Kartenübergang.
-- [ ] „Fertig" steht nicht zweimal mit zwei Bedeutungen auf dem Bildschirm.
+- [x] „Fertig" steht nicht zweimal mit zwei Bedeutungen auf dem Bildschirm.
 
 **Regel**
 
-- [ ] Ein einzelner Exact-Match erzeugt keinen Vorschlag.
-- [ ] Ein Mismatch senkt nichts, schlägt nichts vor, beendet den Lauf und
+- [x] Ein einzelner Exact-Match erzeugt keinen Vorschlag.
+- [x] Ein Mismatch senkt nichts, schlägt nichts vor, beendet den Lauf und
       bewirkt **keine** Wiedereinstreuung.
-- [ ] Ein Retry ist keine positive Evidenz.
-- [ ] Manueller Reveal und *Aufgeben* sind keine positive Evidenz **und
+- [x] Ein Retry ist keine positive Evidenz.
+- [x] Manueller Reveal und *Aufgeben* sind keine positive Evidenz **und
       brechen den Lauf** — auch dann, wenn dabei weder Sprache benutzt noch
       eine Bewertung abgegeben wurde.
-- [ ] Es existiert **kein** Pfad, auf dem die App einen Status senkt.
-- [ ] Ohne Tap auf *Bestätigen* ändert sich kein Status.
-- [ ] Ein Vorschlag ist höchstens eine Stufe nach oben.
-- [ ] Eine Karte auf `.new` bekommt nach zwei sauberen Versuchen ihren ersten
+- [x] Es existiert **kein** Pfad, auf dem die App einen Status senkt.
+- [x] Ohne Tap auf *Bestätigen* ändert sich kein Status.
+- [x] Ein Vorschlag ist höchstens eine Stufe nach oben.
+- [x] Eine Karte auf `.new` bekommt nach zwei sauberen Versuchen ihren ersten
       Vorschlag (`Neu → Mittel`).
-- [ ] Eine von Hand auf `.new` zurückgesetzte Karte bekommt **keinen**
+- [x] Eine von Hand auf `.new` zurückgesetzte Karte bekommt **keinen**
       Vorschlag aus ihrer alten Historie.
-- [ ] Nach *Ablehnen* erscheint derselbe Vorschlag erst wieder, wenn nach der
+- [x] Nach *Ablehnen* erscheint derselbe Vorschlag erst wieder, wenn nach der
       Ablehnung erneut die vollständige Schwelle sauberer Versuche erreicht
       ist — und das gilt **über einen App-Neustart hinweg**.
-- [ ] Nach *Bestätigen* braucht die nächste Stufe zwei frische saubere
+- [x] Nach *Bestätigen* braucht die nächste Stufe zwei frische saubere
       Versuche; zwei Beförderungen hintereinander sind unmöglich.
-- [ ] Ein Versuch in der anderen Richtung bricht den Lauf **nicht**.
-- [ ] Die Regel liegt vollständig in `Learning/`, ist rein, deterministisch,
+- [x] Ein Versuch in der anderen Richtung bricht den Lauf **nicht**.
+- [x] Die Regel liegt vollständig in `Learning/`, ist rein, deterministisch,
       Foundation-only und kennt weder `Card` noch `ModelContext`.
-- [ ] Kein Score, kein Prozentwert, keine Konfidenz, keine Aussage über
+- [x] Kein Score, kein Prozentwert, keine Konfidenz, keine Aussage über
       Aussprache oder Töne, keine Streaks.
 
 **Persistenz**
 
-- [ ] Pro abgeschlossenem Versuch entsteht **genau ein** `ReviewLog`-Eintrag,
+- [x] Pro abgeschlossenem Versuch entsteht **genau ein** `ReviewLog`-Eintrag,
       geschrieben beim Verlassen der Karte.
-- [ ] Der neue Flow schreibt `assessment` **niemals** — auf keinem der drei
+- [x] Der neue Flow schreibt `assessment` **niemals** — auf keinem der drei
       Abschlusswege. Das Feld bleibt ausschließlich die historische
       Selbsteinschätzung des alten Flows.
-- [ ] `correctCount` bewegt sich auf **keinem** Pfad des neuen Flows, auch
+- [x] `correctCount` bewegt sich auf **keinem** Pfad des neuen Flows, auch
       nicht bei *Bestätigen*.
-- [ ] *Weiter* ohne Vorschlag schreibt `suggestedStatus = nil` und
+- [x] *Weiter* ohne Vorschlag schreibt `suggestedStatus = nil` und
       `suggestionDecision = nil` und lässt `status` unberührt.
-- [ ] *Bestätigen* schreibt `suggestedStatus` = den Vorschlag,
+- [x] *Bestätigen* schreibt `suggestedStatus` = den Vorschlag,
       `suggestionDecision = .accepted` und den neuen Status auf die Karte.
-- [ ] *Ablehnen* schreibt `suggestedStatus` = den Vorschlag,
+- [x] *Ablehnen* schreibt `suggestedStatus` = den Vorschlag,
       `suggestionDecision = .declined` und lässt `status` unberührt.
-- [ ] Die vier Fälle — historische Selbsteinschätzung, Vorschlag angenommen,
+- [x] Die vier Fälle — historische Selbsteinschätzung, Vorschlag angenommen,
       Vorschlag abgelehnt, Versuch ohne Vorschlag — sind aus einem einzelnen
       Eintrag **eindeutig** unterscheidbar, ohne eine Regel anzuwenden.
-- [ ] `suggestedStatus` und `suggestionDecision` sind immer gemeinsam gesetzt
+- [x] `suggestedStatus` und `suggestionDecision` sind immer gemeinsam gesetzt
       oder gemeinsam `nil`.
-- [ ] Die Ablehnung ist persistiert und nach einem Neustart wirksam.
-- [ ] Die Erweiterung ist additiv: Ein mit dem **Phase-12-Schema**
+- [x] Die Ablehnung ist persistiert und nach einem Neustart wirksam.
+- [x] Die Erweiterung ist additiv: Ein mit dem **Phase-12-Schema**
       geschriebener Store öffnet mit dem Phase-13-Schema ohne Verlust und ohne
       Migrationsplan — gemessen, nicht angenommen (Q7, neue Properties auf
       einem bestehenden Modell).
-- [ ] Es entsteht **keine** zweite Bewertungshistorie.
+- [x] Es entsteht **keine** zweite Bewertungshistorie.
 
 **Unverändert**
 
-- [ ] Gewichtung, Batch-Auswahl, Recency und Pool-Regeln sind unberührt.
-- [ ] Wiedereinstreuungsposition, `reinsertGap` und `maxReinserts` verhalten
+- [x] Gewichtung, Batch-Auswahl, Recency und Pool-Regeln sind unberührt.
+- [x] Wiedereinstreuungsposition, `reinsertGap` und `maxReinserts` verhalten
       sich wie in §5 beschrieben, nur mit *Aufgeben* als Auslöser.
-- [ ] „Statusänderung nur einmal pro Mini-Batch" (§6.1) gilt und ist durch
+- [x] „Statusänderung nur einmal pro Mini-Batch" (§6.1) gilt und ist durch
       einen Test festgenagelt, obwohl sie strukturell folgt.
-- [ ] Der Phase-9-Erkennungspfad, `AnswerNormalization` und `SpeechCheck` sind
+- [x] Der Phase-9-Erkennungspfad, `AnswerNormalization` und `SpeechCheck` sind
       unverändert; kein Fuzzy Matching, keine Konfidenz.
-- [ ] Phase 12 bleibt vollständig wirksam; geändert ist ausschließlich, dass
+- [x] Phase 12 bleibt vollständig wirksam; geändert ist ausschließlich, dass
       Sprachausgabe den Modus nur bei verdeckter Karte entwaffnet.
-- [ ] Kein eigenes Endpointing, kein Timeout als Ersatz.
-- [ ] Keine externe Dependency, keine Analytics, kein Netzwerk.
+- [x] Kein eigenes Endpointing, kein Timeout als Ersatz.
+- [x] Keine externe Dependency, keine Analytics, kein Netzwerk.
 
 ### Der Produktwunsch „chinesische Tastatur im Hanzi-Feld"
 
@@ -2880,6 +2889,155 @@ und wer von Hand tippen will, schaltet die Tastatur wie in jeder anderen App
 um. Was **falls überhaupt** später in Frage kommt, steht im Backlog — in der
 dort begründeten Reihenfolge und ausdrücklich ohne Erzwingen.
 
+### Stand am 2026-09-21 — implementiert
+
+**633 Testfunktionen / 691 Einzelausführungen grün, 0 übersprungen**,
+Debug-Build von null und Release-Build von null mit 0 Compilerdiagnosen. Ein
+unabhängiges Code Review und ein unabhängiges Testaudit sind durchgeführt und
+ihre Findings abgearbeitet — **mit einer Ausnahme, die keine Umformulierung ist
+und deshalb unten als offener Punkt steht.**
+
+**Eine bewusste Abweichung von Task 13.3, und sie ist kleiner als geplant:**
+Die Spezifikation sah vor, `AssessmentOutcome` durch ein `AttemptOutcome` ohne
+`assessment`/`newStatus` zu ersetzen. Beim Umbau hatte dieses Objekt **keinen
+Leser mehr**: Der Status wird nur bei *Bestätigen* geschrieben und kommt dort
+aus dem Vorschlag, „erster Versuch im Batch" wird über
+`reinsertCount(for:)` beantwortet, und das Batchende fragt der Aufrufer direkt
+mit `isFinished` ab. `closeCurrentCard(reinserting:)` gibt deshalb nur
+`Bool` zurück — ob überhaupt eine Karte geschlossen wurde. Ein zurückgegebener
+Wert, den niemand liest, ist ein Versprechen ohne Deckung; die Regel steht
+sonst unverändert.
+
+**Was die Umsetzung an der Spezifikation korrigiert hat:**
+
+- **Beschriftung und Wiedereinstreuung sind zwei Prädikate, nicht eines.** Die
+  erste Fassung der Spezifikation hängte beides an dieselbe Bedingung. Der
+  Nutzer hat entschieden, dass der Knopf in Modus A **in jedem** Zustand
+  *Aufgeben* heißt — auch ohne Mikrofonfreigabe. Die Wiedereinstreuung darf
+  dieser Beschriftung aber nicht folgen, sonst würde auf einem Gerät ohne
+  Erkennung jeder Batch doppelt so lang. Zwei reine Prädikate, beide getestet
+  (`LearnFlowTests.labelAndReinsertionAreDecoupled`).
+- **`correctCount` bewegt sich auf *keinem* Pfad mehr**, auch nicht bei
+  *Bestätigen*. Die Spezifikation hatte *Bestätigen* über
+  `SelfAssessment.countsAsCorrect` noch zählen lassen; das fiel weg, sobald
+  entschieden war, dass der neue Flow `assessment` **niemals** schreibt. Beides
+  gehört zusammen, und §13.4 sagt es jetzt so.
+- **`AssistedAssessment.assessment(leadingTo:from:)` entfällt.** Die
+  Spezifikation ließ sie stehen, weil sie *Bestätigen* in einen Eintrag
+  übersetzen sollte. Mit den zwei eigenen Feldern hat sie keinen Aufrufer mehr.
+
+**Drei Testfehler, die die Suite gefunden hat und die alle in den Tests lagen:**
+
+- **Ein Use-after-free im Test, und er hat den ganzen Testprozess
+  mitgenommen.** Ein Helfer legte einen `ModelContainer` als lokale Konstante
+  an und gab die `Card` zurück; der Container wurde beim Verlassen freigegeben,
+  und der Zugriff auf die Karte danach war ein Zugriff auf einen freigegebenen
+  Backing Store. Im parallelen Lauf sah das aus wie „500 Tests fehlgeschlagen",
+  weil der Crash den Worker riss — alle mit `0.000 seconds`, also nie gelaufen.
+  Erst ein serieller Lauf zeigte den einen echten Verursacher. Jetzt werden die
+  Zähler **innerhalb** des Helfers gelesen, solange der Container lebt.
+- **Ein zweiter Fall derselben Klasse:** `@Model`-Prüfobjekte, die in keinem
+  Context lagen. Sie liegen jetzt in einem eigenen In-Memory-Container.
+- **Ein Test mit gefrorener Uhr las eine ungeordnete Historie.** Mehrere
+  Einträge mit identischem `reviewedAt` machen „neueste zuerst" undefiniert —
+  ein Test, der nach Glück bestanden hätte. Er benutzt jetzt eine laufende Uhr.
+- **Ein Test, der nicht fehlschlagen konnte,** ist ersetzt worden: Er wollte
+  zeigen, dass der Aufgeben-Merker nicht zwischen Karten überläuft, prüfte das
+  aber über die Queue, wo `wasManualReveal` die Bedingung ohnehin dominiert. Die
+  neue Fassung prüft, was wirklich kaputtgehen kann — dass der Merker pro
+  Versuch **übernommen** und nicht akkumuliert wird.
+
+**Gegenmutationen: vierzehn ausgeführt, alle greifen.** Jede wurde einzeln
+angewandt, die betroffenen Suiten liefen, und die Mutation wurde
+zurückgenommen:
+
+| # | Mutation | rot geworden (Beispiel) |
+| --- | --- | --- |
+| 1 | Schwelle 2 → 1 | 32 Tests, u. a. `withoutSpeechNothingIsOffered` |
+| 2 | Gleichstatus-Regel gestrichen | `manualResetDiscardsOldEvidence` (beide Suiten) |
+| 3 | Ablehnung bricht den Lauf nicht mehr ab | `declineResetsTheEvidence`, `declineSurvivesARestart` |
+| 4 | andere Richtung bricht statt zu überspringen | `otherDirectionIsSkippedNotCounted` |
+| 5 | Wiedereinstreuung ignoriert „Aufnahme war möglich" | 11 Tests, u. a. `storedBatchSizeIsUsed` |
+| 6 | Wiedereinstreuung ignoriert den manuellen Reveal | `aFinishedAttemptDoesNotReinsert` |
+| 7 | *Bestätigen* wird als Selbsteinschätzung gespeichert | `acceptingWritesTheOfferedStatus` |
+| 8 | *Bestätigen* hebt `correctCount` | `correctCountNeverMovesAgain` |
+| 9 | Sprachausgabe entwaffnet auch auf der aufgedeckten Karte | `ordinaryEventsKeepTheMode`, `everyEventIsDecided` |
+| 10 | *Stop* öffnet einen neuen automatischen Versuch | `cancellingKeepsTheModeAndTheLoopGuard` |
+| 11 | die Stop-Zeile überlebt bis in `finalizing` | `stopControlIsDerivedFromThePhase` |
+| 12 | Modus A verliert die Beschriftung *Aufgeben* | 13 Tests, u. a. `modeAAlwaysSaysAufgeben` |
+| 13 | der Vorschlag springt zwei Stufen | 25 Tests, u. a. `declineResetsTheEvidence` |
+| 14 | die Queue ignoriert den Wiedereinstreuungswunsch | 24 Tests, u. a. `fullBatchLengthMatchesThePromise` |
+
+**Eine Warnung für den nächsten Durchgang, teuer gelernt:** Ein
+Mutationsskript, das die Datei mit `git checkout --` zurücksetzt, wirft bei
+einer **uncommitteten** Phase die ganze Arbeit an dieser Datei weg — hier zwei
+Dateien der Lernschicht, die aus dem Kontext wiederhergestellt werden mussten.
+Zurückgenommen wird eine Mutation aus einer **Byte-Kopie** der Datei, nie aus
+Git.
+
+### Offener Punkt der Phase 13 — zu entscheiden, bevor sie abgeschlossen ist
+
+**Das Code Review hat einen echten Widerspruch gefunden, und er ist im Code
+nachgeprüft:** `card.status` wird in der gesamten App an **genau einer** Stelle
+geschrieben — `LearnSessionModel.closeAttempt`, ausschließlich bei einer
+bestätigten Einstufung. Es gibt **kein** Bedienelement, um einen Lernstand von
+Hand zu setzen: Die Kartenübersicht zeigt ihn als Punkt und filtert danach, der
+Picker im Editor ist seit Phase 6 (Task 6.10) entfernt, und das in
+[learning-engine.md §6.2](learning-engine.md) seit Phase 1 spezifizierte Setzen
+in der Kartenübersicht ist nie gebaut worden.
+
+Bis Phase 12 war das folgenlos, weil *Nochmal* (−2) und *Schwer* (−1) nach unten
+führten. **Phase 13 entfernt diesen Weg** und verwies für die Korrektur auf ein
+Bedienelement, das es nicht gibt. Folge: Eine Karte, die zwei zufällige
+Erkennungstreffer nach oben getragen haben, bleibt dauerhaft auf *Gut* oder
+*Sicher*, bekommt das niedrige Gewicht aus §3.1, wird selten gezogen — und der
+Lernende hat kein Mittel. Wie oft ein Treffer zufällig entsteht, ist
+**ungemessen**; genau das war der Grund, einem einzelnen Treffer nichts zu
+glauben.
+
+**Zu entscheiden ist eines von beiden, und es ist eine Produktentscheidung:**
+
+1. **Das Setzen des Lernstands in der Kartenübersicht nachziehen.** Es steht seit
+   Phase 1 in §6.2, ist also kein neuer Umfang, sondern eine Einlösung — ein
+   Kontextmenü auf der Zeile mit den fünf Stufen.
+2. **Ausdrücklich festlegen, dass Version 1 keinen Weg nach unten hat**, §6.2
+   entsprechend umschreiben und das Nachziehen in den Backlog heben.
+
+Die Dokumentation sagt bis dahin die gemessene Wahrheit und verweist nicht mehr
+auf das nicht gebaute Bedienelement (§6.2, §13.8, §13.11 Punkt 1, CLAUDE.md,
+`AssistedAssessment.swift`). **Solange dieser Punkt offen ist, ist Phase 13 nicht
+abgeschlossen** — unabhängig davon, dass Build, Tests, Review und Audit grün
+sind.
+
+### Was nur strukturell gilt, und nicht behauptet wird
+
+Vier Akzeptanzkriterien sind **nicht** durch einen Test gedeckt, und das steht
+hier statt in einer Fußnote:
+
+| Kriterium | warum kein Test, und worauf es ruht |
+| --- | --- |
+| „■ schreibt keinen Eintrag und bewegt keinen Zähler" | Der Abbruch erreicht das Model gar nicht — `cancelRecordingByLearner()` berührt nur `speechState`. Es gibt keinen Eingang, über den ein Eintrag entstehen könnte |
+| „Speicherfehler: Karte bleibt aufgedeckt, Vorschlag bleibt stehen" | Der Fehlerpfad ist im Testbundle nicht provozierbar (seit Phase 2 begründet). Gepinnt ist die tragende Eigenschaft: `SessionQueueTests.advancingACopyDoesNotAffectTheOriginal` |
+| „Sprachausgabe stoppen → Kartenwechsel → Auto-Aufnahme" | Die **eine Hälfte** ist prüfbar und geprüft (`LearnFlowTests.theCycleKeyChangesOncePerTransition`); dass `speech.stop()` zuerst läuft, liegt in einem `body`. Es ruht auf zwei Stellen, nicht auf einer Anweisungsreihenfolge |
+| „Eine Animation, Zeile 2 bewegt sich nicht" | Wie ein Übergang wirkt, erreicht kein Unit-Test — als einziges Kriterium **nicht** abgehakt |
+
+**Korrigiert am 2026-09-21:** Die erste Fassung von §13.12 behauptete, die
+Reihenfolge sei „über `SessionSpeechState` als Sequenz prüfbar, ohne View". Das
+Testaudit hat gezeigt, dass das nicht stimmt — `SessionSpeechState` kennt kein
+Sprachausgabe-Ereignis. Eine Spezifikation, die eine Abdeckung behauptet, die es
+nicht gibt, ist schlimmer als eine benannte Lücke; §13.12 sagt es jetzt richtig,
+und die prüfbare Hälfte ist aus dem `body` herausgezogen und getestet.
+
+**Nicht durch einen Unit-Test gedeckt, und benannt statt behauptet:** Die
+Reihenfolge „Sprachausgabe stoppen → Kartenwechsel → automatische Aufnahme"
+liegt in einem `onChange` in `LearnSessionView`, und kein Unit-Test erreicht
+einen `body`. Sie ruht auf **zwei** strukturellen Zusicherungen: dem einen
+Beobachter je Kartenübergang, dessen erste Anweisung `speech.stop()` ist, und
+darauf, dass `startRecording(for:)` selbst mit `speech.stop()` beginnt. „Nie
+Sprachausgabe und Mikrofon gleichzeitig" hängt damit nicht allein an der
+Anweisungsreihenfolge im Beobachter. Der reale Beleg gehört auf die
+Geräteliste.
+
 ### Abhängigkeiten
 
 Phase 9 (Erkennungspfad, unverändert benutzt), Phase 11 (Historie und
@@ -2891,9 +3049,10 @@ verengt).
 - **Kein automatischer Downgrade** und keine negative Evidenz aus ASR, auch
   nicht aus mehreren Mismatches.
 - **Keine Ersatzheuristik für Modus B** und keine für Modus A ohne Mikrofon.
-  Dort bewegt sich der Lernstand nur über die Kartenliste, und das ist die
-  benannte Folge, keine Lücke
-  ([learning-engine.md §13.11](learning-engine.md#1311-was-das-kostet)).
+  Dort bewegt sich der Lernstand nicht, und das ist die benannte Folge, keine
+  Lücke ([learning-engine.md §13.11](learning-engine.md#1311-was-das-kostet)).
+  **Nicht** in dieser Phase gebaut ist das Setzen des Lernstands in der
+  Kartenübersicht — siehe den offenen Punkt unten.
 - **Kein Endpointing**, kein Silence-Timer, kein `SpeechDetector`-Polling.
 - **Keine Kalibrierung** der Schwelle an realer Historie — sie wird durch die
   aufgezeichneten Ablehnungen erst möglich und bleibt offen.

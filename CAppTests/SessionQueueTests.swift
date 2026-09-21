@@ -7,11 +7,19 @@ import Foundation
 import Testing
 @testable import CApp
 
-/// `docs/learning-engine.md` §10, mandatory tests 9 to 14 and 18 to 19.
+/// `docs/learning-engine.md` §10, mandatory tests 9 to 14 and 18.
 ///
 /// The queue is fed fixed id orders rather than a selected batch, so nothing
 /// here depends on the random selection — these tests are about the queue
 /// alone.
+///
+/// **Since phase 13 the trigger is `closeCurrentCard(reinserting:)`, not a
+/// self-assessment**, and `reinserting: true` is what „Aufgeben" produces. Every
+/// rule below is the same rule as before: where a repetition lands, how often,
+/// and when a batch ends. What is gone is §10's test 19 (`correctCount` per
+/// assessment): the counter is defined through a self-assessment, the new flow
+/// gives none, and it therefore stops moving — that is pinned in
+/// `LearnSessionModelTests` where the counter is actually written, not here.
 struct SessionQueueTests {
 
     /// Named ids, so the expectations read like the examples in §5.
@@ -23,15 +31,15 @@ struct SessionQueueTests {
     @Test("A repetition goes behind every card that has not been seen yet")
     func reinsertGoesBehindUnseenCards() {
         // The rule the device test forced. Before it, a repetition went a
-        // fixed three places on, and four cards answered "Nochmal" in a row
-        // cycled among themselves while the rest of the batch was never
-        // shown.
+        // fixed three places on, and four cards given up on in a row cycled
+        // among themselves while the rest of the batch was never shown.
         let cards = Cards()
         var queue = SessionQueue(cardIDs: [cards.a, cards.c, cards.f, cards.b, cards.d])
 
-        let outcome = queue.assess(.again, currentStatus: .weak)
+        let closed = queue.closeCurrentCard(reinserting: true)
 
-        #expect(outcome?.wasReinserted == true)
+        #expect(closed)
+        #expect(queue.reinsertCount(for: cards.a) == 1, "and it really went back in")
         #expect(queue.pending == [cards.c, cards.f, cards.b, cards.d, cards.a])
         #expect(queue.pending.last == cards.a, "behind all four unseen cards")
         #expect(queue.currentCardID != cards.a, "and never straight away")
@@ -47,18 +55,18 @@ struct SessionQueueTests {
         let cards = Cards()
         var queue = SessionQueue(cardIDs: [cards.a, cards.b, cards.c, cards.d, cards.e])
 
-        // Four "Nochmal" answers. Each repetition lands behind the cards that
-        // are still unseen, so after this exactly one unseen card is left and
-        // it is the current one.
+        // Four give-ups. Each repetition lands behind the cards that are still
+        // unseen, so after this exactly one unseen card is left and it is the
+        // current one.
         for _ in 0..<4 {
-            queue.assess(.again, currentStatus: .weak)
+            queue.closeCurrentCard(reinserting: true)
         }
         let last = queue.currentCardID
         #expect(last == cards.e, "the one card nobody has seen yet")
 
         // Its first attempt. Nothing unseen remains afterwards, so this
         // repetition is placed by the gap alone — which is the point.
-        queue.assess(.again, currentStatus: .weak)
+        queue.closeCurrentCard(reinserting: true)
 
         #expect(queue.pending.count > LearningParameters.reinsertGap, "cards left to place it among")
         // Exact equality on purpose: §5 specifies the position as
@@ -72,25 +80,25 @@ struct SessionQueueTests {
     }
 
     // §10, test 9c: the rule that the device test was about.
-    @Test("Several failed cards in a row do not starve the unseen ones")
+    @Test("Several given-up cards in a row do not starve the unseen ones")
     func consecutiveFailuresDoNotStarveUnseenCards() {
         // Reproduces the reported sequence: seven cards, the first four all
-        // answered "Nochmal". What must follow is E, F, G — the cards nobody
-        // has seen — not another round of A B C D.
+        // given up on. What must follow is E, F, G — the cards nobody has
+        // seen — not another round of A B C D.
         let ids = (0..<7).map { _ in UUID() }
         var queue = SessionQueue(cardIDs: ids)
 
         let failed = Array(ids.prefix(4))
         for expected in failed {
             #expect(queue.currentCardID == expected)
-            queue.assess(.again, currentStatus: .weak)
+            queue.closeCurrentCard(reinserting: true)
         }
 
         // The next three questions are the three cards never shown.
         let unseen = Array(ids.suffix(3))
         for expected in unseen {
             #expect(queue.currentCardID == expected, "an unseen card must come before any repetition")
-            queue.assess(.good, currentStatus: .weak)
+            queue.closeCurrentCard(reinserting: false)
         }
 
         // Only now do the repetitions follow.
@@ -108,7 +116,7 @@ struct SessionQueueTests {
             var firstAttempts: Set<UUID> = []
             var sawRepetitionTooEarly = false
 
-            // Answer "Nochmal" to everything and watch the order.
+            // Give up on everything and watch the order.
             while let current = queue.currentCardID, firstAttempts.count < size {
                 if firstAttempts.contains(current) {
                     // A card is coming back although not everything has been
@@ -116,7 +124,7 @@ struct SessionQueueTests {
                     sawRepetitionTooEarly = true
                 }
                 firstAttempts.insert(current)
-                queue.assess(.again, currentStatus: .weak)
+                queue.closeCurrentCard(reinserting: true)
             }
 
             #expect(sawRepetitionTooEarly == false, "size \(size): a repetition jumped an unseen card")
@@ -138,14 +146,14 @@ struct SessionQueueTests {
         let cards = Cards()
         var queue = SessionQueue(cardIDs: [cards.a, cards.b, cards.c, cards.d])
 
-        queue.assess(.again, currentStatus: .weak)   // A goes behind the unseen ones
-        queue.assess(.good, currentStatus: .weak)    // B resolved
-        queue.assess(.good, currentStatus: .weak)    // C resolved
+        queue.closeCurrentCard(reinserting: true)    // A goes behind the unseen ones
+        queue.closeCurrentCard(reinserting: false)   // B resolved
+        queue.closeCurrentCard(reinserting: false)   // C resolved
         #expect(queue.pending == [cards.d, cards.a], "D unseen, A waiting")
 
         // D's first attempt. Afterwards only A is left, and A has been seen,
         // so the gap asks for position 3 in a queue of one.
-        queue.assess(.again, currentStatus: .weak)
+        queue.closeCurrentCard(reinserting: true)
 
         #expect(queue.pending == [cards.a, cards.d], "appended, as late as the batch allows")
         #expect(queue.pending.last == cards.d)
@@ -157,41 +165,59 @@ struct SessionQueueTests {
         let cards = Cards()
         var queue = SessionQueue(cardIDs: [cards.a, cards.b, cards.c, cards.d])
 
-        // Rate A "Nochmal" every time it comes up.
+        // Give up on A every time it comes up.
         // Derived, and checked: a limit that silently runs out would make the
         // count below wrong for the wrong reason.
         let safetyLimit = 4 * (LearningParameters.maxReinserts + 1)
-        var reinserts = 0
         var questions = 0
         while let current = queue.currentCardID, questions < safetyLimit {
             questions += 1
-            let outcome = queue.assess(current == cards.a ? .again : .good, currentStatus: .weak)
-            if outcome?.wasReinserted == true { reinserts += 1 }
+            queue.closeCurrentCard(reinserting: current == cards.a)
         }
         #expect(questions < safetyLimit, "the queue is not terminating")
 
-        #expect(reinserts == LearningParameters.maxReinserts, "exactly the configured number of repetitions, no more")
-        #expect(queue.reinsertCount(for: cards.a) == LearningParameters.maxReinserts)
-        #expect(queue.isFinished, "the Nochmal past the limit resolves the card instead of extending the batch")
+        #expect(
+            queue.reinsertCount(for: cards.a) == LearningParameters.maxReinserts,
+            "exactly the configured number of repetitions, no more"
+        )
+        #expect(queue.isFinished, "the give-up past the limit resolves the card instead of extending the batch")
     }
 
     // §10, test 12
-    @Test("Gut removes the card from the queue immediately")
-    func goodResolvesAtOnce() {
+    @Test("Closing without reinsertion removes the card from the queue immediately")
+    func closingResolvesAtOnce() {
         let cards = Cards()
         var queue = SessionQueue(cardIDs: [cards.a, cards.b])
 
-        let outcome = queue.assess(.good, currentStatus: .weak)
+        let closed = queue.closeCurrentCard(reinserting: false)
 
-        #expect(outcome?.wasReinserted == false)
-        #expect(outcome?.isResolved == true)
+        #expect(closed)
+        #expect(queue.reinsertCount(for: cards.a) == 0, "nothing went back in")
         #expect(queue.pending == [cards.b], "A is gone, not moved")
+        #expect(queue.currentCardID == cards.b)
+    }
 
-        // The same for the other two resolving answers.
-        for assessment in [SelfAssessment.hard, .secure] {
-            var other = SessionQueue(cardIDs: [cards.a, cards.b])
-            other.assess(assessment, currentStatus: .weak)
-            #expect(other.pending == [cards.b], "\(assessment) resolves too")
+    // Phase 13: the one thing the queue must *not* do on its own.
+    @Test("The queue never reinserts unless the caller asks")
+    func theQueueNeverReinsertsByItself() {
+        // The decision lives in the feature layer (`LearnFlow.reinserts`), and
+        // this is the half the queue owes: `false` means gone, every time, for
+        // every card. It is also the counter-mutation guard for a mismatch — a
+        // mismatch closes with `false`, and if the queue ever reinserted on its
+        // own that would silently become a repetition rule based on evidence the
+        // app says it does not trust.
+        let ids = (0..<LearningParameters.batchSize).map { _ in UUID() }
+        var queue = SessionQueue(cardIDs: ids)
+
+        var questions = 0
+        while queue.isFinished == false, questions <= ids.count {
+            questions += 1
+            queue.closeCurrentCard(reinserting: false)
+        }
+
+        #expect(questions == ids.count, "one question per card, and not one more")
+        for id in ids {
+            #expect(queue.reinsertCount(for: id) == 0, "\(id) came back although nobody asked")
         }
     }
 
@@ -201,24 +227,29 @@ struct SessionQueueTests {
         let cards = Cards()
         var queue = SessionQueue(cardIDs: [cards.a, cards.b, cards.c])
 
-        let first = queue.assess(.good, currentStatus: .weak)
-        #expect(first?.isBatchFinished == false)
+        var closed = queue.closeCurrentCard(reinserting: false)
+        #expect(closed)
         #expect(queue.isFinished == false)
 
-        let second = queue.assess(.hard, currentStatus: .weak)
-        #expect(second?.isBatchFinished == false)
+        closed = queue.closeCurrentCard(reinserting: false)
+        #expect(closed)
+        #expect(queue.isFinished == false)
 
         // Still not finished while a repetition is outstanding, even though
         // every card has been seen once.
-        let third = queue.assess(.again, currentStatus: .weak)
-        #expect(third?.isBatchFinished == false)
+        closed = queue.closeCurrentCard(reinserting: true)
+        #expect(closed)
         #expect(queue.isFinished == false, "the repetition of C is still queued")
 
-        let fourth = queue.assess(.good, currentStatus: .weak)
-        #expect(fourth?.isBatchFinished == true)
+        closed = queue.closeCurrentCard(reinserting: false)
+        #expect(closed)
         #expect(queue.isFinished)
         #expect(queue.currentCardID == nil)
-        #expect(queue.assess(.good, currentStatus: .weak) == nil, "nothing left to rate")
+
+        closed = queue.closeCurrentCard(reinserting: false)
+        #expect(closed == false, "nothing left to close")
+        closed = queue.closeCurrentCard(reinserting: true)
+        #expect(closed == false, "and nothing to put back either")
     }
 
     // Additional, and the number the device test was actually about: how long
@@ -226,7 +257,7 @@ struct SessionQueueTests {
     // `batchSize × (1 + maxReinserts)`, and until the audit pointed it out
     // nothing checked it — a change to `maxReinserts` was noticed only by the
     // parameter table, not by its user-visible consequence.
-    @Test("A full batch answered Nochmal throughout is exactly as long as promised")
+    @Test("A full batch given up on throughout is exactly as long as promised")
     func fullBatchLengthMatchesThePromise() {
         let ids = (0..<LearningParameters.batchSize).map { _ in UUID() }
         var queue = SessionQueue(cardIDs: ids)
@@ -235,7 +266,7 @@ struct SessionQueueTests {
         var questions = 0
         while queue.isFinished == false, questions <= promised {
             questions += 1
-            queue.assess(.again, currentStatus: .weak)
+            queue.closeCurrentCard(reinserting: true)
         }
 
         #expect(queue.isFinished, "the batch has to end")
@@ -249,7 +280,7 @@ struct SessionQueueTests {
     }
 
     // §10, test 14
-    @Test("A batch of one card answered Nochmal forever still terminates")
+    @Test("A batch of one card given up on forever still terminates")
     func singleCardBatchTerminates() {
         // The invariant, not just the output: termination must come from the
         // queue itself, never from the UI happening to stop asking.
@@ -262,7 +293,7 @@ struct SessionQueueTests {
             questions += 1
             #expect(questions <= safetyLimit, "the queue is not terminating")
             if questions > safetyLimit { break }
-            queue.assess(.again, currentStatus: .weak)
+            queue.closeCurrentCard(reinserting: true)
         }
 
         #expect(queue.isFinished)
@@ -271,10 +302,10 @@ struct SessionQueueTests {
     }
 
     // §10, test 18
-    @Test("Every assessment produces one outcome, repetitions included")
-    func everyAssessmentCountsAsAReview() {
-        // `reviewCount` is phase 6's to write; what the engine owes is one
-        // outcome per assessment, so counting them gives the increments.
+    @Test("Every closed attempt is reported, repetitions included")
+    func everyAttemptIsReported() {
+        // `reviewCount` is the feature layer's to write; what the engine owes is
+        // one `true` per closed attempt, so counting them gives the increments.
         let card = UUID()
         var queue = SessionQueue(cardIDs: [card])
 
@@ -283,37 +314,20 @@ struct SessionQueueTests {
         // `maxReinserts` would hang the suite instead of failing it — the
         // worst possible outcome for a test.
         let safetyLimit = LearningParameters.maxReinserts + 10
-        var outcomes: [AssessmentOutcome] = []
-        while outcomes.count < safetyLimit, let outcome = queue.assess(.again, currentStatus: .weak) {
-            outcomes.append(outcome)
+        var closed = 0
+        while closed < safetyLimit, queue.closeCurrentCard(reinserting: true) {
+            closed += 1
         }
-        #expect(outcomes.count < safetyLimit, "the queue is not terminating")
+        #expect(closed < safetyLimit, "the queue is not terminating")
 
-        #expect(outcomes.count == LearningParameters.maxReinserts + 1, "one rating per question, repetitions included")
-        #expect(outcomes.allSatisfy { $0.cardID == card })
-        #expect(outcomes.filter(\.wasFirstAssessmentInBatch).count == 1, "only the first one is the first")
-    }
-
-    // §10, test 19
-    @Test("Only Nochmal fails to count as correct")
-    func correctnessPerAssessment() {
-        let cards = Cards()
-
-        for assessment in SelfAssessment.allCases {
-            var queue = SessionQueue(cardIDs: [cards.a, cards.b])
-            let outcome = queue.assess(assessment, currentStatus: .weak)
-            #expect(outcome?.countsAsCorrect == (assessment != .again), "\(assessment)")
-        }
-
-        // Spelled out once, because this is the rule people get wrong:
-        // "Schwer" counts as correct — the learner knew it, with effort.
-        #expect(SelfAssessment.hard.countsAsCorrect)
+        #expect(closed == LearningParameters.maxReinserts + 1, "one close per question, repetitions included")
+        #expect(queue.reinsertCount(for: card) == LearningParameters.maxReinserts)
     }
 
     // Additional, for the edge case in §9 that has no numbered test: a card
     // deleted mid-session.
-    @Test("A skipped card leaves the batch without counting as a review")
-    func skippingDoesNotCountAsAReview() {
+    @Test("A skipped card leaves the batch without counting as an attempt")
+    func skippingDoesNotCountAsAnAttempt() {
         let cards = Cards()
         var queue = SessionQueue(cardIDs: [cards.a, cards.b])
 
@@ -321,7 +335,8 @@ struct SessionQueueTests {
 
         #expect(queue.pending == [cards.b])
         #expect(queue.currentCardID == cards.b)
-        // No outcome exists for a skip, so phase 6 has nothing to write —
+        #expect(queue.reinsertCount(for: cards.a) == 0, "a skip never puts a card back")
+        // A skip reports nothing, so the feature layer has nothing to write —
         // which is the point: a deleted card is not a review.
         queue.skipCurrentCard()
         #expect(queue.isFinished)
@@ -330,8 +345,8 @@ struct SessionQueueTests {
     }
 
     // Additional: the property the feature layer's persistence order rests
-    // on. `LearnSessionModel.submit` advances a *copy* of the queue and keeps
-    // it only after the write succeeded, so a failed save leaves the same
+    // on. `LearnSessionModel.closeAttempt` advances a *copy* of the queue and
+    // keeps it only after the write succeeded, so a failed save leaves the same
     // card in place. That only works because this is a value type — and
     // nothing asserted it until the audit pointed it out.
     @Test("Advancing a copy leaves the original untouched")
@@ -340,21 +355,22 @@ struct SessionQueueTests {
         let original = SessionQueue(cardIDs: [cards.a, cards.b, cards.c])
 
         var copy = original
-        let outcome = copy.assess(.again, currentStatus: .weak)
+        let closed = copy.closeCurrentCard(reinserting: true)
+        #expect(closed, "the copy advanced")
 
-        #expect(outcome != nil, "the copy advanced")
         #expect(copy.currentCardID == cards.b)
+        #expect(copy.reinsertCount(for: cards.a) == 1)
         #expect(original.currentCardID == cards.a, "the original still asks the same card")
         #expect(original.pending == [cards.a, cards.b, cards.c])
         #expect(original.reinsertCount(for: cards.a) == 0, "and has no repetition recorded")
 
-        // Which means answering again from the original counts as the first
-        // assessment — the retry after a failed save must not be treated as a
-        // repetition.
+        // Which means closing again from the original is still the card's first
+        // attempt — the retry after a failed save must not be treated as a
+        // repetition, because that is what `wasRetry` is read from.
         var retry = original
-        let second = retry.assess(.again, currentStatus: .weak)
-        #expect(second?.wasFirstAssessmentInBatch == true)
-        #expect(second?.newStatus == .weak, "and the status is still decided by it")
+        let retried = retry.closeCurrentCard(reinserting: true)
+        #expect(retried)
+        #expect(retry.reinsertCount(for: cards.a) == 1, "counted once, not twice")
     }
 
     // Additional: the ids of a finished batch have to survive for the next
@@ -363,8 +379,8 @@ struct SessionQueueTests {
     func batchIDsSurviveTheBatch() {
         let cards = Cards()
         var queue = SessionQueue(cardIDs: [cards.a, cards.b])
-        queue.assess(.good, currentStatus: .weak)
-        queue.assess(.good, currentStatus: .weak)
+        queue.closeCurrentCard(reinserting: false)
+        queue.closeCurrentCard(reinserting: false)
 
         #expect(queue.isFinished)
         #expect(queue.cardIDs == [cards.a, cards.b])

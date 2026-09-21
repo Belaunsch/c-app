@@ -21,7 +21,10 @@ import SwiftUI
 /// per difference and would stop being a shared layout.
 ///
 /// Presentation only. Nothing here decides anything — which card, which
-/// stage and what happens next all stay where they were.
+/// stage and what happens next all stay where they were. Since phase 13 what
+/// hangs underneath is `RevealedDecisionBar`: *Weiter*, or „Neue Einstufung"
+/// with *Ablehnen* and *Bestätigen*. The four self-assessments are gone from the
+/// flow, and no status moves without a tap on *Bestätigen*.
 struct LearnRevealedAnswerView: View {
     let card: Card
 
@@ -149,8 +152,9 @@ struct LearnPromptSpeaker: View {
 ///
 /// A mismatch shows both texts and passes no verdict. Deliberately not red
 /// and not marked wrong: the recognition can be wrong, the card can be wrong,
-/// and the learner is the one who knows which. The self-assessment below is
-/// untouched — Nochmal, Schwer, Gut and Sicher stay theirs.
+/// and the learner is the one who knows which. What stands below it is
+/// untouched by this note — since phase 13 that is *Weiter*, because a mismatch
+/// earns no offer (`docs/learning-engine.md` §13.8).
 private struct SpeechCheckNote: View {
     let check: SpeechCheck
 
