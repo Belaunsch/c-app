@@ -203,9 +203,22 @@ Evidenzgrenze, damit eine zurückgesetzte Karte nicht aus ihren alten Reviews
 sofort wieder dieselbe Beförderung angeboten bekommt. Die Historie bleibt dabei
 vollständig erhalten.
 
-Nächster Schritt: **Phase 14 — AI-Integration**, deren Umfang noch nicht
-entschieden ist und die ohne Akzeptanzkriterien nicht begonnen wird, und **erst
-dann** die finale Geräte- und Release-Abnahme auf dem fertigen Produkt.
+Nächster Schritt: **Phase 14 — AI-Erklärung zu einer Karte**, am 2026-09-21
+spezifiziert und gemessen. Auf Abruf ein kurzer deutscher Text zu einer
+vorhandenen Karte — Bedeutung, Gebrauch, höchstens zwei Beispiele —, erzeugt von
+Apples On-Device-Modell, sichtbar als erzeugt gekennzeichnet und **nicht
+gespeichert**. Die Phase schreibt nichts: kein neues Feld, keine Migration, keine
+Änderung an Karte, Lernstand oder Review-Historie.
+
+**Die Phase ist durch ihre eigene Messung kleiner geworden.** Geplant war
+zusätzlich, Karten in Serie aus einer Beschreibung erzeugen zu lassen. Auf dem
+Gerät trugen vier von fünfzig Entwürfen eine falsche Bedeutung bei völlig
+unauffälligem Hanzi — `Abbruch|结账` etwa, wo 结账 „abrechnen" heißt. Genau dieser
+Fall war vorab als Ausschlusskriterium festgeschrieben, weil eine Vorschau aus
+Deutsch, Hanzi und Pinyin ihn nicht sichtbar machen kann. Die Grenze wurde nicht
+gelockert, der Fall gestrichen; die Idee lebt im Backlog weiter, dann mit einer
+unabhängigen Bedeutungsprüfung und neuer Messung. **Erst danach** die finale
+Geräte- und Release-Abnahme auf dem fertigen Produkt.
 
 ## Drittanbieter-Daten
 

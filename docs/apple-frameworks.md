@@ -33,6 +33,17 @@ verfügbar (erwartet um den 14. September 2026); Xcode 27 lag als Beta vor.
 Für die geplanten Features bringt iOS 27 nach aktueller Kenntnis **keine
 zwingend benötigte API**. Empfehlung: auf iOS 26.0 als Target und der stabilen
 Xcode-26-Toolchain bleiben und iOS 27 später neu bewerten.
+**Korrektur der Toolchain-Angabe, gemessen am 2026-09-21:** Installiert ist
+inzwischen **Xcode 27.0 (Build 27A266a) mit ausschließlich dem
+iPhoneOS-27.0-SDK**; ein iOS-26-SDK liegt nicht mehr vor. Der Satz „Build mit
+Xcode 26.x" und alle Verweise auf das 26.5-SDK in den Q-Einträgen beschreiben
+den Stand der jeweiligen Messung, nicht die heutige Maschine.
+
+**Das Deployment Target bleibt unverändert iOS 26.0** — gegen ein neueres SDK zu
+bauen ist der normale Fall und ändert daran nichts. Für Phase 14 ist das sogar
+ein Argument: Der Fehlertyp `LanguageModelSession.GenerationError` ist ab iOS
+27.0 deprecated und beim Target 26.0 **warnungsfrei**; ein Anheben würde das
+Null-Warnungs-Gate an dieser Stelle brechen. Details in §11.7.
 
 ---
 
@@ -846,6 +857,9 @@ entsteht ausschließlich indirekt über das System:
 | Hanzi → Pinyin (CoreFoundation) | nein | — |
 | SwiftData-Persistenz | nein | — |
 | Metriken durch Apple bei `TranslationSession` | Bundle-ID + Sprachpaar, keine Inhalte | pro Nutzung |
+| Download des Apple-Intelligence-Modells | ja | **systemgesteuert, keine App-API** — kein `AssetInventory`-Gegenstück (§11.9) |
+| Textgenerierung mit `SystemLanguageModel` | nein — Apple: „Works offline ✅“ | — |
+| Metriken durch Apple bei `FoundationModels` | **nicht dokumentiert** — Apple sagt dazu nichts (§11.8) | unbekannt |
 
 Folgerung: Die App ist nach dem einmaligen Modell-Download **vollständig
 offline nutzbar**. Das ist eine Anforderung, die in Phase 10 aktiv getestet
@@ -928,10 +942,557 @@ Fingerprinting-nahe API in einer App, die sonst nichts über das Gerät liest
 | Q11 | Liefert `SpeechDetector` (iOS 26.0) auf dem Zielgerät auswertbare `speechDetected`-Werte, und mit welcher Latenz? **Gemessen am 2026-09-14 auf dem iPhone 16 Pro, iOS 26.6, mit echter Sprache: nein — und `isFinal` taugt ebenfalls nicht.** Vollständige Messung in §7.1. Kurzfassung: (1) `SpeechDetector(detectionOptions: .init(sensitivityLevel: .medium), reportResults: true)` lieferte über 45 Sekunden **null Ergebnisse und keinen Fehler**, obwohl in diesem Fenster viermal gesprochen und viermal erkannt wurde. Von Apples zwei widersprüchlichen Doku-Stellen ist die pessimistische die zutreffende („currently only support **error handling** from the VAD model"); die Versprechen in `init(detectionOptions:reportResults:)` und `init()` treffen auf iOS 26.6 nicht zu. (2) Der Transcriber stellte seine vier finalen Ergebnisse **3,9 s bis 6,6 s nach dem Ende des jeweils abgedeckten Audios** zu. Damit ist die Doku-Analyse empirisch bestätigt: `isFinal` markiert Finalisierung, nicht das Äußerungsende. **Das Ziel „unter 2 s" erreicht keines der beiden Apple-Signale**, und zwar nicht knapp. (3) Die Zwei-Modul-Konfiguration wäre kostenlos gewesen: `AssetInventory.status` und `bestAvailableAudioFormat` liefern für `[transcriber]` und `[transcriber, detector]` identische Werte. **Konsequenz:** Ein Hands-free-Endpointing kann sich auf kein Apple-Signal stützen. Bleibt eine eigene Kurzzeit-Energie — im selben Lauf mitgemessen und in §7.1 mit Zahlen belegt, inklusive der Stelle, an der sie unsauber wird. | **Beantwortet am 2026-09-14 — beide Apple-Signale ungeeignet** | gering — der manuelle Stop-Pfad aus Phase 9 bleibt unberührt |
 
 | Q12 | Darf eine normale App die **Tastatursprache** für das Hanzi-Feld programmgesteuert auf Chinesisch setzen? **Aus der Dokumentation abschließend geklärt am 2026-09-21: nein — erzwingen ist belegt unmöglich, und für reines SwiftUI gibt es überhaupt nichts.** Belegkette: (1) **Keine setzende API.** `UITextInputMode` ist in allen Membern lesend — `class var activeInputModes: [UITextInputMode] { get }`, `var primaryLanguage: String? { get }` —, `currentInputMode` ist **seit iOS 7.0 deprecated**, und außer `init(coder:)` gibt es keinen Initializer und keine Factory; die einzige iOS-26-Neuerung im Bereich ist `CurrentInputModeDidChangeMessage` (iOS 26.0), also reine Beobachtung. Die einzigen *umschaltenden* Symbole, `UIInputViewController.advanceToNextInputMode()` und `handleInputModeList(from:with:)`, gehören laut Apple zu „the primary view controller for a custom keyboard app extension" — ausgeschlossen, weil diese App kein eigenes Keyboard baut — und wechseln ohnehin nur zur „next keyboard in the list of user-enabled keyboards", nicht zu einer gewählten Sprache. (2) **Dokumentiert möglich ist nur Bevorzugen pro Feld**, durch Überschreiben von `UIResponder.textInputMode` (iOS 7.0) in einer UIKit-Subklasse. Apple wörtlich: „You can redefine this property and use it to return a different text input mode in cases where you want a responder to use a specific keyboard. The user can still change the keyboard while the responder is active, but switching away to another responder and then back restores the keyboard you specified." Das ist ein **Vorschlag mit Gedächtnis, keine Sperre** — und die einzige dokumentierte Bezugsquelle für ein `UITextInputMode`-Objekt ist `activeInputModes`, also die Tastaturen, die der Nutzer **selbst hinzugefügt** hat. (3) **Eine Tastatur hinzufügen kann keine App**, und es gibt keinen Deep Link dorthin: `UIApplication.openSettingsURLString` führt laut Apple nur zu „your app's custom settings"; die Topic-Section „Deep linking to custom settings" kennt daneben ausschließlich Notification- und Default-Apps-Einstellungen. Das Setzen einer Tastatursprache ist dokumentiert nur als `PrimaryLanguage`-Schlüssel in der `Info.plist` **einer Keyboard-Extension**. (4) **SwiftUI hat dafür keinen Modifier** (vollständiger Index-Scan am 2026-09-21): `.keyboardType(_:)` wählt den *Stil* — `UIKeyboardType.default` ist wörtlich „the default keyboard for **the current input method**", Typ und Eingabemethode sind also orthogonal —, `.textInputAutocapitalization` die Shift-Automatik, `.textContentType` die AutoFill-Vorschläge; `.textInputSuggestions` ist macOS-only; `typesettingLanguage` (iOS 17) betrifft die **Darstellung**, nicht die Eingabe. Auch `UITextInputTraits` hat in seiner vollständigen Member-Liste **kein** sprachbezogenes Trait. (5) **Risikoarm und dokumentiert ist dagegen `UIResponder.textInputContextIdentifier`** (iOS 7.0): „If you redefine this property and return a string value, UIKit tracks the current text input mode for the responder … remembered and restored whenever the responder becomes active" — Persistenz in den `UserDefaults` der App, Rücknahme über `clearTextInputContextIdentifier(_:)`. Kein SwiftUI-Äquivalent. (6) **Ersatzwege, die es nicht gibt:** Handschrift/Scribble ist bei Apple ausdrücklich Apple-Pencil-Eingabe („Configure text fields and custom views that accept text to handle input from Apple Pencil") und fällt weg, weil das Projekt iPhone-only ist; Diktat ist nicht steuerbar, `searchDictationBehavior(_:)` gilt nur für `searchable`-Suchfelder und `UITextInputContext` (iOS 16.4) ist rein berichtend. **Nicht dokumentiert und nur per Laufzeittest klärbar:** welchen `primaryLanguage` eine chinesische Pinyin-Tastatur meldet (Apples Beispiele nennen nur „es", „en-US", „fr-CA"), ob das Überschreiben durch ein `UIViewRepresentable` hindurch wirkt, und was das System mit einem Mode außerhalb von `activeInputModes` tut. **Nebenbedingung, die dazugehört:** `activeInputModes` ist „required reason API" (`NSPrivacyAccessedAPICategoryActiveKeyboards`, zulässiger Grund `54BD.1`) und verlangt bei einer App-Store-Einreichung eine `PrivacyInfo.xcprivacy` — die App liest es deshalb **nicht** (§9). **Konsequenz: In Phase 13 wird dazu nichts gebaut und nichts versprochen.** Die Kette `Deutsch → Hanzi → Pinyin` erzeugt das Hanzi ohne chinesische Tastatur, und wer von Hand tippen will, schaltet die Tastatur wie in jeder anderen App um. Die mögliche Reihenfolge für später steht im Roadmap-Backlog. | **Beantwortet (dokumentarisch)**; Laufzeit-Spike optional und nicht eingeplant | keines — die Kartenerstellung funktioniert ohne chinesische Tastatur |
+| Q13 | ~~Taugt `FoundationModels` für **Bulk-Kartenentwürfe** (Deutsch + Hanzi als strukturierte Liste) und für eine **deutsche Erklärung** zu einem chinesischen Quelltext?~~ **Am 2026-09-21 vollständig beantwortet — API aus Primärdoku, `swiftinterface` und Compile-Proben ([§11](#11-foundationmodels--geklärte-api-oberfläche-für-phase-14-2026-09-21)), Modellqualität auf dem iPhone 16 Pro unter iOS 27.0 (24A437) gemessen ([§12](#12-foundationmodels--gerätemessung-vom-2026-09-21-q13-messteil)). Die Antwort ist zweigeteilt: für die Erklärung ja, für Bulk-Entwürfe nein.** Geklärt und positiv: Framework und alles Nötige ab **iOS 26.0**, Target bleibt 26.0; `availability == .available`; **24 Sprachen mit `de-Latn-DE` und `zh-Hans-CN`**, `supportsLocale` gemessen `true` für `de-DE`, `de`, `zh-CN`, `zh-Hans`, `zh-Hans-CN`, `zh`; keine Berechtigung, kein Entitlement, kein Info.plist-Schlüssel; Modelldownload reine Systemsache (**kein `AssetInventory`-Gegenstück**); PCC ist ein separater Typ (iOS 27.0, managed Entitlement) **ohne automatischen Fallback** und wird nicht benutzt. **Gemessene Mechanik:** erbetene Anzahl in sechs Läufen exakt getroffen, **50 von 50 Hanzi in Han-Schrift**, Pinyin-Kette löst alle auf; `.count(10)` im Schema setzt sich gegen einen Prompt durch, der 100 verlangt; die Instructions setzen sich gegen einen Prompt durch, der eine fremde Sprache verlangt (**kein** `unsupportedLanguageOrLocale`); das Kontextfenster **wirft** bei Überschreitung mit `Content contains 4234 tokens, which exceeds the maximum allowed context size of 4096` — also real **4096** und etwa **0,86 Token je Hanzi**. **Gemessener Widerspruch zur Doku:** `rateLimited` trat **im Vordergrund** auf, und zwar ab der zweiten Anfrage; Taktung mit 30 s Abstand und dreimal 90 s Aufschlag half **nicht**, erst ein eigener Prozess je Anfrage. Für den Entwurf folgt daraus: **eine Anfrage je Nutzeraktion**, und `rateLimited` braucht einen echten UI-Pfad. **Der Grund für das Nein bei Bulk-Entwürfen:** In einer Stichprobe von **50 Einträgen** trugen **vier** eine falsche Bedeutung bei völlig unauffälligem Hanzi — `Abbruch\|结账`, `Speisekarte\|菜谱`, `Toast\|面包`, `Töpfe\|碗`. Das ist wörtlich die vorab festgelegte No-Go-Bedingung: falsches Lernmaterial, das wie richtiges aussieht, und die spezifizierte Vorschau aus Deutsch, Hanzi und Pinyin kann es nicht sichtbar machen. **Die Schwelle ist nach Kenntnis der Ergebnisse nicht verändert worden**, es ist kein externer Dienst und kein Plan B an die Stelle getreten; der Fall ist gestrichen und steht als neu zu spezifizierender Ansatz im Backlog. Erklärungen dagegen waren deutsch, knapp, ohne erfundene Grammatikregel und ohne Tonaussage — mit zwei dokumentierten Qualitätsmängeln (kaputtes Deutsch, ein erfundenes Wort) und einem Schemabefund: `examples` muss ein `@Generable`-Typ mit `chinese` und `german` sein, nicht `[String]`. **Nicht dokumentiert und hier nicht behauptet:** ob Apple für FoundationModels Nutzungsmetriken erhebt. Fehlertyp beim Target 26.0 ist `LanguageModelSession.GenerationError` (9 Fälle); ab iOS 27.0 deprecated — gemessen: bei `-target ios26.0` warnungsfrei, bei `-target ios27.0` eine Deprecation-Warnung. | **Geschlossen am 2026-09-21** | eingetreten und abgefangen: Der Bulk-Fall ist an der eigenen Messung gescheitert, **bevor** er im Produkt stand. Genau dafür war die Reihenfolge da. |
 
 ---
 
-## 11. Quellen
+## 11. FoundationModels — geklärte API-Oberfläche für Phase 14 (2026-09-21)
+
+Zwei Quellen, getrennt gehalten: die **Primärdokumentation** und das
+**installierte SDK**. Wo beide etwas sagen, steht es hier nur einmal; wo sie
+auseinandergehen, gilt nach der Regel aus §7 die `@available`-Annotation am
+Symbol.
+
+Was das Modell **inhaltlich leistet**, steht hier ausdrücklich **nicht**. Das
+ist Q13, und es ist ohne Gerät nicht zu beantworten. Der Unterschied ist
+derselbe wie in Phase 9: dass `SpeechAnalyzer` existiert, hieß nicht, dass die
+Erkennung trägt — das musste ein Benchmark zeigen, und er hat die Produktaussage
+verkleinert.
+
+**Werkzeugstand, gemessen:** Xcode 27.0 (Build 27A266a). Installiert ist
+**ausschließlich** das iPhoneOS-27.0-SDK; ein iOS-26-SDK liegt nicht mehr vor.
+Gelesen aus
+`FoundationModels.framework/Modules/FoundationModels.swiftmodule/arm64e-apple-ios.swiftinterface`
+(`-target arm64e-apple-ios27.0`, Apple Swift 6.4). Damit ist §1 dieses
+Dokuments in einem Punkt überholt — siehe die Korrektur dort.
+
+### 11.1 Das Deployment Target bleibt iOS 26.0
+
+**Alles, was die beiden geplanten Produktfälle brauchen, ist ab iOS 26.0
+verfügbar** — an den `@available`-Annotationen abgelesen, nicht angenommen:
+
+| Baustein | verfügbar ab |
+| --- | --- |
+| `SystemLanguageModel`, `.default`, `init(useCase:guardrails:)` | iOS 26.0 |
+| `availability`, `isAvailable`, `Availability`, `UnavailableReason` | iOS 26.0 |
+| `supportedLanguages: Set<Locale.Language>`, `supportsLocale(_:)` | iOS 26.0 |
+| `LanguageModelSession`, `respond(to:generating:…)`, `isResponding` | iOS 26.0 |
+| `streamResponse(to:generating:…)`, `prewarm(promptPrefix:)` | iOS 26.0 |
+| `@Generable`, `@Guide`, `GenerationGuide`, `GenerationOptions` | iOS 26.0 |
+| `Array: Generable where Element: Generable` | iOS 26.0 |
+| `SystemLanguageModel: Observable` | iOS 26.0 |
+| `contextSize` | iOS 26.0, `@backDeployed(before: 26.4)` |
+| `LanguageModelSession.GenerationError` (9 Fälle) | iOS 26.0, **deprecated ab 27.0** |
+| `tokenCount(for:)` | iOS 26.4 |
+| `PrivateCloudComputeLanguageModel`, `LanguageModelError`, `variant`, `Executor` | iOS 27.0 |
+
+Der Spike ist gegen das iOS-27-SDK mit unverändertem Target **iOS 26.0
+übersetzt worden**. Es gibt also keinen Grund, das Target anzuheben, und Phase 14
+fasst `project.pbxproj` nicht an — siehe auch §11.7, wo ein Anheben teuer wird.
+
+`UseCase` hat genau zwei Werte, `.general` und `.contentTagging`; `Guardrails`
+hat `.default` und `.permissiveContentTransformations`. Für beide Produktfälle
+ist `SystemLanguageModel.default` der Fall — kein `useCase`, keine
+Guardrail-Änderung.
+
+### 11.2 Verfügbarkeit: drei benannte Gründe, beobachtbar
+
+```swift
+enum Availability { case available; case unavailable(UnavailableReason) }
+enum UnavailableReason { case deviceNotEligible, appleIntelligenceNotEnabled, modelNotReady }
+```
+
+Genau diese drei, mit Apples Wortlaut: „The device does not support Apple
+Intelligence" / „Apple Intelligence is not enabled on the system" / „The models
+aren't available on the user's device" — letzteres mit dem Zusatz „Models are
+downloaded automatically based on factors like network status, battery level,
+and system load."
+
+**`SystemLanguageModel` ist `Observable`**, und Apples eigenes Beispiel hält
+`SystemLanguageModel.default` direkt in einer `View` und schaltet im `body` per
+Switch um. Der Zustand kann sich also während der App-Laufzeit ändern, und die
+Oberfläche kann darauf reagieren, ohne zu pollen. Verfügbarkeit hängt außerdem
+an der **Region**, nicht nur am Gerät.
+
+Nicht dokumentiert: wie schnell `availability` nach dem Einschalten von Apple
+Intelligence nachzieht, und ob `modelNotReady → available` tatsächlich eine
+View-Invalidierung auslöst. Für die UX heißt das: **bei jedem Einstieg neu
+abfragen, nie cachen** — dieselbe Begründung, die in §7 schon für
+`AssetInventory.status(forModules:)` steht.
+
+### 11.3 Sprachen: synchron, billig, und mit drei Fallen
+
+`supportsLocale(_:) -> Bool` ist **synchron** und wirft nicht; die Prüfung kostet
+nichts und kann vor dem Anbieten der Funktion stehen. Apple priorisiert sie
+ausdrücklich gegenüber `supportedLanguages`, weil sie Sprach-Fallbacks
+mitrechnet („such as `en-AU` and `en-NZ`"). Der Typ ist
+`Set<Locale.Language>` — **nicht** `[Locale]` wie bei `SpeechTranscriber`.
+
+Eine Sprachliste nennt die Framework-Doku nicht; Apples Support-Seite 121115
+führt für iOS 27 unter anderem **German** und **Chinese (simplified)**. Apple
+sagt zugleich: „language support improves over time in newer model and OS
+versions."
+
+Drei Punkte, die den Entwurf betreffen:
+
+1. **Das Modell ist mehrsprachig, antwortet aber in der Sprache der Eingabe** —
+   „the model may respond in either or both languages". Die Antwortsprache muss
+   in den `Instructions` festgenagelt werden. Apple empfiehlt zusätzlich die
+   **exakte** Phrase `The person's locale is \(locale.identifier).`, weil sie
+   „comes from the model's training, and reduces the possibility of
+   hallucinations in multilingual situations".
+2. **`Generable`-Typen und `@Guide`-Beschreibungen sind Modell-Input:** „all
+   inputs need to be in supported language for the model to understand,
+   including all `Generable` types and descriptions."
+3. **Die Guardrails greifen nur für unterstützte Sprachen.** Ein kurzer
+   fremdsprachiger Einschub wirft unter Umständen *kein*
+   `unsupportedLanguageOrLocale`.
+
+**Ob `supportsLocale(Locale(identifier: "zh_CN"))` auf dem Zielgerät `true`
+liefert, ist nicht dokumentiert** — exakt die Lage wie bei Q2, und exakt der
+Grund, warum der Spike es ausgibt statt es anzunehmen.
+
+### 11.4 Strukturierte Ausgabe trägt den Bulk-Fall
+
+Zwei Befunde machen den Entwurf überhaupt möglich:
+
+- **`extension Array: Generable where Element: Generable`** — eine Liste von
+  `@Generable`-Structs ist ein zulässiger Rückgabetyp, als Property eines
+  Wrappers und als Top-Level-Typ. „Gib mir 15 Einträge" braucht keinen
+  Textparser.
+- **`GenerationGuide` begrenzt Anzahlen:** `.count(Int)`,
+  `.count(ClosedRange<Int>)`, `.minimumCount(_:)`, `.maximumCount(_:)`,
+  `.element(_:)`. Die gewünschte Kartenzahl ist damit **Teil des Schemas**, nicht
+  nur eine Bitte im Prompt.
+
+Dahinter steht *constrained sampling*: „provides strong guarantees that the
+response is in a format you expect … prevents the model from producing malformed
+output". Zwei Nebenregeln aus der Doku: Properties werden **in
+Deklarationsreihenfolge** erzeugt, und Guide-Beschreibungen kosten Kontext
+(„Keep the descriptions as short as possible").
+
+
+**Eine Grenze, die den Entwurf sofort betrifft: `@Guide` ist ein Makro und nimmt
+nur Literale.** Eine zur Laufzeit gewählte Anzahl — der Nutzer will zwölf
+Karten — kann also nicht in ein `@Generable`-Schema. Zwei Wege:
+
+1. **Bereich im Schema, genaue Zahl im Prompt.** `.count(5...15)` begrenzt hart,
+   die Zwölf steht im Prompttext. Einfach, und ob das Modell die Zwölf trifft,
+   ist messbar statt vorausgesetzt.
+2. **`GenerationSchema` von Hand bauen** und über
+   `respond(to:schema:includeSchemaInPrompt:options:)` schicken. Damit ginge eine
+   exakte Laufzeitzahl, zum Preis eines selbstgebauten Schemas.
+
+Für Phase 14 ist Weg 1 gewählt; die Begründung steht dort.
+
+**Strukturvalidität ist nicht Faktenrichtigkeit, und eine Formatgarantie ist
+keine Anzahlgarantie.** Das Schema erzwingt Felder und Typen — nicht, dass `苹果`
+„Apfel" heißt, und laut Doku auch nicht nachweislich, dass genau 15 Elemente
+kommen. Beides ist der Grund, warum die Vorschau in Phase 14 Pflicht ist.
+
+### 11.5 Sessions sind Einwegware — anders als der TTS-Service
+
+Apple sagt es wörtlich: „For a single-turn interaction, **create a new session
+each time** you call the model", und Mehrfachnutzung nur „for a multiturn
+interaction — where the model retains some knowledge of what it produced". Beide
+Produktfälle sind Single-Turn.
+
+**Das ist das Gegenteil der Phase-7-Regel.** `SpeechSynthesisService` *muss* eine
+`AVSpeechSynthesizer`-Instanz für die App-Laufzeit halten; eine
+`LanguageModelSession` darf man genau deshalb **nicht** app-weit halten, weil
+alles im Kontextfenster akkumuliert (§11.6). Gehalten wird nur das `Observable`
+`SystemLanguageModel`.
+
+Dazu: `isResponding` — „You should not call any of the respond methods while
+this property is `true`. Disable buttons and other interactions"; eine Session
+verarbeitet nur eine Anfrage und „causes a runtime error if you call it again
+before the previous request finishes". Als Fehlerfall ist
+`GenerationError.concurrentRequests` dokumentiert — ob geworfen oder getrappt
+wird, ist damit **nicht eindeutig dokumentiert**. Konsequenz: Die App muss
+Überlappung **verhindern**, nicht abfangen.
+
+`prewarm(promptPrefix:)` lohnt nur „when you have a window of at least 1 second"
+und garantiert nichts.
+
+### 11.6 4096 Token pro Session — und ein Token pro Hanzi
+
+Die wichtigste Entwurfsgrenze, weil sie direkt an der Sprache dieses Produkts
+hängt:
+
+- **„Apple's on-device foundation model has a context window of 4096 tokens per
+  session."** Hinein zählt alles: „all prompts, instructions, tool definitions
+  and their input and output, generable type schemas, and all of the model's
+  responses."
+- **„In Latin alphabet languages such as English, a token typically represents
+  three to four characters. For multibyte languages such as Chinese … a token
+  typically represents one character."**
+
+Ein Hanzi kostet also rund vier Mal so viel Budget wie ein deutsches Zeichen.
+Das begrenzt zwei Dinge unmittelbar: wie viele Karten eine Bulk-Runde liefern
+kann, und wie viel Kartenbestand man einem Prompt überhaupt mitgeben könnte.
+`contextSize` ist bis iOS 27 backdeployed und gibt dort schlicht `4096` zurück.
+
+Zur Ausgabelänge: `GenerationOptions.maximumResponseTokens` existiert, aber Apple
+warnt — „Limiting tokens can cause the model to generate incomplete or
+grammatically incorrect responses, like ‚A cat is a small.'" Länge gehört in
+Prompt und `@Guide`, nicht in einen Token-Deckel.
+
+Rate Limits: In Apples Vergleichstabelle steht für das On-Device-Modell „Usage
+limits: Unlimited"; `rateLimited` „will **only** happen if your app is running
+in the background and exceeds the system defined rate limit". Die Schwelle selbst
+ist nicht dokumentiert. Konsequenz: beide Funktionen nur im Vordergrund
+auslösen.
+
+**Energie und Latenz sind nicht dokumentiert** — Apple nennt nur „may take a few
+seconds" und Thermik als Messhygiene. Wer hier Zahlen nennen will, muss messen.
+
+#### Gemessener Widerspruch: `rateLimited` im Vordergrund
+
+**Apples Aussage:** `rateLimited` „will **only** happen if your app is running in
+the background and exceeds the system defined rate limit."
+
+**Gemessen am 2026-09-21, iPhone 16 Pro, iOS 27.0 (24A437), App im
+Vordergrund:** Die **erste** Anfrage lief durch (10,3 s, vollständiges
+Ergebnis). Die **zweite**, elf Sekunden später gestartet, warf `rateLimited` —
+und danach jede weitere, jeweils in Millisekunden. Neun von elf Messblöcken
+haben damit den Rate-Limiter gemessen statt das Modell.
+
+Im Systemlog steht dazu mehr als im Fehlertext:
+
+```
+[IPC] Passing along Client rate limit exceeded, try again later in response to ExecuteRequest
+[TokenGenerator] Failed to fetch model metadata. Rate limited. Wait a little bit and then try again.
+[textAnalyzer] End sanitizeText with error: … SafetyGuardrailTextSanitizerBackend … Rate limited.
+```
+
+Bemerkenswert ist die dritte Zeile: Begrenzt wurde (auch) der
+**Guardrail-Textsanitizer**, nicht nur die Tokenerzeugung. Der Fehlertext, den
+die App sieht, nennt davon nichts und empfiehlt stattdessen, im Hintergrund
+keine Streaming-Anfragen zu benutzen — ein Ratschlag, der hier nicht passt, weil
+nichts im Hintergrund lief und nicht gestreamt wurde.
+
+**Was daraus folgt, und was nicht.** Nicht gefolgert wird, dass Apples
+Dokumentation über den *Produktfall* falsch ist: Ein Testlauf ist nicht dasselbe
+wie eine App im Vordergrund mit einem Menschen davor, und ein XCTest-Host ist
+möglicherweise nicht „foreground" im Sinne des Systems. Belegt ist aber, dass
+**eine schnelle Folge von Anfragen zuverlässig am Rate-Limit scheitert**, und
+zwar ohne Hintergrundbetrieb. Für den Entwurf heißt das:
+
+- Der Fehlerfall `rateLimited` ist **kein theoretischer Fall** und braucht einen
+  echten UI-Pfad, keine Fußnote.
+- **Eine Anfrage je Nutzeraktion** ist nicht nur sparsam, sondern die Bedingung
+  dafür, dass es überhaupt funktioniert. Eine Oberfläche, die eine Bulk-Runde in
+  mehrere Anfragen zerlegt oder automatisch nachlegt, läuft in genau diesen
+  Fehler.
+- Der Messaufbau taktet seither: 30 s Abstand, bei Rate-Limit 90 s Aufschlag und
+  bis zu drei Versuche. Das ist **Messhygiene und verschiebt kein
+  Qualitätskriterium** — die Go/No-Go-Regeln der Roadmap sind Wort für Wort
+  unverändert geblieben.
+
+### 11.7 Die Fehlerfälle sind benannt — und der richtige Typ hängt am Target
+
+`LanguageModelSession.GenerationError` hat neun Fälle, jeder mit einem `Context`,
+der außer `debugDescription` nichts hergibt:
+
+`exceededContextWindowSize`, `assetsUnavailable`, `guardrailViolation`,
+`unsupportedGuide`, **`unsupportedLanguageOrLocale`**, `decodingFailure`,
+`rateLimited`, **`concurrentRequests`**, `refusal`.
+
+Vier sind für dieses Produkt unmittelbar relevant:
+
+- **`unsupportedLanguageOrLocale`** — der Fall, den Q13 messen muss.
+- **`concurrentRequests`** — siehe §11.5: verhindern, nicht abfangen.
+- **`assetsUnavailable`** — „can happen if the user disables Apple Intelligence
+  while your app is running". Später erneut versuchen.
+- **`guardrailViolation` / `refusal`** — eine Anfrage kann abgelehnt werden, und
+  **bei guided generation gibt es dafür keinen Platzhalter**: das Modell wirft.
+  `permissiveContentTransformations` hilft hier nicht, es wirkt laut Doku nur für
+  String-Ausgaben.
+
+**Gemessen mit `swiftc -typecheck` gegen das iOS-27-SDK:** bei
+`-target arm64-apple-ios26.0` erzeugt `catch let error as
+LanguageModelSession.GenerationError` **keine Warnung**; bei
+`-target arm64-apple-ios27.0` erzeugt dieselbe Zeile
+`warning: 'GenerationError' was deprecated in iOS 27.0`.
+
+Das ist ein handfestes Argument für das unveränderte Target: **Solange es 26.0
+ist, ist `GenerationError` der richtige und warnungsfreie Typ.** Ein Anheben
+bricht das Null-Warnungs-Gate an genau dieser Stelle und will als eigener,
+bewusster Schritt geplant werden — die Nachfolger stehen namentlich in den
+Deprecation-Messages (`LanguageModelError.contextSizeExceeded`,
+`SystemLanguageModel.Error.assetsUnavailable`, `LanguageModelError.refusal`, …).
+
+### 11.8 Privatsphäre: der Cloud-Pfad ist ein anderer Typ, dreifach verriegelt
+
+`PrivateCloudComputeLanguageModel` ist eine **eigene Klasse**, kein Modus von
+`SystemLanguageModel`. Der Weg dorthin ist dreifach verriegelt:
+
+1. Der Typ existiert erst ab **iOS 27.0** — beim Target 26.0 ist er ein
+   Compilerfehler, nicht eine Option.
+2. Er braucht das **managed Entitlement** `com.apple.developer.private-cloud-compute`.
+3. Er muss **explizit instanziiert** werden:
+   `LanguageModelSession(model: PrivateCloudComputeLanguageModel())`.
+
+**Einen automatischen Fallback von On-Device auf PCC gibt es nicht** — Apple
+beschreibt den umgekehrten Weg sogar als Aufgabe des Entwicklers („if the request
+fails because the network connection is unavailable, retry the request using the
+on-device model"). Apples Vergleichstabelle für `SystemLanguageModel`: „Preserves
+privacy ✅", „**Works offline ✅**", „Usage limits Unlimited", „Context size 4K".
+
+Für harte Regel 8 (kein Server, keine Telemetrie) ist das die tragende Naht:
+**Die App benutzt ausschließlich `SystemLanguageModel` und erwähnt
+`PrivateCloudComputeLanguageModel` nirgends.**
+
+**Eine Lücke, die benannt gehört:** Apple formuliert für FoundationModels
+**keinen** Satz vom Kaliber der Translation-Zusage („Apple may collect API usage
+and performance metrics … but not the content"). Belegt sind „on-device" und
+„Works offline ✅". Ob Apple Nutzungsmetriken erhebt, ist für dieses Framework
+**nicht dokumentiert** — und wird hier weder behauptet noch bestritten. Die
+belastbare eigene Messung ist der Flugmodus-Test.
+
+Nebenaspekt für die Entwicklungszeit: Eine Instruments-Aufnahme „captures and
+stores all Foundation Models prompts and responses in an **unencrypted** form".
+Betrifft Trace-Dateien, nicht die App.
+
+### 11.9 Kein `AssetInventory` — einfacher als Phase 9
+
+Das Framework hat **keinen** Typ, der Assets reserviert, anfordert oder
+freigibt: kein `AssetInventory`, kein `reserve(locale:)`, kein
+`status(forModules:)`. Die einzige Bereitschaftsinformation ist `availability`.
+Modelldownloads löst das **System** aus, Modellupdates kommen „as part of regular
+OS updates".
+
+Für die Architektur heißt das: **kein Download-Flow, kein Reservierungszustand,
+kein Fortschritts-UI** — nur eine Bereitschaftsabfrage vor jeder Nutzung. Der
+ganze Apparat, den Phase 9 für die Erkennungsmodelle brauchte, entfällt hier.
+
+### 11.10 Was Apple dem Modell selbst abspricht
+
+Apples eigene Tabelle „Capabilities to avoid" nennt: **„Do basic math"**,
+**„Create code"**, **„Perform logical reasoning"**. In der PCC-Vergleichstabelle
+steht für `SystemLanguageModel` schlicht „Reasoning: **Not supported**", dazu
+„Because of their smaller size, on-device models have limited reasoning
+abilities" und der ausdrückliche Hinweis, dass das Modell halluzinieren kann.
+
+Zwei Folgerungen für dieses Produkt:
+
+- **Kein Pinyin aus dem Modell.** Die an 372 Fällen gemessene
+  `ChineseLexicon`/`ToneSandhi`-Kette ist belegt genau; ein Modell, dem Apple
+  Faktentreue abspricht, wäre ein Rückschritt und entwertete Q6 und Q10. Das
+  Modell liefert Deutsch und Hanzi, den Rest macht der bestehende Code.
+- **Ein Erklärungstext ist ein Vorschlag**, kein Nachschlagewerk, und muss als
+  generiert gekennzeichnet sein.
+
+Dazu die Injection-Regel: **`Instructions` haben Vorrang vor dem Prompt**, und
+Apple warnt — „don't include input from people or any unverified input in the
+instructions." Die Themenbeschreibung des Nutzers („15 häufige Wörter zum Thema
+Restaurant") ist damit **Prompt, nie Instruction**.
+
+### 11.11 Was bewusst nicht untersucht wurde
+
+**Tool Calling** existiert (`LanguageModelSession(tools:)`, iOS 26.0), wird aber
+nicht gebraucht — Apple selbst: „Skip tool calling when you don't need the model
+to make decisions. If the model always needs specific information, retrieve it
+directly and include it in your prompt." In beiden Fällen ist der Input
+vollständig bekannt. Und fachlich wäre es der falsche Weg: Ein Werkzeug, das
+SwiftData liest oder schreibt, ist genau der Pfad, auf dem Modellausgabe zur
+Datenbankmutation wird — in Phase 14 ausdrücklich verboten.
+
+**`Adapter`** (eigene trainierte Adapter) ist vorhanden und in iOS 27.0 als
+obsoleted markiert. Kein Thema für dieses Produkt.
+
+**`.contentTagging`** als `UseCase` ist nicht ausgewertet; `.general` ist der
+Fall für beide Funktionen.
+
+---
+
+## 12. FoundationModels — Gerätemessung vom 2026-09-21 (Q13, Messteil)
+
+**Gerät:** iPhone 16 Pro, **iOS 27.0 (Build 24A437)**, Apple Intelligence
+eingeschaltet, App im Vordergrund, Gerät entsperrt. Messaufbau:
+`CAppTests/FoundationModelsSpike.swift` (temporär), Target unverändert
+iOS 26.0, gebaut mit Xcode 27.0 gegen das iOS-27-SDK.
+
+Die vollständigen Blockausgaben liegen dem Messprotokoll bei; hier steht, was sie
+für die Entscheidung bedeuten.
+
+### 12.1 Die Messmethode musste zweimal korrigiert werden
+
+Das gehört an den Anfang, weil sonst die Zahlen falsch gelesen werden.
+
+**Erster Lauf:** Block 1 und 2a lieferten Ergebnisse, **alle neun übrigen Blöcke
+scheiterten an `rateLimited`** — im Vordergrund, was Apples Doku ausschließt
+(§11.6).
+
+**Zweiter Lauf, getaktet** mit 30 s Abstand und 90 s Aufschlag bei Rate-Limit,
+bis zu drei Versuche: **unverändert.** Nur die erste Anfrage des Prozesses ging
+durch; alle weiteren blieben rate-limited, auch nach dreieinhalb Minuten Warten.
+Warten hilft nicht.
+
+**Dritter Lauf, ein Prozess je Block** — dreizehn getrennte
+`xcodebuild test-without-building`-Aufrufe: **dreizehn von dreizehn Blöcken
+gemessen, null Rate-Limits.**
+
+**Der Befund ist damit: Auf dem Gerät gelingt in diesem Aufbau genau eine
+Modellanfrage je Prozess.** Ob das am XCTest-Host hängt — der möglicherweise
+nicht als „foreground" gilt — oder allgemeiner ist, lässt sich von hier aus nicht
+entscheiden, und es wird hier nicht behauptet. Für den Entwurf zählt die
+belastbare Hälfte: **Eine schnelle Folge von Anfragen scheitert zuverlässig.**
+Die Regel „eine Anfrage je Nutzeraktion" ist damit gemessen begründet und nicht
+nur sparsam.
+
+Am Messgerüst wurde außerdem ein Mangel behoben: Fehlerpfade kehrten ohne
+Blockausgabe zurück und druckten deshalb nichts. Jetzt druckt **jeder** Pfad
+seinen Block — ein Fehler ist ein Messergebnis. **Keines der
+Qualitätskriterien ist angefasst worden.**
+
+### 12.2 Block 1 — Verfügbarkeit und Sprachen: positiv, und eine Falle
+
+```
+availability: available     isAvailable: true
+supportedLanguages (24): da-Latn-DK de-Latn-DE en-Latn-AU en-Latn-GB en-Latn-IN
+  en-Latn-US es-Latn-419 es-Latn-ES es-Latn-US fr-Latn-CA fr-Latn-FR it-Latn-IT
+  ja-Jpan-JP ko-Kore-KR nb-Latn-NO nl-Latn-NL pt-Latn-BR pt-Latn-PT sv-Latn-SE
+  tr-Latn-TR vi-Latn-VN zh-Hans-CN zh-Hant-HK zh-Hant-TW
+supportsLocale: de-DE ✓  de ✓  zh-CN ✓  zh-Hans ✓  zh-Hans-CN ✓  zh ✓
+Locale.current: en_DE → true
+```
+
+**Beide Zielsprachen sind unterstützt, gemessen statt aus Apples Sprachliste
+geschlossen.** `de-Latn-DE` und `zh-Hans-CN` stehen namentlich in
+`supportedLanguages`, und `supportsLocale` sagt für jede gefragte Schreibweise
+`true`.
+
+**Die Falle: `Locale.current` ist auf diesem Gerät `en_DE`.** Eine Prüfung über
+`Locale.current` hätte hier zufällig `true` ergeben und im Produkt trotzdem die
+falsche Frage gestellt. Die Spezifikation prüft `de_DE` und `zh_CN`
+**ausdrücklich** — diese Messung belegt, warum das nötig ist.
+
+### 12.3 Block 2 — Bulk-Entwürfe: die Mechanik trägt vollständig
+
+Über fünf gemessene Wortläufe (2a zweimal, 2b, 2d, 4a) und einen Satzlauf:
+
+| Gemessen | Ergebnis |
+| --- | --- |
+| Anzahl erbeten / geliefert | **immer exakt getroffen** — 10/10, 10/10, 10/10, 10/10, 10/10, 5/5 |
+| Hanzi in Han-Schrift | **50 von 50**, kein Latein, kein Pinyin im Hanzi-Feld |
+| Pinyin durch die bestehende Kette auflösbar | **alle**, inklusive lexikonunbekannter Komposita über den Fallback |
+| Pinyin als prüfbedürftig markiert | 3 — zwei davon Eigennamen (安娜, 汉斯), also korrekt markiert |
+| Dauer je Anfrage | 4,2 s bis 10,5 s |
+| Dubletten **innerhalb** einer Antwort | **2 gefunden** — siehe unten |
+| Kollisionen mit vorhandenen Karten | **2 gefunden** (水, 面包 gegen einen Bestand von fünf Begriffen) |
+
+**Die Dublettenregel ist nicht Vorsicht, sie ist belegt nötig.** Das Modell hat
+in einem Lauf `火车` zweimal geliefert — als „Zug" und als „Bahn" — und in einem
+anderen zweimal „Töpfe", für `锅` und `碗`. Beide Fälle hat die deterministische
+Prüfung erkannt, der eine über den Hanzi-Schlüssel, der andere über den deutschen.
+**Beide Zweige der Regel aus der Roadmap haben also an echten Daten gegriffen.**
+
+Die Sätze (5/5) waren korrekt übersetzt, aber im Register daneben: `母亲`/`父亲`
+statt `妈妈`/`爸爸` für HSK1, und zwei der fünf Sätze sind inhaltlich seltsam
+(„Ich habe eine Mutter."). Kein Fehler, aber auch kein gutes Lernmaterial.
+
+### 12.4 Die Qualität der Bedeutungen — als Zählung, nicht als Quote
+
+**Stichprobe: 50 Worteinträge aus fünf benannten Läufen.** Die semantische
+Beurteilung ist eine Lesung von Hand und als solche nachprüfbar, keine Messung.
+
+- **Rund 40 Einträge sind klar richtig und brauchbar.**
+- **Rund 6 sind erkennbar schief** und in der Vorschau auffindbar: schiefes
+  Deutsch (`Serviergerät|餐具`), konstruierte Komposita
+  (`Taxi-Fahrt|出租车行程`), thematisch schwache, aber korrekte Paare
+  (`Licht|灯`, `Kosten|费用`), zwei Dubletten, die die Regel fängt.
+- **4 Einträge tragen eine falsche Bedeutung bei unauffälligem Hanzi:**
+
+  | Entwurf | Tatsächliche Bedeutung |
+  | --- | --- |
+  | `Abbruch \| 结账` | abrechnen, die Rechnung bezahlen |
+  | `Speisekarte \| 菜谱` | Kochbuch, Rezept — die Speisekarte ist 菜单 |
+  | `Toast \| 面包` | Brot |
+  | `Töpfe \| 碗` | Schüssel, Schale |
+
+**Daraus wird keine Prozentzahl als allgemeines Qualitätsversprechen
+abgeleitet** — nicht hier, nicht in der App, nicht in einem Hinweistext. Es ist
+eine Zählung an einer benannten Stichprobe von 50 Einträgen, und sie sagt nichts
+über den nächsten Lauf.
+
+**Warum die vier der entscheidende Befund sind:** Sie sehen aus wie richtige
+Karten. Das Hanzi ist korrekt geschrieben, das Pinyin löst sauber auf, das
+deutsche Wort ist ein echtes deutsches Wort. Ein Lernender, der `结账` noch nicht
+kennt — und wer die Karte anlegt, kennt es nicht —, hat in der Vorschau **keine
+Information**, an der er den Fehler erkennen könnte. Die App zeigt dort heute
+Deutsch, Hanzi und Pinyin; alle drei sind in diesen vier Fällen unauffällig.
+
+**Das gebündelte Lexikon kann diese Lücke heute nicht schließen.** Geprüft:
+`ChineseLexicon` lädt ausschließlich Lesungen, Ambiguitätsmarker und Grundtöne
+(`cedict-readings.txt`, `cedict-ambiguous.txt`, `cedict-base-tones.txt`) —
+**keine Bedeutungen.** Die CC-CEDICT-Quelle enthält englische Definitionen, das
+Asset führt sie aber nicht, und die Rohquelle liegt nicht im Repository.
+
+### 12.5 Block 3 — Erklärungen: formal in Ordnung, inhaltlich dünn
+
+Fünf Karten, alle fünf beantwortet, 2,4 s bis 3,0 s, 154 bis 254 Zeichen.
+
+**Erfüllt:** durchgehend Deutsch, knapp, höchstens zwei Beispiele, **keine
+erfundene Grammatikregel**, **keine Aussage über Töne**, kein Score, keine
+Prozentangabe.
+
+**Zwei Qualitätsmängel, die benannt gehören:**
+
+- **Kaputtes und erfundenes Deutsch.** „Der Begriff bezeichnet einen Obstsorten
+  namens Apfel" ist grammatisch falsch und zugleich leer. „um eine allgemeine
+  **Gegenstandsfähigkeit** auszudrücken" ist ein erfundenes Wort.
+- **Inhaltlich dünn.** Bei `东西` fehlt alles, was die Karte interessant macht:
+  der Gebrauch in `买东西`, die wörtliche Herkunft, der abschätzige Gebrauch für
+  Personen. Die Erklärung sagt im Kern „etwas Allgemeines" — das stand schon auf
+  der Karte.
+
+**Ein Schemafehler, und er ist meiner, nicht der des Modells.** `examples` war
+als `[String]` deklariert. In drei von fünf Fällen hat das Modell daraufhin
+**Slot 1 chinesisch und Slot 2 deutsch** gefüllt — also *ein* Beispiel als zwei
+Einträge (`吃早餐` / `Frühstück essen`), statt zwei Beispiele zu liefern. In den
+beiden anderen Fällen hat es beides in einen String gepackt
+(`我想吃点东西 - Ich möchte etwas essen.`). **Folge für die Spezifikation:** Ein
+Beispiel ist ein `@Generable`-Typ mit zwei Feldern (`chinese`, `german`), nicht
+ein String. Das ist genau die Art Befund, für die der Spike existiert.
+
+### 12.6 Block 4 — die Fehlerfälle, alle drei aufschlussreich
+
+**4a — Prompt verlangt eine fremde Sprache.** „Erstelle 10 Wörter zum Thema
+Küche **auf Suaheli**." Ergebnis: **kein Fehler**, und das Modell hat den
+Suaheli-Wunsch **ignoriert** — zehn deutsch/chinesische Einträge.
+`unsupportedLanguageOrLocale` trat nicht auf. Das bestätigt Apples Aussage, dass
+`Instructions` Vorrang vor dem Prompt haben, **an dem Fall, der für dieses
+Produkt zählt**: Die Nutzerbeschreibung kann die festgelegte Sprache nicht
+umbiegen. Die Injection-Naht der Spezifikation — Beschreibung in den Prompt, nie
+in die Instructions — ist damit gemessen wirksam.
+
+**4b — `.count` gegen einen Prompt, der das Zehnfache verlangt.** Prompt: „100
+häufige Wörter". Schema: exakt `.count(10)`. Ergebnis: **genau 10, kein Fehler.**
+Die Doku gibt über die Elementzahl keine Garantie (§11.4); **gemessen hat das
+Schema sich in diesem Fall gegen den Prompt durchgesetzt.** Ein Fall ist kein
+Beweis, aber es ist die richtige Richtung, und es stützt den Entwurf, die
+Bandbreite ins Schema zu legen.
+
+**4c — Prompt über dem Kontextfenster.** 4940 Hanzi Fülltext. Ergebnis: **es
+wirft**, mit einer präzisen Meldung —
+
+```
+Content contains 4234 tokens, which exceeds the maximum allowed context size of 4096.
+```
+
+Drei Befunde daraus: Das Fenster ist real **4096**; die Grenze **wirft statt
+still abzuschneiden**; und die Umrechnung stimmt etwa mit der Doku — 4940 Hanzi
+ergaben 4234 Token, also knapp **0,86 Token je Hanzi**. Damit ist auch belegt,
+dass der Kartenbestand nicht in den Prompt passt: Schon rund 4000 Hanzi sprengen
+das Fenster, und das sind bei zweisilbigen Wörtern etwa 2000 Karten — aber die
+Instructions, das Schema und die Antwort müssen mit hinein, und die Grenze
+kommt entsprechend früher. **Die Dublettenprüfung gehört in die App**, wie
+spezifiziert.
+
+---
+
+## 13. Quellen
 
 Primärquellen (Apple Developer Documentation):
 

@@ -7,11 +7,12 @@ wird getestet, bevor die nächste beginnt.
 
 **Die finale Abnahme ist am 2026-09-21 erneut nach hinten gerückt**, hinter
 [Phase 13](#phase-13--lernflow--assisted-classification-ux) und
-[Phase 14](#phase-14--ai-integration). Der Grund ist derselbe wie beim ersten
-Mal: Beide Phasen verändern das Produkt real — Phase 13 den gesamten
-Bedienfluss der Lernkarte und das Schema, Phase 14 ist noch nicht einmal im
-Umfang entschieden —, und eine Abnahme vor ihnen würde etwas abnehmen, das so
-nicht ausgeliefert wird. **Die bisherige Abnahme- und Gerätetesthistorie
+[Phase 14](#phase-14--ai-erklärung-zu-einer-karte). Der Grund ist derselbe wie
+beim ersten Mal: Beide Phasen verändern das Produkt real — Phase 13 den gesamten
+Bedienfluss der Lernkarte und das Schema —, und eine Abnahme vor ihnen würde
+etwas abnehmen, das so nicht ausgeliefert wird. **Phase 14 ist durch ihre eigene
+Messung kleiner geworden** (Task 14.0, am 2026-09-21 erledigt): Der Bulk-Fall ist
+gemessen gescheitert und gestrichen, geblieben ist die Erklärung zu einer Karte. **Die bisherige Abnahme- und Gerätetesthistorie
 bleibt vollständig stehen**; sie sind Entwicklungsbelege für die jeweils
 geprüften Pfade.
 
@@ -3141,35 +3142,430 @@ verengt).
 
 ---
 
-## Phase 14 — AI-Integration
+## Phase 14 — AI-Erklärung zu einer Karte
 
-**Platzhalter. Umfang noch nicht spezifiziert — Stand 2026-09-21.**
+**Spezifiziert, gemessen und zugeschnitten am 2026-09-21. Noch nicht
+implementiert.**
 
-Diese Phase steht in der Reihenfolge, damit die finale Abnahme das fertige
-Produkt prüft und nicht einen Zwischenstand. **Was sie enthält, ist nicht
-entschieden**, und es wird hier auch nicht vorweggenommen: Ein Scope, der vor
-seiner eigenen Entscheidung aufgeschrieben wird, ist eine Vermutung mit
-Kästchen davor.
+Die Phase begann mit zwei Produktfällen und endet mit einem. **Fall B — eine
+kurze, deutsche Erklärung zu einer vorhandenen Karte — ist gebaut worden, weil
+die Messung ihn trägt. Fall A — Bulk-Kartenentwürfe aus einer Beschreibung — ist
+an der vorab festgelegten No-Go-Bedingung gescheitert** und wird nicht gebaut.
+Der Befund steht unten und ist der Grund, warum diese Phase so klein ist wie sie
+ist.
 
-Zu klären ist sie nach demselben Muster wie jede technisch unsichere Phase
-dieses Projekts — **erst Spike und Dokumentation, dann Produktcode** (Phasen 9
-und 12) —, und mindestens diese Fragen gehören vor den ersten Task:
+Das ist die Reihenfolge, die dieses Projekt seit Phase 9 hat: **erst messen, dann
+behaupten.** Sie hat damals eine Produktaussage kassiert, bevor sie im Produkt
+stand, und sie kassiert hier ein ganzes Feature. Die vollständige Gerätemessung
+steht in
+[apple-frameworks.md §12](apple-frameworks.md#12-foundationmodels--gerätemessung-vom-2026-09-21-q13-messteil),
+die geklärte API-Oberfläche in
+[§11](apple-frameworks.md#11-foundationmodels--geklärte-api-oberfläche-für-phase-14-2026-09-21),
+Q13 ist damit geschlossen.
 
-- **Welches Lernproblem** löst sie, das die vorhandenen Modi nicht lösen?
-- **Auf dem Gerät oder über einen Dienst?** Harte Regel 2 (keine externen
-  Dependencies, kein Backend, kein Laufzeit-SDK) und harte Regel 8 (keine
-  Telemetrie, kein Server, kein Login) gelten unverändert. Eine Lösung, die
-  Kartentexte an einen Dienst gibt, widerspricht dem local-first-Anspruch
-  dieser App und wäre eine ausdrückliche, begründete Ausnahme — keine
-  Nebenwirkung einer Feature-Entscheidung.
-- **Was darf sie behaupten?** Harte Regel 7 gilt: keine
-  Aussprachebewertung, kein Score. Ein Modell, das „gut ausgesprochen" sagt,
-  sagt es auf derselben unbelegten Grundlage wie ein Textvergleich.
-- **Was passiert, wenn sie nicht verfügbar ist?** Harte Regel 5: Automatik
-  blockiert nie. Die App muss ohne sie vollständig benutzbar bleiben.
+### Ziel
 
-Bis diese Fragen beantwortet sind, hat diese Phase **keine
-Akzeptanzkriterien** — und ohne Akzeptanzkriterien wird nichts implementiert.
+**Eine Karte erklärt sich nicht selbst.** `一点` heißt „ein bisschen", aber wann
+man es benutzt, wie ein Satz damit aussieht und was daran besonders ist, steht
+nirgends. Das gebündelte Wörterbuch liefert die Lesung, nicht den Gebrauch — es
+führt nicht einmal Bedeutungen, nur Lesungen, Ambiguitätsmarker und Grundtöne.
+
+Die Phase schließt diese Lücke für den Moment des Lernens und des Durchsehens:
+ein kurzer Text auf Abruf, sichtbar als erzeugt gekennzeichnet, nicht
+gespeichert.
+
+**Was sie ausdrücklich nicht will:** am Lernen mitreden. Der Lernstand gehört dem
+Lernenden (Phase 13), die Bewertung ist textuell und behauptet nichts (harte
+Regel 7), und ein Modell, dem Apple selbst „Reasoning: Not supported"
+bescheinigt, ist der letzte Kandidat für eine Einstufungsentscheidung.
+
+### Scope
+
+- **Fall B — Erklärung zu einer bestehenden Karte.** Bedeutung, Gebrauch,
+  höchstens zwei Beispiele. Strukturiert über `@Generable`, deutsch,
+  gekennzeichnet, **nicht persistiert**.
+- **Zwei Einstiege, ein Sheet** (P5): Kontextmenü der Kartenliste und
+  **aufgedeckte** Lernkarte.
+- **Verfügbarkeits- und Fallback-UX** für die fünf Zustände aus §11.2, dazu eine
+  Zustandszeile in den Einstellungen (P6).
+- **Prompt-Versionierung** und die Aufzeichnung, gegen welche OS- und
+  Modellversion gemessen wurde.
+
+Das ist alles. Es gibt in dieser Phase **keinen neuen Datentyp, kein neues
+Attribut, keine Migration und keinen einzigen Schreibzugriff auf den Store.**
+
+### Ausdrücklich nicht in dieser Phase
+
+- **Keine Bulk-Kartenentwürfe.** Gemessen gescheitert, Begründung im nächsten
+  Abschnitt. Nicht „später in dieser Phase", nicht „in abgespeckter Form".
+- **Keine Aussprachebewertung durch das Modell.** Harte Regel 7 gilt unverändert.
+  Kein Score, kein Prozentwert, kein Ton-Feedback — auch nicht im Erklärtext.
+- **Kein Einfluss auf den Lernstand.** Das Modell liest `LearningStatus` nicht
+  und schreibt ihn nicht, schreibt keinen `ReviewLog`, keinen `reviewCount`,
+  keinen `correctCount`. Die assistierte Einstufung aus Phase 13 bleibt
+  vollständig regelbasiert und unberührt. **`CApp/Learning/` bleibt unverändert**
+  — dieselbe Zusage wie in Phase 9, am Diff nachprüfbar.
+- **Kein Schreibzugriff, gar keiner.** Fall B liest eine Karte und schreibt
+  nichts. Kein Insert, kein Save, kein Delete.
+- **Kein Tool Calling** (§11.11), **keine agentische Werkzeugkette, keine
+  Websuche, kein Chatbot.**
+- **Kein Pinyin aus dem Modell.** Die an 372 Fällen gemessene
+  `ChineseLexicon`/`ToneSandhi`-Kette bleibt die Quelle.
+- **Kein externer Dienst, kein API-Key, kein Backend, keine Private Cloud
+  Compute.** `PrivateCloudComputeLanguageModel` wird nirgends importiert oder
+  erwähnt (§11.8).
+- **Kein Anheben des Deployment Targets.** Es bleibt iOS 26.0; §11.7 nennt den
+  Preis, der sonst fällig wäre.
+- **Kein Asset- oder Download-Management** (P6). Das Framework gibt es nicht her
+  (§11.9), anders als Phase 9.
+
+### Warum Fall A nicht gebaut wird — der gemessene Befund
+
+Die Go/No-Go-Regeln standen **vor** der Messung in diesem Dokument und sind nach
+ihr nicht angefasst worden. Für Fall A lauteten sie:
+
+> **Go**, wenn in beiden Wortthemen die deutliche Mehrheit der Einträge brauchbar
+> ist, die Hanzi in Han-Schrift und vereinfacht kommen und die bestehende
+> Pinyin-Kette sie auflöst.
+>
+> **No-Go**, wenn Einträge unbrauchbar sind, ohne dass man es in der Vorschau
+> erkennen kann — falsche Bedeutung bei unauffälligem Hanzi.
+
+**Die Go-Bedingungen sind erfüllt.** 50 von 50 Hanzi kamen in Han-Schrift, die
+Pinyin-Kette löste alle auf, die erbetene Anzahl wurde in allen sechs Läufen
+exakt getroffen, und rund 40 der 50 Einträge sind klar brauchbar. Die Mechanik
+funktioniert also — und zwei Regeln der Spezifikation haben sich an echten Daten
+bewährt: Die **Dublettenprüfung** fing `火车` („Zug" und „Bahn") und `锅`/`碗`
+(beide „Töpfe"), je über einen anderen Schlüssel, und das **Anzahl-Schema** setzte
+sich mit exakt 10 gegen einen Prompt durch, der 100 verlangte.
+
+**Die No-Go-Bedingung ist ebenfalls erfüllt.** Sie ist keine Zählgrenze, sondern
+eine Existenzaussage, und diese Einträge existieren — vier von fünfzig:
+
+| Entwurf | Tatsächliche Bedeutung |
+| --- | --- |
+| `Abbruch \| 结账` | abrechnen, die Rechnung bezahlen |
+| `Speisekarte \| 菜谱` | Kochbuch, Rezept — die Speisekarte ist 菜单 |
+| `Toast \| 面包` | Brot |
+| `Töpfe \| 碗` | Schüssel, Schale |
+
+**Warum das schwerer wiegt als die guten vierzig.** Diese Karten sehen richtig
+aus. Das Hanzi ist korrekt geschrieben, das Pinyin löst sauber auf, das deutsche
+Wort ist ein echtes deutsches Wort. Die Vorschau zeigt Deutsch, Hanzi und
+Pinyin — bei allen vier ist alles davon unauffällig. Und wer eine Karte für
+`结账` anlegt, kennt `结账` nicht; sonst bräuchte er sie nicht. **Der Fehler wäre
+nicht abwählbar, sondern unsichtbar**, und das Ergebnis wäre falsches
+Lernmaterial, das über Monate abgefragt wird.
+
+Eine Zählung, kein Versprechen: **vier von fünfzig an einer benannten
+Stichprobe.** Daraus wird keine Prozentzahl als allgemeine Qualitätsaussage
+abgeleitet, und schon gar keine Beruhigung — die Stichprobe sagt nichts über den
+nächsten Lauf.
+
+**Was hier nicht passiert ist:** Die Grenze wurde nicht verschoben, nachdem die
+Ergebnisse vorlagen. Es ist kein externer Dienst an die Stelle getreten, kein
+Plan B, keine abgeschwächte Variante. Fall A ist gescheitert und bleibt
+ungebaut.
+
+### Die Entscheidung „auf dem Gerät oder über einen Dienst" — sie war keine Wahl
+
+Der ursprüngliche Platzhalter führte sie als offene Frage. Sie folgt aus den
+bestehenden Regeln: Harte Regel 2 verbietet Laufzeit-SDKs und Backends, harte
+Regel 8 Server und Telemetrie, und ein kompilierter Schlüssel ist kein Geheimnis,
+sondern eine Zeile in einer Binärdatei. `FoundationModels` ist ein
+**Systemframework** und damit keine externe Dependency — dieselbe Einordnung wie
+`Speech`, `Translation` und `AVFoundation`.
+
+**Das Risiko dieser Festlegung ist in dieser Phase eingetreten**, und zwar
+sichtbar: Es gab keinen Plan B für Fall A, also gibt es Fall A nicht. Das ist der
+Preis des local-first-Anspruchs, und er wird hier bezahlt statt umgangen.
+
+### Fall B — der Flow
+
+**Zwei Einstiege, ein Sheet** (P5):
+
+1. das **Kontextmenü der Kartenliste**, das seit Phase 13 ohnehin existiert, mit
+   einem Eintrag *Erklärung anzeigen*;
+2. die **aufgedeckte** Lernkarte — und nur die aufgedeckte. Bei verdeckter Karte
+   wäre die Erklärung die Antwort, die gerade abgefragt wird.
+
+Beide Male **dasselbe Sheet mit demselben temporären Text**. Nicht im Editor:
+Dort wäre er eine Aussage über etwas noch nicht Gespeichertes, derselbe Grund,
+aus dem das Pinyin dort an ausdrücklichen Nutzeraktionen hängt.
+
+**Was der Einstieg aus dem Lernflow nicht anfassen darf**, und deshalb steht er
+hier einzeln: Das Sheet ist ein Nachschlagen, kein Lernschritt. Es wertet nichts
+aus, deckt nichts auf, schreibt keinen `ReviewLog`, bewegt keinen Zähler und
+ändert die Wiedereinstreuung nicht. Nach dem Schließen ist der Sessionzustand
+exakt derselbe wie vorher — inklusive eines noch offenen Einstufungsvorschlags
+und der Armierung des Sprachmodus.
+
+**Inhalt**, strukturiert statt als Textblock: eine **Bedeutung**, ein
+**Gebrauch**, höchstens **zwei Beispiele** (`@Guide(.maximumCount(2))`).
+
+**Ein Beispiel ist ein eigener `@Generable`-Typ mit zwei Feldern — `chinese` und
+`german` —, kein String.** Das ist ein Messbefund, nicht Geschmack: Mit
+`examples: [String]` hat das Modell in drei von fünf Fällen **Slot 1 chinesisch
+und Slot 2 deutsch** gefüllt, also *ein* Beispiel als zwei Einträge
+(`吃早餐` / `Frühstück essen`), und in den beiden anderen beides in einen String
+gepackt (`我想吃点东西 - Ich möchte etwas essen.`). Zwei Felder machen die Absicht
+für das Modell eindeutig und erlauben der Oberfläche, die Teile getrennt zu
+setzen — was sie für die Sprachauszeichnung ohnehin braucht.
+
+**Kennzeichnung, nicht verhandelbar:** Über dem Text steht, dass er automatisch
+erzeugt ist und Fehler enthalten kann. Die Messung gibt dem Gewicht: Die
+Erklärungen waren deutsch, knapp und ohne erfundene Grammatikregel, aber eine
+enthielt kaputtes Deutsch („einen Obstsorten namens Apfel") und eine ein
+erfundenes Wort („Gegenstandsfähigkeit"). Ein ungekennzeichneter Erklärtext in
+einer Lern-App wäre eine Autoritätsbehauptung, die niemand gedeckt hat.
+
+**Chinesische Anteile** laufen durch `ChineseText` — VoiceOver-Sprachauszeichnung
+und Dynamic Type, wie seit Phase 10 für jeden chinesischen Text in dieser App.
+
+**Nicht persistiert**, und das ist eine Entscheidung mit Gründen:
+
+- Das Systemmodell **ändert sich mit OS-Updates** („as part of regular OS
+  updates", §11.9). Ein gespeicherter Text wäre die Antwort eines Modells, das es
+  nicht mehr gibt, ohne Kennzeichnung dieses Umstands.
+- Es wäre die **zweite** Schemaerweiterung nach Phase 11 — für einen Text, den
+  man einmal liest.
+- Regenerierbarkeit kostet nichts: Das Sheet erzeugt beim Öffnen neu, und *Neu
+  erzeugen* ist ein Knopf.
+
+**Genau eine Modellanfrage je Nutzeraktion.** Das ist gemessen begründet, nicht
+sparsam gemeint: Auf dem Gerät gelang in Folge nur die erste Anfrage je Prozess,
+alle weiteren scheiterten an `rateLimited` — auch nach dreieinhalb Minuten Warten
+(§12.1). Ein Sheet, das automatisch nachlädt oder beim Öffnen zwei Anfragen
+stellt, läuft in genau diesen Fehler. Der Erzeugen-Knopf hängt an `isResponding`:
+**Überlappung wird verhindert, nicht abgefangen** (§11.5).
+
+### Verfügbarkeit und Fallback — die fünf Zustände
+
+`availability` wird **bei jedem Öffnen neu** abgefragt und **nie gecacht**: Das
+System kann den Zustand hinter dem Rücken der App ändern (§11.2), und dieselbe
+Begründung steht seit Phase 9 für `AssetInventory.status(forModules:)`. Dazu die
+Sprachprüfung über `supportsLocale(_:)` für `de_DE` **und** `zh_CN` — synchron und
+kostenlos, also vor dem Anbieten.
+
+**Gemessen und deshalb hier ausdrücklich:** `Locale.current` ist auf dem Testgerät
+`en_DE`. Eine Prüfung über `Locale.current` hätte zufällig `true` ergeben und
+trotzdem die falsche Frage gestellt. Es werden **beide Ziel-Locales namentlich**
+geprüft.
+
+| Zustand | Einstiegspunkt | Begründung |
+| --- | --- | --- |
+| `.available`, beide Locales unterstützt | sichtbar und nutzbar | gemessen der Fall auf dem Testgerät |
+| `.unavailable(.deviceNotEligible)` | **ausgeblendet** | für den Nutzer nicht behebbar; ein dauerhaft toter Eintrag ist Ärger ohne Gegenwert — dieselbe Wahl wie beim Lautsprecher ohne `zh-CN`-Stimme in Phase 7 |
+| eine der beiden Locales nicht unterstützt | **ausgeblendet** | ebenfalls nicht behebbar |
+| `.unavailable(.appleIntelligenceNotEnabled)` | **sichtbar, deaktiviert, mit Erklärung** | behebbar in den iOS-Einstellungen; Ausblenden würde eine einschaltbare Funktion verschweigen |
+| `.unavailable(.modelNotReady)` | **sichtbar, deaktiviert, mit Erklärung** | vorübergehend; beim nächsten Öffnen neu geprüft |
+
+Dazu **eine Zeile in den Einstellungen** (P6), die den aktuellen Zustand **samt
+verständlichem Grund** nennt. Sie ist der Grund, warum ein Ausblenden erklärbar
+bleibt. **Kein Asset- oder Download-Management, kein Fortschritt** — das
+Framework gibt es nicht her (§11.9).
+
+**Fehler während der Erzeugung** bleiben im Sheet: eine Meldung, ein erneuter
+Versuch, und nichts geschrieben. Die relevanten `GenerationError`-Fälle gehen
+über `AppError` in die Fehlermatrix in
+[architecture.md §7](architecture.md#7-fehlerbehandlung); `debugDescription` wird
+**nie** nutzersichtbar. `rateLimited` braucht dabei einen echten Pfad und keine
+Fußnote — es ist gemessen aufgetreten, im Vordergrund (§11.6).
+
+### Modelloutput ist keine Datenbankmutation — in dieser Phase trivial erfüllt
+
+Der ursprüngliche Entwurf brauchte dafür sechs Nähte, weil Fall A Karten anlegte.
+Nach dem Zuschnitt bleibt die stärkste Form der Zusage:
+
+1. **Diese Phase schreibt überhaupt nicht.** Kein Insert, kein Save, kein Delete,
+   kein `ModelContext`-Zugriff außer dem Lesen der einen Karte, die erklärt wird.
+2. **Das Modell liefert ausschließlich Wertetypen.** Die `@Generable`-Structs sind
+   keine `@Model`-Typen; sie *können* nicht eingefügt werden. Der Compiler trägt
+   diese Grenze, nicht die Disziplin.
+3. **Kein Tool Calling.** `tools:` bleibt leer — es wäre der einzige Weg, auf dem
+   das Modell selbst schreiben könnte.
+4. **Karte, `ReviewLog` und `LearningStatus` bleiben unberührt**, auch beim
+   Einstieg aus einer laufenden Session.
+5. **Ein Fehler lässt den Store unverändert** — was hier folgt, weil nie etwas
+   geschrieben wird, und was trotzdem geprüft wird.
+
+### Prompt-Versionierung
+
+Die Instructions liegen als benannte Konstanten in **einer** Datei,
+`CApp/Services/AIPrompts.swift`, zusammen mit einem `promptRevision: Int`.
+
+**Wer eine Instruction ändert, erhöht `promptRevision` und trägt eine neue
+Messzeile in [apple-frameworks.md §12](apple-frameworks.md#12-foundationmodels--gerätemessung-vom-2026-09-21-q13-messteil)
+ein** — mit Datum, Gerät, OS-Version und dem, was sich am Ergebnis geändert hat.
+
+Warum überhaupt eine Version, wenn nichts persistiert wird: Weil die
+Messergebnisse sonst an nichts hängen. Apple nennt selbst drei Modellversionen
+mit unterschiedlichem Verhalten (26.0–26.3, 26.4, 27.0). Eine Messung ohne
+Angabe, welcher Prompt sie erzeugt hat, ist eine Anekdote. Warum ein `Int` und
+kein Vorlagensystem: Es ist **eine** Instruction in einer privaten App.
+
+**Die Instruction nagelt die Antwortsprache fest** und enthält Apples exakte
+Phrase `The person's locale is de_DE.` (§11.3). Gemessen wirksam: Ein Prompt, der
+ausdrücklich Suaheli verlangte, hat die festgelegte Sprache **nicht** umbiegen
+können (§12.6).
+
+### Architektur
+
+Keine neue Schicht, kein Container, keine Protokolle. Vier neue Dateien und drei
+Ergänzungen:
+
+| Datei | Inhalt |
+| --- | --- |
+| `Services/AIPrompts.swift` | die Instruction und `promptRevision` |
+| `Services/AIAvailability.swift` | **reine** Abbildung aus `availability` plus beiden `supportsLocale`-Prüfungen auf die fünf UI-Zustände — testbar ohne Modell |
+| `Services/CardExplanationGenerator.swift` | die `@Generable`-Typen und die eine `async`-Funktion; erzeugt und verwirft die Session |
+| `Features/Cards/CardExplanationSheet.swift` | das Sheet, für beide Einstiege dasselbe |
+| `Features/Cards/CardListView.swift` (Ergänzung) | Kontextmenü-Eintrag |
+| `Features/Learn/…` (Ergänzung) | Einstieg auf der aufgedeckten Karte |
+| `Support/AppError.swift` (Ergänzung) | Fälle für die Generierung |
+| `Features/Settings/…` (Ergänzung) | die Zustandszeile |
+
+Zwei bewusste Nicht-Entscheidungen:
+
+- **Kein `AIService` in der Environment.** `SpeechSynthesisService` muss eine
+  Instanz halten, weil `AVSpeechSynthesizer` es verlangt. Hier gilt das
+  Gegenteil: Sessions sind Einwegware (§11.5), und `SystemLanguageModel.default`
+  ist bereits eine geteilte, `Observable` Instanz, die Apples eigenes Beispiel
+  direkt in der View hält. Ein Service, der nichts hält, wäre eine Schicht um des
+  Symmetriegefühls willen.
+- **Kein gemeinsamer Obertyp** für Generator und Verfügbarkeitsprüfung. Sie
+  teilen nichts außer dem Framework.
+
+`CApp/Learning/` wird **nicht angefasst**.
+
+### Tasks
+
+| # | Task | Abhängig von |
+| --- | --- | --- |
+| 14.0 | ~~Messung am Gerät~~ **erledigt am 2026-09-21**, Ergebnis in [§12](apple-frameworks.md#12-foundationmodels--gerätemessung-vom-2026-09-21-q13-messteil), Q13 geschlossen, Spike entfernt | — |
+| 14.1 | `AIPrompts` und `AIAvailability` — **mit Tests, vor jeder Oberfläche** | — |
+| 14.2 | Zustandszeile in den Einstellungen | 14.1 |
+| 14.3 | `CardExplanationGenerator` samt `@Generable`-Typen (Beispiel = zwei Felder) | 14.1 |
+| 14.4 | `CardExplanationSheet`, Einstieg über das Kontextmenü der Kartenliste | 14.3 |
+| 14.5 | Einstieg über die **aufgedeckte** Lernkarte, ohne Eingriff in den Sessionzustand | 14.4 |
+| 14.6 | `AppError`-Fälle und Fehlermatrix in [architecture.md §7](architecture.md#7-fehlerbehandlung) | 14.4, 14.5 |
+| 14.7 | Entscheidungen in [architecture.md §10](architecture.md#10-zusammenfassung-der-architekturentscheidungen) eintragen | 14.6 |
+| 14.8 | Review, Testaudit, Gegenmutationen | alle |
+
+**14.1 kommt vor allem anderen.** `AIAvailability` ist der einzige Teil dieser
+Phase, der ohne Modell vollständig prüfbar ist — genau wie `LearnFlow` in
+Phase 13 zuerst kam.
+
+### Akzeptanzkriterien
+
+**Messung und Abschluss des Messteils**
+
+- [x] Alle elf Messblöcke sind auf dem iPhone 16 Pro (iOS 27.0, Build 24A437)
+      gelaufen; die Ergebnisse stehen mit Gerät, OS-Version und Datum in §12.
+- [x] `supportsLocale` für `de_DE` und `zh_CN` ist **gemessen** protokolliert,
+      nicht aus Apples Sprachliste geschlossen.
+- [x] Die fachliche Bewertung steht als **Zählung an einer benannten Stichprobe**
+      im Dokument; **keine Prozentzahl als allgemeines Qualitätsversprechen** —
+      nicht im Dokument, nicht in der App, nicht in einem Hinweistext.
+- [x] Das Go/No-Go ist je Fall dokumentiert und **nach** der Messung nicht
+      verändert worden.
+- [x] Fall A ist als blockiert dokumentiert, mit den vier Belegfällen.
+- [x] Die Spike-Datei ist entfernt.
+
+**Fall B**
+
+- [ ] Der Eintrag steht im Kontextmenü der Kartenliste **und** auf der
+      **aufgedeckten** Lernkarte; bei verdeckter Karte gibt es ihn nicht.
+- [ ] Beide Einstiege zeigen **dasselbe** Sheet.
+- [ ] Der Einstieg aus dem Lernflow lässt den Sessionzustand unverändert: kein
+      `ReviewLog`, kein Zähler, keine Wiedereinstreuung, ein offener
+      Einstufungsvorschlag bleibt offen, der Sprachmodus bleibt wie er war —
+      durch einen Test belegt.
+- [ ] Ein Beispiel ist ein `@Generable`-Typ mit `chinese` und `german`;
+      `[String]` kommt nicht vor.
+- [ ] Höchstens zwei Beispiele, und die Grenze steht im Schema
+      (`@Guide(.maximumCount(2))`).
+- [ ] Die Erklärung ist sichtbar als automatisch erzeugt gekennzeichnet und als
+      möglicherweise fehlerhaft.
+- [ ] Chinesische Anteile laufen durch `ChineseText`.
+- [ ] Der Text wird **nicht persistiert**: keine Schemaänderung, kein neues
+      Attribut, und nach dem Schließen ist er weg.
+- [ ] *Neu erzeugen* funktioniert und schreibt ebenfalls nichts.
+- [ ] **Eine** Modellanfrage je Nutzeraktion; kein automatisches Nachladen, kein
+      zweiter Aufruf beim Öffnen.
+- [ ] Der Erzeugen-Knopf ist an `isResponding` gebunden; zwei gleichzeitige
+      Anfragen sind **nicht möglich**.
+
+**Verfügbarkeit, Sicherheit, Regeln**
+
+- [ ] Die fünf Zustände der Tabelle sind umgesetzt; `availability` wird bei jedem
+      Öffnen neu abgefragt und **nirgends gecacht**.
+- [ ] Geprüft werden `de_DE` und `zh_CN` **namentlich**, nicht `Locale.current`.
+- [ ] Die Einstellungen nennen den Zustand **samt verständlichem Grund**; es gibt
+      **kein** Asset- oder Download-Management.
+- [ ] `rateLimited` hat einen nutzersichtbaren Pfad, der nichts kaputt macht.
+- [ ] `debugDescription` eines `GenerationError` erscheint **nie** in der
+      Oberfläche.
+- [ ] Die Instruction nagelt die Antwortsprache fest und enthält Apples exakte
+      Locale-Phrase — durch einen Test belegt.
+- [ ] `promptRevision` existiert, und die Messzeile im Dokument nennt sie.
+- [ ] `tools:` wird nirgends gesetzt.
+- [ ] `PrivateCloudComputeLanguageModel` kommt im Projekt **nicht vor** — durch
+      eine Suche über das Repository belegt.
+- [ ] Kein neuer Info.plist-Schlüssel, kein Entitlement, kein API-Key, keine
+      Netzwerkanfrage der App.
+- [ ] Die Phase führt **keinen einzigen Schreibzugriff** auf den Store ein —
+      durch einen Test belegt, der Kartenzahl und Inhalte vor und nach einer
+      Erklärung vergleicht.
+- [ ] **`CApp/Learning/` ist unverändert** — am Diff nachprüfbar.
+- [ ] Kein Pfad ändert `Card`, `LearningStatus`, `reviewCount`, `correctCount`
+      oder schreibt einen `ReviewLog`.
+- [ ] Nirgends eine Aussprachebewertung, ein Score, ein Prozentwert oder eine
+      Konfidenz — auch nicht im Erklärtext.
+- [ ] Keine Bulk-Kartenerstellung, auch nicht in abgespeckter Form.
+- [ ] Deployment Target unverändert **iOS 26.0**; `project.pbxproj` unberührt.
+- [ ] Build und Tests grün, **null Compilerwarnungen** auf einem Debug- und einem
+      Release-Build von null.
+
+### Die sechs Produktentscheidungen vom 2026-09-21
+
+Alle sechs sind getroffen. **Vier davon betreffen den blockierten Fall A und
+werden in Phase 14 nicht umgesetzt** — sie stehen hier, weil eine getroffene
+Entscheidung nicht verloren gehen soll, nicht weil etwas davon gebaut wird.
+
+| # | Entschieden | Gilt für |
+| --- | --- | --- |
+| **P1** | 5 bis 15 Karten je Bulk-Lauf, Standard 10 | **Fall A — blockiert, nicht implementiert** |
+| **P2** | Vorschau inline editierbar für Deutsch und Hanzi, dazu an-/abwählen und löschen; kein vollständiger `CardEditor` je Entwurf | **Fall A — blockiert, nicht implementiert** |
+| **P3** | Exakte Deutsch-und-Hanzi-Dublette vorab abgewählt und markiert, bewusst wieder aktivierbar; Teildubletten nur markiert | **Fall A — blockiert, nicht implementiert** |
+| **P4** | Eine optionale Kategorie für die gesamte Generierungsrunde; keine Kategorienverwaltung je Entwurf | **Fall A — blockiert, nicht implementiert** |
+| **P5** | Dieselbe temporäre Erklärung aus der Kartenliste **und** von einer aufgedeckten Lernkarte, nicht persistiert | **Fall B — Scope dieser Phase** |
+| **P6** | Einstellungen zeigen den On-Device-Verfügbarkeitsstatus samt verständlichem Grund; kein Asset-/Download-Management | **Fall B — Scope dieser Phase** |
+
+**P5 hat meinen eigenen Vorschlag umgekehrt**, und das ist vermerkt, damit die
+Begründung nicht später als meine gelesen wird: Ich hatte den Lernflow
+ausgeschlossen, weil Phase 13 dort gerade Prosa abgebaut hat. Die Entscheidung
+lautet anders und ist eng gezogen — nur bei aufgedeckter Karte, wo nichts mehr zu
+verraten ist, und als dasselbe temporäre Sheet ohne eigenen Zustand.
+
+Die Entscheidung **on-device statt Dienst** stand nie zur Wahl; sie folgt aus den
+harten Regeln 2 und 8.
+
+### Was ein späterer Anlauf auf Fall A bräuchte
+
+**Nicht in dieser Phase, und nicht als Variante davon.** Der Vollständigkeit
+halber, weil die No-Go-Begründung selbst darauf zeigt: Sie lautet „keine
+Oberfläche kann ihn auffangen", und das ist für die spezifizierte Oberfläche
+gemessen wahr — Deutsch, Hanzi und Pinyin sind in allen vier Fehlerfällen
+unauffällig. Eine **unabhängige Bedeutungsquelle** neben dem Modellvorschlag
+würde genau diese Fälle sichtbar machen; `菜谱 → recipe; cookbook` neben
+„Speisekarte" fällt sofort auf.
+
+Das wäre ein **anderer Ansatz und eine eigene Phase**: Das gebündelte Asset führt
+heute keine Bedeutungen, die CC-CEDICT-Quelle hat englische Definitionen, und die
+Rohquelle liegt nicht im Repository. Er müsste neu spezifiziert und **neu
+gemessen** werden, gegen neu festgelegte Kriterien. Der Eintrag steht im
+[Backlog](#backlog-ausdrücklich-nicht-im-mvp).
 
 ---
 
@@ -3273,6 +3669,9 @@ Nach einmalig installierten Assets, im Flugmodus:
 - [ ] Lernmodus, beide Richtungen
 - [ ] Sprachausgabe
 - [ ] Spracherkennung
+- [ ] **AI-Funktionen aus Phase 14, falls gebaut** — Apples „Works offline ✅"
+      ist zitiert, nicht gemessen; hier wird es im eigenen Haus geprüft
+      ([apple-frameworks.md §11.8](apple-frameworks.md#118-privatsphäre-der-cloud-pfad-ist-ein-anderer-typ-dreifach-verriegelt))
 - [ ] alle sonstigen als offline deklarierten Funktionen
 
 ### 4. Accessibility und Darstellung
@@ -3334,6 +3733,34 @@ als implementiert gelten.
 
 Sammelstelle für Ideen, die während der Umsetzung auftauchen. Nichts hiervon
 wird vor Abschluss von Phase 10 begonnen.
+
+**Bulk-Kartenentwürfe mit unabhängiger Bedeutungsprüfung**
+
+**Entstanden aus dem gemessenen No-Go von Phase 14 am 2026-09-21.** Aus einer
+Beschreibung („15 häufige Wörter zum Thema Restaurant") entstehen Entwürfe, die
+vor der Vorschau gegen eine **unabhängige Bedeutungsquelle** geprüft werden —
+naheliegend die englischen Definitionen von CC-CEDICT, die die Quelle führt und
+das gebündelte Asset heute nicht.
+
+**Warum es nicht Phase 14 ist.** Dort war der Fall gemessen gescheitert: Vier von
+fünfzig Einträgen trugen eine falsche Bedeutung bei unauffälligem Hanzi
+(`Abbruch|结账`, `Speisekarte|菜谱`, `Toast|面包`, `Töpfe|碗`), und die
+spezifizierte Vorschau — Deutsch, Hanzi, Pinyin — kann das nicht sichtbar machen.
+Die Grenze wurde nicht gelockert; der Fall wurde gestrichen.
+
+**Was daran neu wäre, und warum es eine eigene Phase braucht:** ein erweitertes
+Datenasset samt Lizenz- und Herkunftsdokumentation, eine Vergleichsschicht
+zwischen deutschem Modellvorschlag und englischer Wörterbuchdefinition, und eine
+Oberfläche, die eine Abweichung verständlich zeigt, ohne ein Urteil zu behaupten.
+Das ist ein anderer Ansatz, nicht eine Variante — er müsste **neu spezifiziert
+und neu gemessen** werden, gegen vorab festgelegte Kriterien.
+
+**Was aus Phase 14 dafür schon belegt ist:** Die Mechanik trägt. Anzahl exakt
+getroffen, 50 von 50 Hanzi in Han-Schrift, Pinyin-Kette löst alles auf, das
+Anzahl-Schema setzt sich gegen einen widersprechenden Prompt durch, und die
+deterministische Dublettenregel hat an echten Daten gegriffen — beide Zweige.
+Die Entscheidungen P1 bis P4 aus Phase 14 gelten als getroffen und sind dort
+dokumentiert.
 
 **Weitere Lernmodi**
 - Hanzi → Bedeutung

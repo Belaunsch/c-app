@@ -89,11 +89,38 @@ API. Die Einschränkung steht dokumentiert in
 [apple-frameworks.md](docs/apple-frameworks.md) Q12; der Weg zum Hanzi bleibt
 die Kette `Deutsch → Hanzi → Pinyin`.
 
-**Nächster Schritt: Phase 14 — AI-Integration.** Ihr **Umfang ist nicht
-entschieden**, sie hat keine Akzeptanzkriterien, und ohne die wird nichts
-implementiert — zu klären sind die vier Fragen in
-[roadmap.md § Phase 14](docs/roadmap.md). **Erst danach** die finale Geräte-
-und Release-Abnahme.
+**Nächster Schritt: Phase 14 — AI-Erklärung zu einer Karte.** Spezifiziert und
+**gemessen** am 2026-09-21, noch nicht implementiert. Die Phase begann mit zwei
+Produktfällen und endet mit einem.
+
+**Gebaut wird:** eine kurze, deutsche, lernorientierte Erklärung zu einer
+vorhandenen Karte — Bedeutung, Gebrauch, höchstens zwei Beispiele —, erreichbar
+aus dem Kontextmenü der Kartenliste **und** von einer **aufgedeckten** Lernkarte,
+sichtbar als erzeugt gekennzeichnet und **nicht persistiert**. Die Phase führt
+deshalb **keinen einzigen Schreibzugriff** auf den Store ein: kein neues Attribut,
+keine Migration, kein `ReviewLog`, keine Änderung an `Card` oder
+`LearningStatus`. `Learning/` bleibt unverändert.
+
+**Gestrichen wird der Bulk-Fall** — Kartenentwürfe aus einer Beschreibung. Er ist
+an der **vor** der Messung festgelegten No-Go-Bedingung gescheitert: In 50
+generierten Einträgen trugen vier eine falsche Bedeutung bei völlig unauffälligem
+Hanzi (`Abbruch|结账`, `Speisekarte|菜谱`, `Toast|面包`, `Töpfe|碗`), und eine
+Vorschau aus Deutsch, Hanzi und Pinyin kann das nicht sichtbar machen. **Die
+Schwelle ist nach Kenntnis der Ergebnisse nicht verändert worden**, es ist kein
+externer Dienst und kein Plan B an die Stelle getreten. Der Ansatz „Bulk mit
+unabhängiger Bedeutungsprüfung" steht als **neu zu spezifizierende und neu zu
+messende** Idee im Backlog. Die Entscheidungen P1 bis P4 sind als getroffen
+dokumentiert und dem blockierten Fall zugeordnet.
+
+Alles ausschließlich **on-device** über `SystemLanguageModel`; dass es kein Dienst
+wird, folgt aus den harten Regeln 2 und 8. Q13 ist geschlossen — API-Oberfläche in
+[apple-frameworks.md §11](docs/apple-frameworks.md), Gerätemessung in §12. Drei
+Messbefunde prägen den Entwurf: `availability` wird **nie gecacht**,
+`Locale.current` war auf dem Gerät `en_DE` (also beide Ziel-Locales **namentlich**
+prüfen), und `rateLimited` trat **im Vordergrund** auf — deshalb **eine Anfrage je
+Nutzeraktion** und ein echter Fehlerpfad dafür.
+
+**Erst danach** die finale Geräte- und Release-Abnahme.
 
 Die Kette `Deutsch → Hanzi → Pinyin` läuft mit Return oder beim Verlassen des
 Feldes automatisch, beide Werte bleiben editierbar, und ein von Hand gesetzter
