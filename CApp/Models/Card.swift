@@ -77,6 +77,37 @@ final class Card {
 
     var createdAt: Date = Date()
     var lastReviewedAt: Date?
+
+    /// The moment the learner last set this card's status by hand — and the
+    /// line from which the assisted classification may read evidence.
+    ///
+    /// ## Why this needs its own field
+    ///
+    /// Checked against every existing property before it was added, because
+    /// borrowing one would have been cheaper: `lastReviewedAt` moves on **every**
+    /// review, so it would also exclude the fresh attempts that are supposed to
+    /// count; `createdAt` never moves; the counters are counters; the two
+    /// `…WasEditedManually` flags belong to the text and bending them would be
+    /// exactly the reuse this project forbids. On `ReviewLog`, `previousStatus` is
+    /// the field the case **fails** on: a card set back to *Mittel* by hand has
+    /// old *Mittel*-era entries, which the same-status rule then finds comparable
+    /// again (`docs/learning-engine.md` §13.13).
+    ///
+    /// ## What it is for
+    ///
+    /// A card that went *Mittel* → *Sicher* and is then corrected back to
+    /// *Mittel* must not immediately be offered *Mittel* → *Gut* again from the
+    /// reviews it collected the first time round. The correction is a statement,
+    /// and evidence older than it cannot speak for the new status.
+    ///
+    /// **The history itself is never deleted.** This moves a line, it does not
+    /// remove anything — the entries stay readable, and a later calibration can
+    /// still see them.
+    ///
+    /// `nil` means the learner has never corrected this card, so all of its
+    /// history is eligible. That is also the value every card written before this
+    /// field existed reads back as, which is the only honest one.
+    var classificationEvidenceResetAt: Date?
     var reviewCount: Int = 0
     var correctCount: Int = 0
 

@@ -6,11 +6,10 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 12 implementiert, Phase 13 implementiert mit einem offenen
-Produktpunkt. Finale Roadmap-Abnahme: ausstehend.**
+**Phasen 0 bis 13 implementiert. Finale Roadmap-Abnahme: ausstehend.**
 
 Die Implementierung von v1 steht: Tests grün, Debug- und Release-Build sauber,
-drei unabhängige Code Reviews und drei Testaudits abgearbeitet. Physische
+vier unabhängige Code Reviews und vier Testaudits abgearbeitet. Physische
 Gerätetests hat es in jeder Phase gegeben, zuletzt am **2026-09-12** und
 **2026-09-13** auf einem iPhone 16 Pro (iOS 26.6) — sie sind
 **Entwicklungsbelege** für die jeweils geprüften Pfade.
@@ -34,7 +33,7 @@ Kartenverwaltung: Wörter und Sätze getrennt, Karten anlegen, bearbeiten und
 löschen, Suche über Deutsch, Hanzi und Pinyin, Filter nach Kategorie und
 Lernstatus, Kategorien umbenennen und löschen.
 
-Build und Unit-Tests laufen grün: **633 Testfunktionen / 691 Einzelausführungen,
+Build und Unit-Tests laufen grün: **649 Testfunktionen / 707 Einzelausführungen,
 0 Fehlschläge, 0 Compilerdiagnosen** auf einem Debug-Build von null (iPhone-17-Simulator, iOS
 26.5), Release-Build von null ebenso. Jede Phase ist zusätzlich auf einem
 echten iPhone belegt worden — zuletzt am **2026-09-12** und **2026-09-13** —,
@@ -193,17 +192,18 @@ kann, ist geprüft und beantwortet: **nein**, nicht aus einer normalen App — d
 Einschränkung ist dokumentiert, statt ein Verhalten zu versprechen, das iOS
 nicht erlaubt.
 
-**Offen aus Phase 13, und es ist eine Produktentscheidung:** Mit dem Wegfall der
-vier Bewertungstasten gibt es im Produkt **derzeit keinen Weg, einen Lernstand zu
-senken.** Die Dokumentation verwies dafür auf das Setzen in der Kartenübersicht —
-das unabhängige Code Review hat gefunden, dass dieses Bedienelement seit Phase 1
-spezifiziert, aber nie gebaut wurde. Zu entscheiden ist: nachziehen, oder
-ausdrücklich festlegen, dass Version 1 keinen Weg nach unten hat. Bis dahin gilt
-Phase 13 nicht als abgeschlossen; Einzelheiten in
-[roadmap.md § Phase 13](docs/roadmap.md) und
-[learning-engine.md §13.11](docs/learning-engine.md).
+Ebenfalls aus Phase 13, und erst durch das unabhängige Code Review ausgelöst:
+**der Lernstand lässt sich von Hand korrigieren.** Mit dem Wegfall der vier
+Bewertungstasten gab es keinen Weg mehr nach unten — die Dokumentation verwies
+auf ein Bedienelement, das seit Phase 1 spezifiziert, aber nie gebaut worden war.
+Jetzt gibt es es: Kontextmenü auf der Kartenzeile, *Lernstand setzen*, fünf
+Stufen, der aktuelle markiert, schreibt sofort. Das ist **keine** Lernantwort —
+kein Historieneintrag, keine Zähler, keine Wiederholung —, aber es setzt eine
+Evidenzgrenze, damit eine zurückgesetzte Karte nicht aus ihren alten Reviews
+sofort wieder dieselbe Beförderung angeboten bekommt. Die Historie bleibt dabei
+vollständig erhalten.
 
-Nächster Schritt danach: **Phase 14 — AI-Integration**, deren Umfang noch nicht
+Nächster Schritt: **Phase 14 — AI-Integration**, deren Umfang noch nicht
 entschieden ist und die ohne Akzeptanzkriterien nicht begonnen wird, und **erst
 dann** die finale Geräte- und Release-Abnahme auf dem fertigen Produkt.
 

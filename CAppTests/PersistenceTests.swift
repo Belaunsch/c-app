@@ -211,6 +211,10 @@ struct PersistenceTests {
             "id", "typeRaw", "statusRaw", "german", "hanzi", "pinyin",
             "createdAt", "lastReviewedAt", "reviewCount", "correctCount",
             "hanziWasEditedManually", "pinyinWasEditedManually",
+            // Seit Phase 13: die Linie, ab der die assistierte Einstufung
+            // Evidenz lesen darf. Ein eigenes Feld, weil kein vorhandenes die
+            // Semantik trägt — `lastReviewedAt` bewegt sich bei jedem Review.
+            "classificationEvidenceResetAt",
         ])
         // Die abgeleiteten Werte dürfen nicht im Store landen, und `type`
         // sowie `status` dürfen nicht zusätzlich zu ihren RawValues

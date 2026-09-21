@@ -54,12 +54,39 @@ final class LearnSessionModel {
     /// mode A, where nothing ever sets it.
     private(set) var hasShownHanzi = false
 
+    /// One offered classification, together with the status it was worked out
+    /// from.
+    ///
+    /// **Both halves, because an offer expires.** The learning session is a push
+    /// *inside* the Lernen tab, so the tab bar stays reachable: the learner can
+    /// leave a revealed card standing, correct that same card by hand in the card
+    /// list, and come back. Without remembering where the offer started, tapping
+    /// „Bestätigen" would then undo the correction — the one direction this app
+    /// has no other way of going (A46) — and the bar would meanwhile read
+    /// „Schwach → Gut", two rungs, against the rule it is supposed to obey.
+    ///
+    /// Found in review. Before the manual correction existed the interleaving was
+    /// impossible, because `card.status` was only ever written here.
+    private struct StatusProposal: Equatable {
+        let from: LearningStatus
+        let to: LearningStatus
+    }
+
+    private var proposal: StatusProposal?
+
     /// The status the app offers for the card on screen, or `nil` when there is
     /// nothing to offer (phase 13).
     ///
     /// An offer and nothing else: the status changes when the learner taps
     /// „Bestätigen", never because this is set.
-    private(set) var proposedStatus: LearningStatus?
+    ///
+    /// **Derived rather than stored**, so an offer that has gone stale disappears
+    /// everywhere at once — the bar falls back to „Weiter", and both
+    /// `acceptProposal` and `declineProposal` refuse. One check, every reader.
+    var proposedStatus: LearningStatus? {
+        guard let proposal, let card = currentCard, proposal.from == card.status else { return nil }
+        return proposal.to
+    }
 
     /// Whether the microphone was used for the attempt currently on screen.
     private var usedSpeechThisAttempt = false
@@ -279,7 +306,7 @@ final class LearnSessionModel {
         // No evidence, so no offer. The rule would reach the same conclusion —
         // a manual reveal is never a clean attempt — but the app must not even
         // look like it is weighing one up here.
-        proposedStatus = nil
+        proposal = nil
         isRevealed = true
     }
 
@@ -322,11 +349,11 @@ final class LearnSessionModel {
         // Phase 13: enough repeated clean evidence means the app offers one step
         // up. The rule lives in `Learning/`; this only carries out what it
         // decided, and it decides nothing else — no status moves here.
-        proposedStatus = AssistedAssessment.decision(
+        proposal = AssistedAssessment.decision(
             currentStatus: card.status,
             current: attemptSignal(for: card),
             history: recentSignals(for: card)
-        ).proposedStatus
+        ).proposedStatus.map { StatusProposal(from: card.status, to: $0) }
     }
 
     /// Closes the attempt with a plain „Weiter": nothing was offered, or the
@@ -340,9 +367,12 @@ final class LearnSessionModel {
     /// Takes **exactly** the status the rule proposed — not a second derivation
     /// of it. `StatusTransition` is where that value comes into being; two
     /// routes to the same value would be two truths.
+    /// - Note: reads `proposedStatus`, which is `nil` once the offer has gone
+    ///   stale — so a card corrected by hand in the meantime cannot be pushed
+    ///   back up by a tap on „Bestätigen".
     func acceptProposal(in context: ModelContext) {
-        guard let proposal = proposedStatus else { return }
-        closeAttempt(.accepted(proposal), in: context)
+        guard let offered = proposedStatus else { return }
+        closeAttempt(.accepted(offered), in: context)
     }
 
     /// The learner declined the offered classification.
@@ -351,9 +381,13 @@ final class LearnSessionModel {
     /// is that the decline is recorded, so the evidence for this particular step
     /// starts over and the same offer does not come back on the next clean
     /// attempt (`docs/learning-engine.md` §13.7, rule 4).
+    /// - Note: same staleness guard as `acceptProposal`. Declining an expired
+    ///   offer would record a `suggestedStatus` against a `previousStatus` it was
+    ///   never computed from, and that entry is the only calibration data the
+    ///   project has (§13.10).
     func declineProposal(in context: ModelContext) {
-        guard let proposal = proposedStatus else { return }
-        closeAttempt(.declined(proposal), in: context)
+        guard let offered = proposedStatus else { return }
+        closeAttempt(.declined(offered), in: context)
     }
 
     /// What became of an offered classification, if one was offered.
@@ -449,9 +483,9 @@ final class LearnSessionModel {
             // so the user decides on the same card again rather than a new one.
             context.rollback()
             isRevealed = true
-            // `proposedStatus` stays as it was: the offer has to be back on
-            // screen, or an alert would leave the learner on a revealed card
-            // with the question gone.
+            // The offer stays as it was: it has to be back on screen, or an
+            // alert would leave the learner on a revealed card with the question
+            // gone.
             saveFailure = .cardSaveFailed(error)
             Self.logger.error("Attempt could not be saved: \(error.localizedDescription, privacy: .public)")
             return
@@ -483,16 +517,52 @@ final class LearnSessionModel {
         )
     }
 
-    /// The card's earlier reviews, newest first and bounded by the window.
+    /// The card's earlier reviews that may count as evidence: newest first,
+    /// bounded above by the window and below by the learner's last correction.
     ///
     /// Sorted here rather than in the store: a SwiftData relationship is
-    /// unordered, and the engine is given a sequence whose order it may rely
-    /// on.
+    /// unordered, and the engine is given a sequence whose order it may rely on.
+    ///
+    /// **Both bounds belong here rather than in `Learning/`**, and for the same
+    /// reason: they decide *which history is handed over*, not what the rule
+    /// concludes from it. `windowSize` has always been an upper bound applied at
+    /// this boundary (§12.5), and the correction line is the matching lower one.
+    /// The engine keeps no clock and `ReviewSignal` keeps no timestamp — putting a
+    /// date comparison inside the rule would give both of them one.
+    ///
+    /// The filter runs before the window because that reads more clearly, **not**
+    /// because the order matters: eligibility is monotone in time — eligible means
+    /// „newer than the line" — so filtering before or after the newest-first cut
+    /// yields the same set. An earlier version of this comment claimed the order
+    /// protected something, which taught an invariant that does not exist.
     private func recentSignals(for card: Card) -> [ReviewSignal] {
         card.reviews
+            .filter { Self.countsAsEvidence($0, for: card) }
             .sorted { $0.reviewedAt > $1.reviewedAt }
             .prefix(AssistedAssessment.windowSize)
             .map(\.signal)
+    }
+
+    /// Whether one stored review is on the eligible side of the learner's last
+    /// hand-picked status.
+    ///
+    /// A card that went *Mittel* → *Sicher* and was corrected back to *Mittel*
+    /// still carries its old *Mittel*-era reviews, and the same-status rule finds
+    /// those comparable again — so without this line the very next clean attempt
+    /// would offer the promotion the learner had just taken away.
+    ///
+    /// **Strictly after**, so a review written in the same instant as a correction
+    /// does not count: the correction is the later statement of the two, and at
+    /// equal timestamps the tie has to fall on the side that respects it.
+    ///
+    /// `nil` — never corrected — means everything is eligible, which is also what
+    /// every card written before phase 13 reads back as.
+    ///
+    /// Static and taking the card explicitly, so it can be checked without a
+    /// session.
+    static func countsAsEvidence(_ review: ReviewLog, for card: Card) -> Bool {
+        guard let boundary = card.classificationEvidenceResetAt else { return true }
+        return review.reviewedAt > boundary
     }
 
     /// Whether the card on screen has already been through this batch.
@@ -536,7 +606,7 @@ final class LearnSessionModel {
     private func resetAttemptState() {
         hasShownHanzi = false
         speechCheck = nil
-        proposedStatus = nil
+        proposal = nil
         usedSpeechThisAttempt = false
         revealedByHand = false
         recordingWasPossible = false

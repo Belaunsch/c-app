@@ -6,13 +6,12 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phasen 0–12 implementiert, Phase 13 implementiert mit einem
-offenen Produktpunkt** (§13.11 Punkt 1, unten). Stand des Gates: **633
-Testfunktionen / 691 Einzelausführungen grün** — parametrisierte Tests machen
+**Aktueller Stand: Phasen 0–13 implementiert, Phase 13 verifiziert (READY).** Stand des Gates: **649
+Testfunktionen / 707 Einzelausführungen grün** — parametrisierte Tests machen
 daraus zwei Zahlen, also immer mit Einheit nennen —, 0 fehlgeschlagen, 0
 Compilerdiagnosen auf einem Debug-Build von null, Release-Build von null
-ebenso, dazu ein unabhängiges Code Review, ein Testaudit und **vierzehn
-Gegenmutationen, die alle greifen**.
+ebenso, dazu **zwei** unabhängige Code Reviews, **zwei** Testaudits und
+**einundzwanzig Gegenmutationen, die alle greifen**.
 
 **Die vollständige Geräteprüfung und der mehrtägige Alltagstest sind seit dem
 2026-09-13 kein Gate der einzelnen Phase mehr**, sondern ein gemeinsames Gate
@@ -64,11 +63,14 @@ wieder ein.
 Nach dem Aufdecken sind die vier Bewertungstasten **weg**. Dort steht
 `[ Weiter ]` oder eine Zustimmungsfrage: „Neue Einstufung — Mittel → Gut" mit
 *Ablehnen* und *Bestätigen*, nie beides. **Es gibt keinen Pfad, auf dem die App
-einen Status senkt** — und, weil das in
-[learning-engine.md §6.2](docs/learning-engine.md) seit Phase 1 spezifizierte
-Setzen in der Kartenübersicht nie gebaut wurde, derzeit auch keinen, auf dem der
-Nutzer ihn senkt. Das ist der **offene Punkt der Phase 13**, benannt in §13.11
-Punkt 1, und er ist zu entscheiden, bevor die Phase als abgeschlossen gilt.
+einen Status senkt.** Nach unten kommt eine Karte über die **Korrektur von Hand**
+in der Kartenübersicht: Kontextmenü auf der Zeile, *Lernstand setzen*, fünf
+Stufen, der aktuelle markiert. Das ist keine Lernantwort — kein `ReviewLog`,
+keine Zähler, keine Wiedereinstreuung —, aber es setzt
+`Card.classificationEvidenceResetAt`, damit die alten Reviews einer
+zurückgesetzten Karte nicht sofort denselben Vorschlag erneut auslösen. Regel und
+Begründung, warum kein vorhandenes Feld das konnte:
+[learning-engine.md §13.13](docs/learning-engine.md).
 `correctCount` wächst nicht mehr — auch *Bestätigen* ist keine
 Selbsteinschätzung. Die Regel zählt einen Lauf nur über **vergleichbare**
 Versuche: gleiche Richtung, gleicher Ausgangsstatus, Abbruch am ersten

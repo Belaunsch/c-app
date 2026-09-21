@@ -60,12 +60,11 @@ nonisolated enum AssistedClassificationDecision: Equatable, Sendable {
 /// - A **retry** is not weaker positive evidence, it is none at all.
 /// - **Revealing by hand — „Aufgeben" — is not positive evidence**, and it ends
 ///   the run.
-/// - **There is no downgrade.** Not from a mismatch, not from a run of
-///   mismatches, not from anything. And — measured on 2026-09-21, not assumed —
-///   there is currently no way down at all: the manual setting `§6.2` has
-///   specified since phase 1 was never built, and phase 13 removed the two
-///   assessments that used to lower a status. That is an open product decision,
-///   named in `docs/learning-engine.md` §13.11.
+/// - **There is no downgrade here.** Not from a mismatch, not from a run of
+///   mismatches, not from anything this rule can conclude. Phase 13 removed the
+///   two assessments that used to lower a status; what took their place is the
+///   learner's own correction in the card list — the only way down the app has,
+///   and deliberately outside this rule (`docs/learning-engine.md` §6.2, §13.13).
 /// - **Nothing here says anything about pronunciation or tones** (hard rule 7).
 /// - The learner decides: no status moves without a tap on „Bestätigen".
 ///
@@ -81,6 +80,15 @@ nonisolated enum AssistedClassificationDecision: Equatable, Sendable {
 /// reviews in a row hides their older mode-A evidence behind that bound. The
 /// failure direction is the safe one — the app offers nothing and asks nothing,
 /// so the status simply does not move.
+///
+/// **And the history reaching this rule is bounded from below as well.** When the
+/// learner corrects a status by hand, everything recorded before that moment stops
+/// counting — otherwise a card set back down would be offered the same promotion
+/// again out of the evidence it collected the first time round. That cut is made
+/// where the history is handed over (`LearnSessionModel.recentSignals`), not here:
+/// it needs a clock and a stored date, and this layer has neither
+/// (`docs/learning-engine.md` §13.13). Reading this file alone therefore does not
+/// tell the whole rule, which is why it is said here.
 nonisolated enum AssistedAssessment {
 
     // MARK: - The free parameters

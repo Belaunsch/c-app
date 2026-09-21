@@ -288,26 +288,30 @@ konnte, wäre nach dem Batch besser bewertet als vorher. Der ehrliche Indikator
 ist der erste Versuch. Weitere Einschätzungen derselben Karte im selben Batch
 aktualisieren nur die Zähler (§7).
 
-### 6.2 Manuelle Bearbeitung — spezifiziert, **nicht gebaut**
+### 6.2 Manuelle Bearbeitung
 
-Vorgesehen ist: Der Nutzer kann den Lernstatus in der Kartenübersicht direkt
-setzen; ein manuell gesetzter Status verhält sich anschließend wie jeder andere
-— keine Sonderbehandlung, keine Sperre.
+Der Nutzer kann den Lernstatus in der Kartenübersicht direkt setzen — seit
+Phase 13 auch tatsächlich: über ein Kontextmenü auf der Kartenzeile, mit dem
+aktuellen Stand markiert. Die Auswahl schreibt sofort, ohne Bestätigungsdialog,
+und die Auswahl des bereits aktiven Status ist ein No-op.
 
-**Am 2026-09-21 im Code nachgesehen: dieses Bedienelement existiert nicht.**
-`card.status` wird in der gesamten App an **genau einer** Stelle geschrieben —
-`LearnSessionModel.closeAttempt`, ausschließlich im Fall einer bestätigten
-Einstufung. Die Kartenübersicht zeigt den Lernstand als farbigen Punkt und
-filtert danach; setzen kann sie ihn nicht. Der Picker im Editor ist in Phase 6
-(Task 6.10) entfernt worden, weil ihn beim Anlegen einer Karte niemand
-beantworten kann.
+**Diese Korrektur ist keine Lernantwort.** Sie schreibt keinen
+`ReviewLog`-Eintrag, bewegt weder `reviewCount` noch `correctCount` noch
+`lastReviewedAt`, und sie streut keine Karte in einen laufenden Batch ein. Sie
+als Review zu verbuchen würde ein Lernereignis erfinden, das nicht stattgefunden
+hat.
 
-Bis Phase 12 war das folgenlos: *Nochmal* (−2) und *Schwer* (−1) waren ein
-funktionierender Weg nach unten. **Phase 13 entfernt diesen Weg** — und damit
-gibt es im Produkt derzeit **überhaupt keinen** Pfad, auf dem ein Lernstand
-sinkt. Die Konsequenz ist in
-[§13.11](#1311-was-das-kostet) benannt und **ist eine offene
-Produktentscheidung**, keine getroffene.
+**Sie setzt aber eine Evidenzgrenze**, und das ist der schwierige Teil — siehe
+[§13.13](#1313-die-manuelle-korrektur-und-ihre-evidenzgrenze). Ein manuell
+gesetzter Status verhält sich danach wie jeder andere: keine Sonderbehandlung,
+keine Sperre.
+
+**Bis Phase 13 war dieser Abschnitt eine Beschreibung ohne Deckung.** Er stand
+seit Phase 1 hier, das Bedienelement wurde nie gebaut, und bis Phase 12 fiel das
+nicht auf, weil *Nochmal* (−2) und *Schwer* (−1) nach unten führten. Als Phase 13
+diese beiden entfernte, war der Widerspruch da: kein automatischer Downgrade und
+kein manueller. Das unabhängige Code Review hat ihn gefunden, und er ist mit
+dem Kontextmenü eingelöst statt umformuliert worden.
 
 ---
 
@@ -886,11 +890,10 @@ Roadmap:
 - **Ein Retry ist keine gleichwertige positive Evidenz** — er ist gar keine.
 - **Aufdecken und Aufgeben sind keine positive Evidenz.**
 - **Keine automatische Herabstufung**, unter keinen Umständen, auch nicht über
-  mehrere Mismatches. Es gibt in Phase 13 **keinen** Pfad, auf dem die App
-  einen Status senkt — und, weil das Bedienelement aus §6.2 nie gebaut wurde,
-  derzeit auch keinen, auf dem der **Nutzer** ihn senkt. Das ist die offene
-  Entscheidung aus [§13.11](#1311-was-das-kostet), nicht eine Eigenschaft, mit
-  der diese Phase zufrieden ist.
+  mehrere Mismatches. Es gibt **keinen** Pfad, auf dem die *App* einen Status
+  senkt. Nach unten kommt eine Karte ausschließlich über die Korrektur von Hand
+  in der Kartenübersicht (§6.2), und die gibt es seit Phase 13 wirklich
+  ([§13.13](#1313-die-manuelle-korrektur-und-ihre-evidenzgrenze)).
 - **Eine tatsächliche Statusänderung braucht die Zustimmung des Nutzers.** Der
   Vorschlag ändert nichts; er wird zu einer Änderung durch den Tap auf
   *Bestätigen* und durch nichts sonst.
@@ -1027,36 +1030,27 @@ Annahmequote ist also erst **ab Phase 13** messbar, nicht rückwirkend.
 
 ### 13.11 Was das kostet
 
-Fünf Folgen. Vier sind bewusst in Kauf genommen; die erste ist beim Review
-aufgefallen, ist **nicht** entschieden und blockiert den Abschluss der Phase.
+Vier Folgen, alle bewusst in Kauf genommen und keine davon versteckt. Eine
+fünfte stand hier zunächst als **offene Entscheidung** und ist eingelöst:
+Phase 13 entfernte mit *Nochmal* und *Schwer* den letzten abwärts führenden Pfad
+und verwies für die Korrektur auf §6.2 — das nie gebaut worden war. Das
+Kontextmenü aus [§13.13](#1313-die-manuelle-korrektur-und-ihre-evidenzgrenze)
+schließt die Lücke, also ist sie keine Folge dieser Phase mehr, sondern ihr
+Bestandteil.
 
-1. **Es gibt im Produkt derzeit keinen Weg nach unten — und das ist eine offene
-   Entscheidung, keine Inkaufnahme.** Bis Phase 12 senkten *Nochmal* (−2) und
-   *Schwer* (−1) einen Lernstand. Phase 13 entfernt sie, verbietet jede
-   automatische Herabstufung und verweist für die Korrektur auf das Setzen in
-   der Kartenübersicht — **das laut §6.2 seit Phase 1 spezifiziert, aber nie
-   gebaut wurde.** Damit kann eine Karte, die zwei zufällige
-   Erkennungstreffer nach oben getragen haben, dauerhaft auf *Gut* oder
-   *Sicher* stehen bleiben; sie bekommt das niedrige Gewicht aus §3.1, wird
-   selten gezogen, und der Lernende hat kein Mittel dagegen. Wie oft ein
-   Treffer zufällig entsteht, ist **ungemessen** (§13.8) — genau deshalb ist
-   das keine Randbemerkung. **Zu entscheiden ist eines von beiden:** das
-   Bedienelement aus §6.2 nachziehen, oder ausdrücklich festlegen, dass es in
-   Version 1 keinen Weg nach unten gibt. Beides ist eine Produktentscheidung
-   und steht dem Nutzer zu.
-2. **Ohne Mikrofon bewegt sich kein Lernstand mehr von selbst.** Die einzige
+1. **Ohne Mikrofon bewegt sich kein Lernstand mehr von selbst.** Die einzige
    automatische positive Evidenz ist der Textvergleich. Wer in Modus A nie
-   spricht oder auf einem Gerät ohne Mandarin-Erkennung lernt, bekommt nie
-   einen Vorschlag; nach oben geht es dann gar nicht mehr, und nach unten —
-   siehe Punkt 1 — ebenfalls nicht. Das ist die ehrliche Konsequenz aus „keine
-   neue Ersatzheuristik erfinden".
-3. **Dasselbe gilt für Modus B**, dauerhaft und unabhängig vom Gerät.
-4. **Die Gewichtung folgt einem Status, der sich seltener bewegt** (§3.1). Eine
+   spricht oder auf einem Gerät ohne Mandarin-Erkennung lernt, bekommt nie einen
+   Vorschlag — nach oben geht es dann nur über die Korrektur von Hand, nach unten
+   ebenfalls. Das ist die ehrliche Konsequenz aus „keine neue Ersatzheuristik
+   erfinden", und sie ist erträglich, weil es die Korrektur jetzt gibt (§13.13).
+2. **Dasselbe gilt für Modus B**, dauerhaft und unabhängig vom Gerät.
+3. **Die Gewichtung folgt einem Status, der sich seltener bewegt** (§3.1). Eine
    gut gelernte, aber nie gesprochene Karte behält ihr hohes Gewicht und kommt
    weiter häufig. Das ist die richtige Fehlerrichtung — sie fragt zu viel,
    nicht zu wenig —, aber es ist eine Änderung am Sessiongefühl und gehört auf
    die Geräteliste.
-5. **`correctCount` wächst ab Phase 13 nicht mehr** und wird damit ein
+4. **`correctCount` wächst ab Phase 13 nicht mehr** und wird damit ein
    eingefrorenes Aggregat der Phasen 1 bis 12. Es ist in §7 über die
    Selbsteinschätzung definiert, und die gibt es im Lernflow nicht mehr — auch
    *Bestätigen* ist keine (§13.4). Das abgeleitete `accuracy` wird dadurch auf
@@ -1141,3 +1135,85 @@ eingeschränkt. Der Fall bleibt in der Entscheidungstabelle stehen, weil er die
 ehrliche Antwort wäre, sobald auf einer verdeckten Modus-A-Karte ein
 Lautsprecher erschiene — ihn zu löschen würde „wir haben das entschieden" in
 „daran hat niemand gedacht" verwandeln.
+
+### 13.13 Die manuelle Korrektur und ihre Evidenzgrenze
+
+**Die Regel schlägt nur vorsichtig nach oben vor; der Nutzer korrigiert
+jederzeit, insbesondere nach unten.** Das ist die Symmetrie, die der Phase
+gefehlt hat, und sie ist keine Rückkehr der Selbsteinschätzung: Sie sitzt in der
+Kartenübersicht, nicht im Lernflow.
+
+**Die Bedienung** (§6.2): ein Kontextmenü auf der Kartenzeile, *Lernstand
+setzen* mit den fünf Stufen, der aktuelle markiert. Die Auswahl schreibt sofort
+und persistiert sofort, ohne Bestätigungsdialog — eine Statusänderung ist einen
+Tap gemacht und einen Tap zurückgenommen. Der alte Statuspicker im Karteneditor
+kommt **nicht** zurück; beim Anlegen einer Karte kann ihn niemand beantworten,
+und genau das war der Grund, ihn in Phase 6 zu entfernen.
+
+**Was eine Korrektur nicht ist:** keine Lernantwort. Kein `SelfAssessment`, kein
+`ReviewLog`-Eintrag, `reviewCount` und `correctCount` unverändert,
+`lastReviewedAt` unverändert, keine Wiedereinstreuung. Die bestehende Historie
+wird **nicht gelöscht**.
+
+#### Die Evidenzgrenze, und warum sie nötig ist
+
+Den Status zu setzen genügt nicht, und der Fall, der das zeigt, ist der
+realistische:
+
+```text
+Karte steht auf Mittel, sammelt saubere Mittel-Reviews
+  → Vorschlag Mittel → Gut, bestätigt
+  → später Gut → Sicher, bestätigt
+  → der Lernende widerspricht und setzt von Hand zurück auf Mittel
+```
+
+Die alten Mittel-Reviews tragen `previousStatus == medium`, sind nach der
+Gleichstatus-Regel (§13.7, Regel 2) also wieder vergleichbar — und der nächste
+saubere Versuch würde sofort erneut *Mittel → Gut* anbieten. Genau die
+Beförderung, die der Lernende gerade zurückgenommen hat.
+
+Deshalb setzt die Korrektur eine persistente Linie:
+
+```swift
+card.status = gewählterStatus
+card.classificationEvidenceResetAt = now
+try context.save()
+```
+
+Danach zählt als Evidenz **nur, was nach dieser Linie liegt** — strikt danach:
+Ein Review mit demselben Zeitstempel wie die Korrektur zählt nicht, weil die
+Korrektur die spätere der beiden Aussagen ist.
+
+`nil` heißt „nie korrigiert", also ist alles zulässig. Das ist auch der Wert, den
+jede vor Phase 13 geschriebene Karte zurückliest, und der einzige ehrliche.
+
+#### Warum ein eigenes Feld, und warum es nicht in der Engine liegt
+
+**Geprüft, ob ein vorhandenes Feld die Semantik trägt — keines tut es.**
+`lastReviewedAt` bewegt sich bei *jedem* Review und würde damit auch die frischen
+Versuche ausschließen, die gerade zählen sollen; `createdAt` bewegt sich nie; die
+Zähler sind Zähler; die beiden `…WasEditedManually`-Merker gehören zum Text, und
+sie umzudeuten wäre genau die Wiederverwendung, die dieses Projekt verbietet. Auf
+`ReviewLog` ist `previousStatus` das Feld, an dem der Fall **scheitert**.
+
+**Gelesen wird die Grenze beim Übergeben der Historie, nicht in der Regel.**
+`LearnSessionModel.recentSignals` filtert, bevor es abbildet — dieselbe Stelle,
+an der `windowSize` seit Phase 11 als *obere* Schranke wirkt (§12.5); die
+Korrektur ist die passende *untere*. Dass der Filter vor dem Fenster läuft, ist
+Lesbarkeit und **keine** tragende Eigenschaft: Zulässigkeit ist monoton in der
+Zeit — zulässig heißt „neuer als die Linie" —, also liefern beide Reihenfolgen
+dieselbe Menge. Eine frühere Fassung dieses Satzes behauptete etwas anderes und
+lehrte damit eine Invariante, die es nicht gibt; das Review hat es gefunden.
+`Learning/` bleibt damit ohne Uhr und `ReviewSignal` ohne Zeitstempel — ein
+Datumsvergleich in der Regel hätte beiden einen gegeben.
+
+#### Schema
+
+`Card.classificationEvidenceResetAt: Date?`, additiv mit Default `nil`. Gemessen
+statt angenommen: `SchemaMigrationTests.evidenceBoundaryMigratesLightly` schreibt
+einen Store mit dem nachgebauten **Phase-13-Schema** (`ReviewLog` mit den zwei
+Vorschlagsfeldern, `Card` ohne die Linie), öffnet dieselbe Datei mit dem
+aktuellen Schema, liest jeden Wert unverändert, findet die neue Property als
+`nil` — also bleibt die Historie vollständig zulässig —, benutzt sie sofort und
+öffnet noch einmal zur Kontrolle. Das ist der **dritte** additive Fall, den Q7
+einzeln beantwortet, statt aus zwei einen Erfahrungswert zu machen.

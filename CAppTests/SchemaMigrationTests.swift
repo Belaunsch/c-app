@@ -264,6 +264,134 @@ struct SchemaMigrationTests {
         #expect(card.reviews.first?.direction == .audioToGerman)
     }
 
+    /// The data model as phase 13 first shipped it: `ReviewLog` **with** the two
+    /// suggestion fields, `Card` **without** the evidence boundary.
+    ///
+    /// A third reconstruction for a third additive case — a new property on `Card`
+    /// this time. Q7 is answered per case rather than generalised, because that is
+    /// what „gemessen statt angenommen" means.
+    enum Phase13Schema {
+        static var schema: Schema { Schema([Card.self, Tag.self, ReviewLog.self]) }
+
+        @Model
+        final class Card {
+            var id: UUID = UUID()
+            var typeRaw: String = CardType.word.rawValue
+            var statusRaw: Int = LearningStatus.new.rawValue
+            var german: String = ""
+            var hanzi: String = ""
+            var pinyin: String = ""
+            var createdAt: Date = Date()
+            var lastReviewedAt: Date?
+            var reviewCount: Int = 0
+            var correctCount: Int = 0
+            var hanziWasEditedManually: Bool = false
+            var pinyinWasEditedManually: Bool = false
+
+            @Relationship(deleteRule: .nullify, inverse: \Tag.cards)
+            var tags: [Tag] = []
+
+            @Relationship(deleteRule: .cascade, inverse: \ReviewLog.card)
+            var reviews: [ReviewLog] = []
+
+            init(german: String, hanzi: String) {
+                self.german = german
+                self.hanzi = hanzi
+            }
+        }
+
+        @Model
+        final class Tag {
+            var name: String = ""
+            var cards: [Card] = []
+            init(name: String) { self.name = name }
+        }
+
+        @Model
+        final class ReviewLog {
+            var id: UUID = UUID()
+            var reviewedAt: Date = Date()
+            var directionRaw: String = SessionDirection.germanToChinese.rawValue
+            var previousStatusRaw: Int = LearningStatus.new.rawValue
+            var assessmentRaw: String?
+            var usedSpeech: Bool = false
+            var speechMatched: Bool?
+            var wasManualReveal: Bool = false
+            var wasRetry: Bool = false
+            var suggestedStatusRaw: Int?
+            var suggestionDecisionRaw: String?
+            var card: Card?
+            init() {}
+        }
+    }
+
+    @Test("A phase-13 store opens with the evidence boundary added, and reads as never corrected")
+    func evidenceBoundaryMigratesLightly() throws {
+        let store = TemporaryStore()
+        defer { store.remove() }
+        let writtenAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+        // 1. A store from the first phase-13 build: a card with history, including
+        //    an entry that already carries a declined suggestion.
+        do {
+            let container = try store.openContainer(for: Phase13Schema.schema)
+            let context = container.mainContext
+
+            let card = Phase13Schema.Card(german: "Apfel", hanzi: "苹果")
+            card.statusRaw = LearningStatus.good.rawValue
+            card.reviewCount = 6
+            card.lastReviewedAt = writtenAt
+            context.insert(card)
+
+            let declined = Phase13Schema.ReviewLog()
+            declined.reviewedAt = writtenAt
+            declined.previousStatusRaw = LearningStatus.good.rawValue
+            declined.usedSpeech = true
+            declined.speechMatched = true
+            declined.suggestedStatusRaw = LearningStatus.secure.rawValue
+            declined.suggestionDecisionRaw = SuggestionDecision.declined.rawValue
+            declined.card = card
+            context.insert(declined)
+
+            try context.save()
+        }
+
+        // 2. Open the same file with the current schema.
+        let container = try store.openContainer()
+        let context = container.mainContext
+        let card = try #require(try context.fetch(FetchDescriptor<CApp.Card>()).first)
+
+        #expect(card.german == "Apfel")
+        #expect(card.status == .good)
+        #expect(card.reviewCount == 6)
+        #expect(card.lastReviewedAt == writtenAt)
+        #expect(card.reviews.count == 1)
+
+        let declined = try #require(card.reviews.first)
+        #expect(declined.suggestedStatus == .secure, "the phase-13 fields survive")
+        #expect(declined.suggestionDecision == .declined)
+
+        // 3. The new property reads as „never corrected", which is the only honest
+        //    value for a card written before it existed — so all of its history
+        //    stays eligible.
+        #expect(card.classificationEvidenceResetAt == nil)
+        #expect(LearnSessionModel.countsAsEvidence(declined, for: card))
+
+        // 4. And it is usable at once.
+        try LearningStatusCorrection.apply(
+            .medium, to: card, in: context, now: { writtenAt.addingTimeInterval(60) }
+        )
+        #expect(card.status == .medium)
+        #expect(LearnSessionModel.countsAsEvidence(declined, for: card) == false)
+
+        // 5. Reopened, because a migration that only appears to work shows up here.
+        let reopened = try store.openContainer()
+        let again = try #require(try reopened.mainContext.fetch(FetchDescriptor<CApp.Card>()).first)
+        #expect(again.status == .medium)
+        #expect(again.classificationEvidenceResetAt == writtenAt.addingTimeInterval(60))
+        #expect(again.reviews.count == 1, "and the history is still there")
+    }
+
     @Test("A phase-12 store opens under the phase-13 schema with nothing lost")
     func phase13PropertiesMigrateLightly() throws {
         let store = TemporaryStore()

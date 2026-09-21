@@ -140,6 +140,7 @@ c-app/
 │   │   │   ├── CardFilter.swift            pure Filterlogik, testbar
 │   │   │   ├── CardEditorView.swift        Anlegen + Bearbeiten
 │   │   │   ├── CardEditorModel.swift       @Observable, Validierung, Merker
+│   │   │   ├── LearningStatusCorrection.swift  Lernstand von Hand, testbar (Phase 13)
 │   │   │   ├── TagNormalization.swift      Duplikatvermeidung, Namensregeln
 │   │   │   ├── TagListView.swift           Kategorien anlegen, umbenennen, löschen
 │   │   │   ├── TagManagement.swift         Anlegen, Umbenennen, Löschen, testbar
@@ -312,6 +313,7 @@ Die Anforderungen nennen unter anderem „Gewicht bzw. Lernmetadaten“ und
 | `reviewCount` | persistiert | nicht rekonstruierbar (keine Antwort-Historie) |
 | `correctCount` | persistiert | dito |
 | `hanziWasEditedManually`, `pinyinWasEditedManually` | persistiert | verhindert Überschreiben durch Automatik |
+| `classificationEvidenceResetAt` | **Phase 13**, persistiert, optional | die Linie, ab der die assistierte Einstufung Evidenz lesen darf. Gesetzt bei einer Korrektur von Hand; `nil` = noch nie korrigiert |
 | **`weight`** | **abgeleitet** | Reine Funktion aus `status` (+ Recency innerhalb der Session). Doppelte Speicherung würde nur inkonsistent werden können. |
 | **`errorCount`** | **abgeleitet** | `reviewCount - correctCount` |
 | **`accuracy`** | **abgeleitet** | `correctCount / reviewCount` |
@@ -798,6 +800,7 @@ das eine noch das andere zutrifft — mit Begründung in derselben Zelle.
 | 16 | Erkennung | nichts gesprochen | „Nichts erkannt. Noch einmal versuchen, oder aufgeben." — ausdrücklich **kein** Fehler und **kein** Urteil über die Aussprache | wiederholen | beides |
 | 17 | SwiftData | Container lässt sich nicht öffnen | ganzseitige `PersistenceErrorView` statt Absturz | App neu starten; der Grund steht da | Gerät |
 | 18 | SwiftData | `save()` beim Anlegen/Bearbeiten einer Karte scheitert | Alert `cardSaveFailed` **und** `rollback()` | erneut versuchen; nichts wurde halb geschrieben | **Gerät** — siehe Kasten unten |
+| 18a | SwiftData | `save()` beim Setzen des Lernstands von Hand scheitert | Alert „Lernstand nicht gespeichert" + `rollback()`; eigener Zustand, nicht der des Löschens, damit die Meldung nicht über die falsche Aktion spricht | erneut wählen; der alte Stand steht noch | **Gerät** — derselbe nicht provozierbare Pfad wie 18 bis 21 |
 | 19 | SwiftData | `save()` beim Löschen scheitert | Alert `cardDeleteFailed` + `rollback()`, die Karte bleibt sichtbar | erneut versuchen | **Gerät** |
 | 20 | SwiftData | `save()` **während einer Session** scheitert | Alert, `rollback()`, die Karte bleibt aufgedeckt und der Vorschlag stehen | dieselbe Entscheidung erneut treffen | **Gerät** |
 | 21 | SwiftData | Kategorie anlegen/umbenennen/löschen scheitert | `tagCreateFailed` / `tagRenameFailed` / `tagDeleteFailed`, jeweils mit Systemtext | erneut versuchen; der alte Zustand steht noch | **Gerät** |
@@ -808,7 +811,7 @@ das eine noch das andere zutrifft — mit Begründung in derselben Zelle.
 | 26 | Datenlage | Karte ohne chinesischen Text | wird beim Aufbau des Pools übersprungen — sie taucht in keiner Session auf | Hanzi ergänzen | Test |
 | 27 | Datenlage | Karte wird gelöscht, während sie in der laufenden Session steckt | die Session überspringt sie beim nächsten Zugriff; ein eintreffendes Erkennungsergebnis wird verworfen und protokolliert | weiterlernen | Test |
 
-**Warum die vier SwiftData-Schreibfehler nicht im Test stehen.** Der
+**Warum die fünf SwiftData-Schreibfehler nicht im Test stehen.** Der
 Fehlerpfad ist nicht provozierbar: Ein `ModelContext`, der beim Speichern
 wirft, lässt sich im Testbundle nicht herstellen — `allowsSave: false` wird im
 vollen Suite-Lauf nicht geehrt, das steht seit Phase 2 in
@@ -1059,3 +1062,4 @@ würde entfallen.
 | A43 | Evidenz zählt **je Richtung und je Ausgangsstatus** — das ersetzt den `.new`-Riegel aus Phase 11 | Phase 11 verweigerte `.new` jeden Vorschlag, weil eine von Hand zurückgesetzte Karte ihre Historie behält und sofort eine Beförderung angeboten bekommen hätte. Der Riegel war das richtige Verhalten aus dem falschen Grund: Er prüfte den Status, wo die **Herkunft** der Evidenz das Problem war. Zählt ein Lauf nur Versuche mit demselben `previousStatus`, ist die zurückgesetzte Karte ohne Evidenz, eine wirklich neue Karte kann ihren ersten Vorschlag bekommen, und zwei Beförderungen hintereinander sind unmöglich — drei Eigenschaften aus einer Bedingung. Die Richtungsregel steht daneben, weil ein Modus-B-Versuch keine Information über Modus A trägt und deshalb auch keine zerstören darf |
 | A44 | Sprachausgabe entwaffnet den Session-Sprachmodus nur bei **verdeckter** Karte | Verengung der Phase-12-Regel, erzwungen durch A40: Der Lernende landet jetzt auf **jeder** Karte im aufgedeckten Zustand, in dem der große Lautsprecher steht. Einmal die Antwort anhören hätte den Sprachmodus jedes Mal gekostet und die Phase-12-Funktion praktisch abgeschafft. Der Grund der Regel — nie gleichzeitig sprechen und aufnehmen, und die Entscheidung darüber nicht wegnehmen — greift dort nicht: Die Aufnahme dieses Versuchs ist beendet, die nächste beginnt erst nach dem Kartenwechsel, und der stoppt die Sprachausgabe ohnehin. **Damit wird diese Reihenfolge tragend und ist festgeschrieben:** Sprachausgabe stoppen → Kartenwechsel → erst danach die automatische Aufnahme, an **einem** Beobachter je Kartenübergang. Nach der Verengung ist sie das Einzige, was Ton und Mikrofon noch auseinanderhält |
 | A45 | Ein abgebrochener Aufnahmeversuch ist **kein** Versuch | *Stop* verwirft, ohne auszuwerten, aufzudecken oder etwas zu protokollieren: kein `ReviewLog`-Eintrag, kein `reviewCount`, keine Evidenz. Ohne diesen Weg kostet ein verstolpertes „Moment, nochmal" einen Versuch **und** ein Aufdecken. Der Sprachmodus bleibt dabei aktiv — abbrechen ist keine Entscheidung über die nächste Karte —, aber A38 gilt: Auf **derselben** Karte startet nichts von selbst nach, ein weiterer Anlauf braucht einen Tap |
+| A46 | Der Lernstand wird **von Hand** in der Kartenübersicht korrigiert, und die Korrektur setzt eine **Evidenzgrenze** | Phase 13 nahm mit *Nochmal* und *Schwer* den letzten abwärts führenden Pfad heraus und verwies für die Korrektur auf §6.2 — das seit Phase 1 spezifiziert, aber nie gebaut war. Das unabhängige Review fand den Widerspruch; eingelöst statt umformuliert, weil eine Karte, die zwei zufällige Erkennungstreffer nach oben getragen haben, sonst dauerhaft dort bliebe und die False-Accept-Rate ungemessen ist. Kontextmenü auf der Zeile, kein Picker im Editor (Phase 6 hat ihn aus gutem Grund entfernt), kein Bestätigungsdialog. **Keine Lernantwort:** kein `ReviewLog`, keine Zähler, keine Wiedereinstreuung. **Aber eine Grenze:** `Card.classificationEvidenceResetAt`, weil die alten Reviews einer auf *Mittel* zurückgesetzten Karte nach der Gleichstatus-Regel sonst sofort erneut *Mittel → Gut* auslösen würden. Ein eigenes Feld, nachdem jedes vorhandene geprüft wurde — `lastReviewedAt` bewegt sich bei jedem Review, `previousStatus` ist das Feld, an dem der Fall scheitert. Gelesen wird die Grenze beim Übergeben der Historie, nicht in der Regel: so bleibt `Learning/` ohne Uhr |

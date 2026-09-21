@@ -78,6 +78,11 @@ struct CardListView: View {
     @State private var cardPendingDeletion: Card?
     @State private var deleteFailure: AppError?
 
+    /// A failed hand-picked learning status. Its own property rather than
+    /// sharing `deleteFailure`: the two alerts say different things, and one
+    /// state for two meanings is how an alert ends up lying about what failed.
+    @State private var statusFailure: AppError?
+
     /// Every card of the current type, ignoring search and filters. Used to
     /// tell "nothing created yet" apart from "filtered everything away".
     private var cardsOfCurrentType: [Card] {
@@ -186,6 +191,18 @@ struct CardListView: View {
                 presenting: deleteFailure
             ) { _ in
                 Button("OK", role: .cancel) { deleteFailure = nil }
+            } message: { failure in
+                Text(failure.userText)
+            }
+            .alert(
+                "Lernstand nicht gespeichert",
+                isPresented: Binding(
+                    get: { statusFailure != nil },
+                    set: { if $0 == false { statusFailure = nil } }
+                ),
+                presenting: statusFailure
+            ) { _ in
+                Button("OK", role: .cancel) { statusFailure = nil }
             } message: { failure in
                 Text(failure.userText)
             }
@@ -362,6 +379,52 @@ struct CardListView: View {
             Button("Löschen", role: .destructive) {
                 cardPendingDeletion = card
             }
+        }
+        // The only way a learning status ever goes **down**. The assisted
+        // classification offers steps up and needs consent; nothing in the app
+        // lowers one, and the text comparison those offers rest on has an
+        // unmeasured false-accept rate — so a card carried upwards by two lucky
+        // recognitions needs a way back (`docs/learning-engine.md` §13.13).
+        //
+        // A context menu rather than a row of buttons: it is used rarely, and the
+        // list is the purpose of this screen (A25). Not a swipe action either —
+        // swiping already deletes, and five statuses do not fit there.
+        .contextMenu {
+            Menu("Lernstand setzen") {
+                ForEach(LearningStatusCorrection.menuOrder, id: \.self) { status in
+                    Button {
+                        setStatus(status, on: card)
+                    } label: {
+                        // The current one is marked, so the menu says where the
+                        // card stands as well as where it could go. `Label` with
+                        // a checkmark rather than a `Picker`: a picker would
+                        // imply a binding, and this writes to the store.
+                        if status == card.status {
+                            Label(status.title, systemImage: "checkmark")
+                        } else {
+                            Text(status.title)
+                        }
+                    }
+                    // The marking has to be spoken, not only drawn.
+                    .accessibilityLabel(LearningStatusCorrection.accessibilityLabel(
+                        for: status, isCurrent: status == card.status
+                    ))
+                }
+            }
+        }
+    }
+
+    /// Writes a hand-picked learning status.
+    ///
+    /// No confirmation dialog: the change is one tap to make and one tap to
+    /// reverse, and a card's status is not the kind of thing that needs a
+    /// safety question. The rule — including „the same status is a no-op" —
+    /// lives in `LearningStatusCorrection`, where a test can reach it.
+    private func setStatus(_ status: LearningStatus, on card: Card) {
+        do {
+            try LearningStatusCorrection.apply(status, to: card, in: context)
+        } catch {
+            statusFailure = error as? AppError ?? .cardSaveFailed(error)
         }
     }
 

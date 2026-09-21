@@ -2654,8 +2654,9 @@ Diese sechs Punkte standen im Spezifikationsdurchgang zur Klärung und sind
    „keine neue Ersatzheuristik erfinden", keine Lücke. Die Rückfallebene liegt
    im Backlog und wird erst nach dem Alltagstest bewertet. **Nachtrag vom
    2026-09-21:** Dieser Punkt verwies ursprünglich auf das Setzen des Status in
-   der Kartenübersicht — das Review hat gefunden, dass dieses Bedienelement
-   nicht existiert. Siehe den offenen Punkt am Ende dieser Phase.
+   der Kartenübersicht — das Review hat gefunden, dass dieses Bedienelement nicht
+   existierte, und es ist daraufhin nachgezogen worden. Siehe § *Der offene Punkt
+   der Phase 13*.
 2. **`Neu → Mittel` ist der erste Vorschlag** nach ausreichender sauberer
    Evidenz — die *Gut*-Spalte der Matrix aus §6, keine neue Leiter. *Schwach*
    wird dabei übersprungen, weil *Neu* laut §6 mit Stufe 1 verrechnet wird und
@@ -2764,11 +2765,14 @@ Phase-13-Entscheidung.
       erneut möglich.
 - [x] Startet die Aufnahme einer neuen Karte von selbst, erscheint direkt
       `[ Fertig ][ ■ ]` und nicht *Antwort sprechen*.
-- [ ] Der Übergang zwischen den beiden Aufnahmezuständen ist **eine**
-      Animation; Zeile 2 bewegt sich dabei nicht. **Gerätebeleg offen** — der
-      Code hat genau ein `.animation` auf dem aus der Phase abgeleiteten Wert
-      und Zeile 2 liegt außerhalb des animierten `HStack`, aber wie ein
-      Übergang *wirkt*, erreicht kein Unit-Test.
+- [→] Der Übergang zwischen den beiden Aufnahmezuständen ist **eine**
+      Animation; Zeile 2 bewegt sich dabei nicht. **In die
+      [finale Geräte- und Release-Abnahme](#finale-geräte--und-release-abnahme)
+      verschoben** (2026-09-21): Der Code hat genau ein `.animation` auf dem aus
+      der Phase abgeleiteten Wert und Zeile 2 liegt außerhalb des animierten
+      `HStack` — wie ein Übergang *wirkt*, erreicht aber kein Unit-Test. Das ist
+      eine Darstellungsprüfung des fertigen Produkts, kein technisches Gate
+      dieser Phase.
 - [x] *Aufgeben* verwirft eine laufende Aufnahme, deckt auf, zählt als
       manueller Reveal, liefert **keine** positive Evidenz und verbessert
       **keinen** Status.
@@ -2889,13 +2893,19 @@ und wer von Hand tippen will, schaltet die Tastatur wie in jeder anderen App
 um. Was **falls überhaupt** später in Frage kommt, steht im Backlog — in der
 dort begründeten Reihenfolge und ausdrücklich ohne Erzwingen.
 
-### Stand am 2026-09-21 — implementiert
+### Stand am 2026-09-21 — implementiert und verifiziert (READY)
 
-**633 Testfunktionen / 691 Einzelausführungen grün, 0 übersprungen**,
-Debug-Build von null und Release-Build von null mit 0 Compilerdiagnosen. Ein
-unabhängiges Code Review und ein unabhängiges Testaudit sind durchgeführt und
-ihre Findings abgearbeitet — **mit einer Ausnahme, die keine Umformulierung ist
-und deshalb unten als offener Punkt steht.**
+**Verdict: READY.** Build, Tests und alle technischen Akzeptanzkriterien der
+Phase sind erfüllt; die drei Darstellungs- und Interaktionsprüfungen stehen mit
+`[→]` in der finalen Geräte- und Release-Abnahme und sind ausdrücklich **kein**
+Gate dieser Phase — so sieht es die Regelung vom 2026-09-13 vor.
+
+**649 Testfunktionen / 707 Einzelausführungen grün, 0 übersprungen**,
+Debug-Build von null und Release-Build von null mit 0 Compilerdiagnosen. **Zwei**
+unabhängige Code Reviews und **zwei** unabhängige Testaudits sind durchgeführt —
+die zweite Runde geprüft die Nachlieferung der manuellen Korrektur — und ihre
+Findings vollständig abgearbeitet, einschließlich des Blockers, der eine
+Produktentscheidung verlangte und unten einzeln steht.
 
 **Eine bewusste Abweichung von Task 13.3, und sie ist kleiner als geplant:**
 Die Spezifikation sah vor, `AssessmentOutcome` durch ein `AttemptOutcome` ohne
@@ -2947,7 +2957,7 @@ sonst unverändert.
   neue Fassung prüft, was wirklich kaputtgehen kann — dass der Merker pro
   Versuch **übernommen** und nicht akkumuliert wird.
 
-**Gegenmutationen: vierzehn ausgeführt, alle greifen.** Jede wurde einzeln
+**Gegenmutationen: einundzwanzig ausgeführt, alle greifen.** Jede wurde einzeln
 angewandt, die betroffenen Suiten liefen, und die Mutation wurde
 zurückgenommen:
 
@@ -2967,6 +2977,17 @@ zurückgenommen:
 | 12 | Modus A verliert die Beschriftung *Aufgeben* | 13 Tests, u. a. `modeAAlwaysSaysAufgeben` |
 | 13 | der Vorschlag springt zwei Stufen | 25 Tests, u. a. `declineResetsTheEvidence` |
 | 14 | die Queue ignoriert den Wiedereinstreuungswunsch | 24 Tests, u. a. `fullBatchLengthMatchesThePromise` |
+| 15 | die Evidenzgrenze wird ignoriert | 8 Tests, u. a. `newReviewsCountAgain` |
+| 16 | eine Korrektur setzt keine Grenze | 9 Tests, u. a. `theBoundaryIsStrict` |
+| 17 | dieselbe Stufe erneut zu wählen ist kein No-op mehr | `samePickIsANoOp` |
+| 18 | die Korrektur zählt als Review (`reviewCount`, `lastReviewedAt`) | `correctionIsNotAnAnswer` |
+| 19 | die Korrektur speichert nicht | `correctionIsPersisted` |
+| 20 | die Grenze wird nicht persistiert (`@Transient`) | `evidenceBoundaryMigratesLightly`, `storeContainsExactlyTheDocumentedAttributes` |
+| 21 | ein veralteter Vorschlag bleibt gültig | 6 Tests, u. a. `aCorrectionExpiresAStandingOffer` |
+
+Die letzten vier hat das Testaudit als fehlend benannt — drei davon deckten
+vorhandene Tests ab, ohne ausgeführt worden zu sein, und die vierte prüft den
+Guard, den das Code Review erzwungen hat.
 
 **Eine Warnung für den nächsten Durchgang, teuer gelernt:** Ein
 Mutationsskript, das die Datei mit `git checkout --` zurücksetzt, wirft bei
@@ -2975,39 +2996,79 @@ Dateien der Lernschicht, die aus dem Kontext wiederhergestellt werden mussten.
 Zurückgenommen wird eine Mutation aus einer **Byte-Kopie** der Datei, nie aus
 Git.
 
-### Offener Punkt der Phase 13 — zu entscheiden, bevor sie abgeschlossen ist
+### Der offene Punkt der Phase 13 — am 2026-09-21 entschieden und eingelöst
 
-**Das Code Review hat einen echten Widerspruch gefunden, und er ist im Code
-nachgeprüft:** `card.status` wird in der gesamten App an **genau einer** Stelle
-geschrieben — `LearnSessionModel.closeAttempt`, ausschließlich bei einer
-bestätigten Einstufung. Es gibt **kein** Bedienelement, um einen Lernstand von
-Hand zu setzen: Die Kartenübersicht zeigt ihn als Punkt und filtert danach, der
-Picker im Editor ist seit Phase 6 (Task 6.10) entfernt, und das in
+**Das Code Review hat einen echten Widerspruch gefunden**, und er war im Code
+nachgeprüft: `card.status` wurde in der gesamten App an genau einer Stelle
+geschrieben, und es gab **kein** Bedienelement, um einen Lernstand von Hand zu
+setzen. Die Kartenübersicht zeigte ihn als Punkt und filterte danach, der Picker
+im Editor ist seit Phase 6 (Task 6.10) entfernt, und das in
 [learning-engine.md §6.2](learning-engine.md) seit Phase 1 spezifizierte Setzen
-in der Kartenübersicht ist nie gebaut worden.
+war nie gebaut worden.
 
 Bis Phase 12 war das folgenlos, weil *Nochmal* (−2) und *Schwer* (−1) nach unten
-führten. **Phase 13 entfernt diesen Weg** und verwies für die Korrektur auf ein
-Bedienelement, das es nicht gibt. Folge: Eine Karte, die zwei zufällige
-Erkennungstreffer nach oben getragen haben, bleibt dauerhaft auf *Gut* oder
-*Sicher*, bekommt das niedrige Gewicht aus §3.1, wird selten gezogen — und der
-Lernende hat kein Mittel. Wie oft ein Treffer zufällig entsteht, ist
-**ungemessen**; genau das war der Grund, einem einzelnen Treffer nichts zu
-glauben.
+führten. Phase 13 entfernte beide und verwies für die Korrektur auf ein
+Bedienelement, das es nicht gab — also gab es überhaupt keinen Weg nach unten
+mehr, auch nicht für eine Karte, die zwei zufällige Erkennungstreffer nach oben
+getragen haben. Wie oft ein Treffer zufällig entsteht, ist **ungemessen**; genau
+das war der Grund, einem einzelnen Treffer nichts zu glauben.
 
-**Zu entscheiden ist eines von beiden, und es ist eine Produktentscheidung:**
+**Entschieden: das Bedienelement wird nachgezogen** — keine Umformulierung, keine
+Rückkehr der Selbsteinschätzung, sondern die Einlösung dessen, was §6.2 seit
+Phase 1 beschreibt. Umgesetzt als Kontextmenü auf der Kartenzeile, *Lernstand
+setzen* mit den fünf Stufen und dem aktuellen markiert; die Auswahl schreibt und
+persistiert sofort, ohne Bestätigungsdialog, und dieselbe Stufe erneut zu wählen
+ist ein No-op.
 
-1. **Das Setzen des Lernstands in der Kartenübersicht nachziehen.** Es steht seit
-   Phase 1 in §6.2, ist also kein neuer Umfang, sondern eine Einlösung — ein
-   Kontextmenü auf der Zeile mit den fünf Stufen.
-2. **Ausdrücklich festlegen, dass Version 1 keinen Weg nach unten hat**, §6.2
-   entsprechend umschreiben und das Nachziehen in den Backlog heben.
+**Der schwierige Teil war nicht das Setzen, sondern die Evidenzgrenze.** Eine
+Karte, die *Mittel → Sicher* gegangen ist und von Hand auf *Mittel*
+zurückgesetzt wird, trägt ihre alten *Mittel*-Reviews — die nach der
+Gleichstatus-Regel wieder vergleichbar sind, sodass der nächste saubere Versuch
+sofort erneut *Mittel → Gut* anbieten würde. Deshalb setzt die Korrektur
+`Card.classificationEvidenceResetAt`, und danach zählt nur, was **nach** dieser
+Linie liegt. Die Historie wird nicht gelöscht; die Linie verschiebt sich.
 
-Die Dokumentation sagt bis dahin die gemessene Wahrheit und verweist nicht mehr
-auf das nicht gebaute Bedienelement (§6.2, §13.8, §13.11 Punkt 1, CLAUDE.md,
-`AssistedAssessment.swift`). **Solange dieser Punkt offen ist, ist Phase 13 nicht
-abgeschlossen** — unabhängig davon, dass Build, Tests, Review und Audit grün
-sind.
+Ein eigenes Feld, weil vorher geprüft wurde, ob ein vorhandenes die Semantik
+trägt: `lastReviewedAt` bewegt sich bei jedem Review und würde auch die frischen
+Versuche ausschließen, `createdAt` bewegt sich nie, die Zähler sind Zähler, die
+`…WasEditedManually`-Merker gehören zum Text, und `ReviewLog.previousStatus` ist
+das Feld, an dem der Fall scheitert. Vollständig in
+[learning-engine.md §13.13](learning-engine.md#1313-die-manuelle-korrektur-und-ihre-evidenzgrenze).
+
+**Zusätzliche Akzeptanzkriterien dieser Nachlieferung, alle erfüllt:**
+
+- [x] Eine Karte lässt sich auf **jeden** der fünf Stufen setzen, und die
+      Markierung des aktuellen Stands wird von VoiceOver ausgesprochen, nicht nur
+      gezeichnet.
+- [→] Dass das **Kontextmenü** aufgeht, den Haken zeigt und mit Tap und Swipe
+      koexistiert: **in die
+      [finale Geräte- und Release-Abnahme](#finale-geräte--und-release-abnahme)
+      verschoben** (2026-09-21). Ein Long-Press auf eine Zeile, in der ein
+      `Button` die halbe Breite einnimmt, ist genau die A27-Anordnung, die in
+      Phase 6 zwei Geräterunden gekostet hat — eine Interaktionsprüfung des
+      fertigen Produkts, kein technisches Gate dieser Phase.
+- [x] Die Auswahl schreibt und persistiert sofort.
+- [→] Dass **kein Bestätigungsdialog** dazwischenliegt: **in die
+      [finale Geräte- und Release-Abnahme](#finale-geräte--und-release-abnahme)
+      verschoben** (2026-09-21). Strukturell belegt durch das Fehlen eines
+      Bestätigungszustands — das Löschen hat mit `cardPendingDeletion` einen —,
+      aber kein Test sieht einen Dialog.
+- [x] Dieselbe Stufe erneut zu wählen ist ein No-op — und setzt **auch keine**
+      Evidenzgrenze.
+- [x] Der Statuspicker kommt **nicht** in den Karteneditor zurück.
+- [x] Eine Korrektur schreibt keinen `ReviewLog`, bewegt weder `reviewCount` noch
+      `correctCount` noch `lastReviewedAt` und streut keine Karte wieder ein.
+- [x] Die bestehende Review-Historie wird nicht gelöscht.
+- [x] Reviews von **vor** der Korrektur liefern keine Evidenz mehr; ein Review
+      mit demselben Zeitstempel zählt nicht.
+- [x] Reviews **nach** der Korrektur zählen normal, und nach zwei sauberen
+      Versuchen — dem protokollierten und dem laufenden — darf wieder
+      *Mittel → Gut* vorgeschlagen werden.
+- [x] Der Wechsel auf `.new` verhält sich wie jede andere Korrektur.
+- [x] Status und Grenze überleben einen Neustart.
+- [x] Die Erweiterung ist additiv: Ein mit dem **Phase-13-Schema** geschriebener
+      Store öffnet ohne Migrationsplan, jeder Wert unverändert, die neue Property
+      als `nil` — gemessen, nicht angenommen (Q7, dritter additiver Fall).
 
 ### Was nur strukturell gilt, und nicht behauptet wird
 
@@ -3019,7 +3080,22 @@ hier statt in einer Fußnote:
 | „■ schreibt keinen Eintrag und bewegt keinen Zähler" | Der Abbruch erreicht das Model gar nicht — `cancelRecordingByLearner()` berührt nur `speechState`. Es gibt keinen Eingang, über den ein Eintrag entstehen könnte |
 | „Speicherfehler: Karte bleibt aufgedeckt, Vorschlag bleibt stehen" | Der Fehlerpfad ist im Testbundle nicht provozierbar (seit Phase 2 begründet). Gepinnt ist die tragende Eigenschaft: `SessionQueueTests.advancingACopyDoesNotAffectTheOriginal` |
 | „Sprachausgabe stoppen → Kartenwechsel → Auto-Aufnahme" | Die **eine Hälfte** ist prüfbar und geprüft (`LearnFlowTests.theCycleKeyChangesOncePerTransition`); dass `speech.stop()` zuerst läuft, liegt in einem `body`. Es ruht auf zwei Stellen, nicht auf einer Anweisungsreihenfolge |
-| „Eine Animation, Zeile 2 bewegt sich nicht" | Wie ein Übergang wirkt, erreicht kein Unit-Test — als einziges Kriterium **nicht** abgehakt |
+| „Eine Animation, Zeile 2 bewegt sich nicht" | Wie ein Übergang wirkt, erreicht kein Unit-Test |
+| „Das Kontextmenü geht auf und zeigt den Haken" | `.contextMenu` sitzt am `HStack`, in dem ein `Button` die halbe Zeile einnimmt (A27). Getestet sind die Stufenliste, das gesprochene Label und die Modellschicht — nicht die Gestik |
+| „Kein Bestätigungsdialog" | Belegt durch das Fehlen eines Bestätigungszustands, nicht durch einen Test |
+| „Eine Korrektur streut keine Karte wieder ein" | `LearningStatusCorrection` sieht weder `SessionQueue` noch `LearnSessionModel` — es gibt keinen Eingang, über den es geschehen könnte |
+
+**Drei davon sind mit `[→]` gekennzeichnet** — Animation, Kontextmenü-Gestik,
+Dialogfreiheit. Sie sind **weder erfüllt noch offen gegen diese Phase**, sondern
+am 2026-09-21 in die
+[finale Geräte- und Release-Abnahme](#finale-geräte--und-release-abnahme)
+verschoben: Es sind Darstellungs- und Interaktionsprüfungen des fertigen
+Produkts, und seit dem 2026-09-13 gehört genau diese Klasse in das gemeinsame
+Gate am Ende statt in das Gate einer einzelnen Phase. Ein Kästchen, das Prüfung
+behauptet, bekommen sie damit nicht — sie stehen dort als Punkte.
+
+Die vierte Zeile der Tabelle, die Wiedereinstreuung, ist durch die fehlende
+Schnittstelle strukturell dicht und bleibt abgehakt.
 
 **Korrigiert am 2026-09-21:** Die erste Fassung von §13.12 behauptete, die
 Reihenfolge sei „über `SessionSpeechState` als Sequenz prüfbar, ohne View". Das
@@ -3051,8 +3127,9 @@ verengt).
 - **Keine Ersatzheuristik für Modus B** und keine für Modus A ohne Mikrofon.
   Dort bewegt sich der Lernstand nicht, und das ist die benannte Folge, keine
   Lücke ([learning-engine.md §13.11](learning-engine.md#1311-was-das-kostet)).
-  **Nicht** in dieser Phase gebaut ist das Setzen des Lernstands in der
-  Kartenübersicht — siehe den offenen Punkt unten.
+  Das Setzen des Lernstands in der Kartenübersicht war hier zunächst als **nicht
+  gebaut** geführt; es ist am 2026-09-21 nachgezogen worden, weil es der einzige
+  Weg nach unten ist — siehe § *Der offene Punkt der Phase 13*.
 - **Kein Endpointing**, kein Silence-Timer, kein `SpeechDetector`-Polling.
 - **Keine Kalibrierung** der Schwelle an realer Historie — sie wird durch die
   aufgezeichneten Ablehnungen erst möglich und bleibt offen.
@@ -3151,6 +3228,21 @@ unverändert dokumentiert.
 - [ ] der Lernflow aus Phase 13: Stop im Aufnahmepfad, *Aufgeben* samt
       Wiedereinstreuung, *Weiter*, *Bestätigen*, *Ablehnen* — und die
       Ablehnung, die einen App-Neustart überlebt
+- [ ] die **Korrektur des Lernstands von Hand** — die drei aus Phase 13 hierher
+      verschobenen Punkte (dort mit `[→]` gekennzeichnet): Long-Press auf eine
+      Kartenzeile öffnet das Kontextmenü, ohne den Aufklapp-Tap oder die
+      Swipe-Aktion zu beschädigen (A27); der aktuelle Stand ist markiert **und**
+      wird von VoiceOver als solcher angesagt; die Auswahl schreibt **ohne
+      Bestätigungsdialog**; bei aktivem Statusfilter verschwindet die Zeile
+      danach aus der Liste, was gewollt ist
+- [ ] die **Animation im Aufnahmepfad** (ebenfalls aus Phase 13 verschoben):
+      `[ Antwort sprechen ]` → `[ Fertig ][ ■ ]` ist **eine** Bewegung — der
+      breite Knopf schrumpft nach rechts auf die Stop-Fläche, *Fertig* erscheint
+      links, und die Zeile darunter bewegt sich **nicht** mit
+- [ ] ein **Vorschlag, der während einer laufenden Session von Hand überholt
+      wird**: Karte aufgedeckt stehen lassen, im Karten-Tab denselben Lernstand
+      ändern, zurückwechseln — das Angebot muss verschwunden sein, nicht die
+      Korrektur zurücknehmen
 - [ ] alle Funktionen aus Phase 14, sobald deren Umfang entschieden ist
 
 ### 2. Persistenz und Migration
@@ -3163,9 +3255,10 @@ Nutzers vernichten kann.
 - [ ] Keine bestehenden Karten, Kategorien oder Lernstände gehen verloren
 - [ ] Alle bis dahin hinzugekommenen Modelle und Migrationen prüfen,
       insbesondere `ReviewLog` aus Phase 11 mit seiner Beziehung zu `Card` und
-      die in Phase 13 ergänzten `suggestedStatusRaw` und
-      `suggestionDecisionRaw` — die ersten neuen Properties auf einem
-      **bestehenden** Modell
+      die in Phase 13 ergänzten Properties: `suggestedStatusRaw` und
+      `suggestionDecisionRaw` auf `ReviewLog` und
+      `classificationEvidenceResetAt` auf `Card` — die erste neue Property auf
+      `Card` überhaupt
 - [ ] Damit ist auch **Q7** fällig
       ([apple-frameworks.md §10](apple-frameworks.md#10-offene-technische-fragen-zu-klären-vor-der-jeweiligen-phase)):
       ob die automatische SwiftData-Migration reicht, entscheidet sich hier
