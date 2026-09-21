@@ -60,7 +60,7 @@ ein Engine-Zustand, kein Pflichtfeld für den Nutzer.
 | **Pool** | Alle Karten, die zur Session-Konfiguration passen (Kartentyp, optional Tag-Filter). Wird einmal beim Sessionstart gebildet. |
 | **Mini-Batch** | Eine Gruppe von standardmäßig 7 **unterschiedlichen** Karten aus dem Pool. |
 | **Queue** | Die Abfragereihenfolge innerhalb des aktuellen Mini-Batches. Verändert sich durch Wiedereinstreuung. |
-| **Aufgelöst** | Eine Karte gilt als aufgelöst, wenn sie im aktuellen Mini-Batch mit *Schwer*, *Gut* oder *Sicher* bewertet wurde. Sie verlässt damit den Batch. |
+| **Aufgelöst** | Eine Karte gilt als aufgelöst, wenn sie im aktuellen Mini-Batch mit *Schwer*, *Gut* oder *Sicher* bewertet wurde. Sie verlässt damit den Batch. **Ab Phase 13** ([§13.4](#134-die-sechs-aktionen-und-was-sie-schreiben)): aufgelöst ist eine Karte, deren Versuch mit *Weiter*, *Bestätigen* oder *Ablehnen* abgeschlossen wurde und die nicht nach *Aufgeben* wieder eingestreut wird. |
 | **Session** | Folge beliebig vieler Mini-Batches, bis der Nutzer beendet. |
 
 Ablauf auf oberster Ebene:
@@ -75,6 +75,13 @@ Session starten
               └─ sonst    → Karte aufgelöst, verlässt den Batch
         └─ alle 7 aufgelöst → nächsten Mini-Batch auswählen (endlos)
 ```
+
+**Ab Phase 13 ändert sich die letzte Zeile des Kartenzyklus**, nicht die
+Struktur darüber: Statt der Selbsteinschätzung steht dort *Weiter* oder eine
+binäre Einstufungsfrage, und die Rolle von „Nochmal" übernimmt *Aufgeben*.
+Pool, Mini-Batch, Gewichtung und Queue bleiben unverändert — die verbindliche
+Beschreibung des neuen Kartenzyklus steht in
+[§13](#13-lernflow-und-assistierte-einstufung-phase-13).
 
 ---
 
@@ -156,6 +163,12 @@ ist, nicht *wo* sie darin steht.
 ---
 
 ## 5. Queue und Wiedereinstreuung
+
+> **Ab Phase 13** löst nicht mehr die Selbsteinschätzung diese Regeln aus,
+> sondern der Abschluss eines Versuchs, und wieder eingestreut wird genau nach
+> *Aufgeben* ([§13.5](#135-wiedereinstreuung-aufgeben-ist-die-einzige-aussage-über-nichtwissen)).
+> **Position, Obergrenze und Begründung dieses Abschnitts gelten unverändert**
+> — nur der Auslöser heißt anders.
 
 Die Queue ist eine Liste von Karten-IDs mit einem Index `i` auf die aktuelle
 Karte.
@@ -259,6 +272,11 @@ Zwei bewusste Eigenschaften:
 **Der Lernstatus einer Karte wird pro Mini-Batch nur bei der *ersten*
 Selbsteinschätzung geändert.**
 
+**Ab Phase 13 gilt die Regel unverändert, wird aber nicht mehr gezählt,
+sondern ist strukturell erfüllt:** Der Status wandert nur über *Bestätigen*,
+das setzt einen sauberen Versuch voraus, und ein sauberer Versuch ist kein
+Wiederholungsversuch ([§13.9](#139-welche-phase-11-regeln-damit-ersetzt-sind)).
+
 Begründung: Ohne diese Regel würde die Folge „Nochmal“ → später „Gut“ eine
 Karte netto auf *Mittel* heben — eine Karte, die man beim ersten Versuch nicht
 konnte, wäre nach dem Batch besser bewertet als vorher. Der ehrliche Indikator
@@ -276,7 +294,8 @@ es gibt keine Sonderbehandlung und keine Sperre.
 ## 7. Persistierte Änderungen pro Antwort
 
 Bei **jeder** Selbsteinschätzung (auch bei Wiederholungen innerhalb eines
-Batches):
+Batches) — ab Phase 13 bei jedem abgeschlossenen Versuch, siehe
+[§13.4](#134-die-sechs-aktionen-und-was-sie-schreiben):
 
 | Feld | Änderung |
 | --- | --- |
@@ -296,10 +315,15 @@ einem Absturz oder App-Wechsel nichts verloren.
 
 ---
 
-### 7.1 Automatisch weitergereichte Versuche (Phase 11)
+### 7.1 Versuche ohne Bewertung (Phase 11, erweitert in Phase 13)
 
 Geht die App von selbst weiter (§12), gibt es **keine** Selbsteinschätzung.
-Persistiert wird dann:
+**Ab Phase 13 gilt dieselbe Tabelle für *Weiter* und *Ablehnen***, die beide
+ebenfalls keine Bewertung abgeben; das automatische Weitergehen selbst
+entfällt ([§13.9](#139-welche-phase-11-regeln-damit-ersetzt-sind)). Die Zeile
+`correctCount` gilt zusätzlich für *Bestätigen*: Auch eine bestätigte
+Einstufung ist keine Selbsteinschätzung, also bewegt sie diesen Zähler nicht
+([§13.4](#134-die-sechs-aktionen-und-was-sie-schreiben)). Persistiert wird:
 
 | Feld | Änderung |
 | --- | --- |
@@ -352,6 +376,16 @@ weiterhin 7. Drei Dinge gehören dazu:
   einer laufenden Runde baut diese Runde nicht um; sie wirkt ab der nächsten.
 
 §9 („Pool kleiner als `batchSize`") gilt unverändert.
+
+**Was Phase 13 an dieser Liste ändert** (Einzelbegründungen in
+[§13.9](#139-welche-phase-11-regeln-damit-ersetzt-sind)):
+
+| Konstante | ab Phase 13 |
+| --- | --- |
+| `AssistedAssessment.windowSize` = 10 | unverändert — Obergrenze für die gelesene Historie |
+| `cleanRunBeforeAutoAdvance` = 2 | heißt `cleanRunBeforeSuggestion`, Wert 2, jetzt Schwelle für einen **Vorschlag** |
+| `autoAdvancesBeforeRecalibration` = 3 | **entfällt** |
+| `batchSize`, `reinsertGap`, `maxReinserts`, `recencyFactor`, alle Gewichte | unverändert |
 
 ---
 
@@ -429,6 +463,13 @@ Funktion herausgezogen.
 ---
 
 ## 12. Assistierte Bewertung (Phase 11)
+
+> **Teilweise überholt durch [§13](#13-lernflow-und-assistierte-einstufung-phase-13)
+> (Phase 13, spezifiziert am 2026-09-21).** Dieser Abschnitt beschreibt das
+> **implementierte** Produkt und bleibt gültig, bis Phase 13 umgesetzt ist.
+> Welche Regeln danach ersetzt sind und welche unverändert weitergelten, steht
+> einzeln in [§13.9](#139-welche-phase-11-regeln-damit-ersetzt-sind); §12.1,
+> §12.2, §12.4 und §12.5 gelten in beiden Fassungen.
 
 Seit Phase 11 sammelt die App Evidenz über eine Karte und **fragt an geeigneten
 Stellen nicht mehr**. Die Regel ist rein, deterministisch und liegt in
@@ -520,3 +561,509 @@ dem letzten Patzer kann also nichts bewirken. Das Fenster ist dagegen eine
 **Obergrenze für das, was gelesen wird**: Bei einer Schwelle von zwei kann das
 Kappen eines Laufs bei zehn keine Entscheidung ändern. Es begrenzt die
 Datenmenge, nicht das Ergebnis, und genau so steht es jetzt auch im Code.
+
+---
+
+## 13. Lernflow und assistierte Einstufung (Phase 13)
+
+**Status: spezifiziert am 2026-09-21, nicht implementiert.** Dieser Abschnitt
+ist die verbindliche Regel für Phase 13 und **ersetzt §12 dort, wo die beiden
+sich widersprechen** — die Ersetzungen stehen einzeln in
+[§13.9](#139-welche-phase-11-regeln-damit-ersetzt-sind). Bis Phase 13
+implementiert ist, beschreibt §12 das laufende Produkt und §13 den Plan.
+
+### 13.1 Warum die vier Tasten den normalen Flow verlassen
+
+Phase 11 hat die Frage nur im sauberen Fall gespart. In jedem anderen Fall —
+Mismatch, Aufdecken, Retry, kein Mikrofon, Modus B, Rekalibrierung — stand
+weiterhin *Nochmal / Schwer / Gut / Sicher* auf dem Bildschirm. Das ist genau
+der Tap, den die Roadmap loswerden wollte, und es ist eine Frage, die direkt
+nach dem Aufdecken niemand ehrlich beantworten kann: Der Unterschied zwischen
+*Schwer* und *Gut* ist eine Stimmung, keine Beobachtung, und beide liegen
+**nach** dem Moment, in dem die Antwort schon sichtbar war.
+
+Der neue Flow stellt höchstens **eine binäre Frage**, und nur dann, wenn die
+App für einen konkreten Schritt nach oben Evidenz hat. Sonst gibt es einen
+einzigen Knopf weiter.
+
+Was dabei **nicht** entsteht: kein neues Signal, keine Ersatzheuristik, keine
+Aussprachebewertung. Die einzige automatische positive Evidenz dieser App
+bleibt der exakte Textvergleich aus Phase 9, mit allen Grenzen aus §12.4.
+
+### 13.2 Der Flow in Modus A
+
+```text
+verdeckte Karte
+  ├─ [ Antwort sprechen ]  → Aufnahme läuft
+  │     ├─ [ ■ ]      → Versuch verworfen, keine Auswertung, kein Aufdecken
+  │     └─ [ Fertig ] → finalisieren → Phase-9-Vergleich → aufdecken
+  └─ [ Aufgeben ]     → laufende Aufnahme verwerfen → aufdecken
+
+aufgedeckte Karte
+  ├─ kein Vorschlag → [ Weiter ]
+  └─ Vorschlag      → „Neue Einstufung: Mittel → Gut"
+                      [ Ablehnen ]  [ Bestätigen ]
+```
+
+Der **Versuch ist erst mit dem Verlassen der Karte abgeschlossen** — also mit
+*Weiter*, *Bestätigen* oder *Ablehnen*. Genau dann entsteht der
+`ReviewLog`-Eintrag, und genau einer. Das ist eine bewusste Präzisierung der
+Formulierung „schreibt den Review, deckt danach die Karte auf": Ausgewertet
+wird vor dem Aufdecken, protokolliert wird beim Verlassen — sonst könnte der
+Eintrag nicht tragen, wie die Einstufungsfrage ausgegangen ist, und die
+Phase-11-Zusage „pro abgeschlossenem Versuch genau ein Eintrag" wäre
+gebrochen.
+
+Wer die Session mitten im aufgedeckten Zustand verlässt, erzeugt **keinen**
+Eintrag. Das ist unverändert: Der Fragepfad aus Phase 11 verhält sich heute
+genauso.
+
+Zwei Randfälle, damit sie nicht beim Implementieren entschieden werden müssen:
+
+- **Aufgeben während `finalizing`.** Der Lernende gewinnt: Die laufende
+  Analyse wird verworfen, ihr Ergebnis erreicht die Karte nicht mehr, der
+  Versuch gilt als von Hand aufgedeckt (`usedSpeech = false`). Das ist der
+  Weg, den Phase 9 für das Aufdecken während einer Aufnahme schon geht —
+  dieselbe Abbruchlogik, dieselbe Epochenprüfung.
+- **Schreibfehler bei *Bestätigen* oder *Ablehnen*.** Wie bisher:
+  `rollback()`, Alert, die Karte bleibt aufgedeckt — **und der Vorschlag bleibt
+  stehen**, damit dieselbe Entscheidung erneut möglich ist. Ein Alert, nach dem
+  die Frage verschwunden ist, wäre die Unwahrheit über das, was gespeichert
+  wurde.
+
+### 13.3 Der Flow in Modus B
+
+```text
+nur Audio → [ Hanzi anzeigen ] → [ Antwort zeigen ] → [ Weiter ]
+```
+
+**Kein Vorschlag, keine Statusänderung, keine Wiedereinstreuung.** Ohne die
+vier Tasten gibt es in Modus B kein Correctness-Signal, und eine
+Ersatzheuristik wird nicht erfunden. Der Knopf heißt dort weiterhin *Antwort
+zeigen* und nicht *Aufgeben*: Das Aufdecken **ist** der vorgesehene Schritt
+dieses Modus, nicht das Aufgeben eines Versuchs. **In Modus A heißt er
+dagegen in jedem Zustand *Aufgeben*** — auch ohne Mikrofonfreigabe und auf
+einem Gerät ohne Erkennung ([§13.5](#135-wiedereinstreuung-aufgeben-ist-die-einzige-aussage-über-nichtwissen)).
+
+Die benannte Folge steht in [§13.11](#1311-was-das-kostet).
+
+### 13.4 Die sechs Aktionen und was sie schreiben
+
+| Aktion | Vorbedingung | `status` | `reviewCount` | `correctCount` | Queue | `ReviewLog` |
+| --- | --- | --- | --- | --- | --- | --- |
+| **Fertig** | Aufnahme läuft | — | — | — | — | — (nur Auswertung + Aufdecken) |
+| **■ (Stop)** | Aufnahme läuft | — | — | — | — | — (nichts ist passiert) |
+| **Aufgeben** | verdeckt, Modus A | — | — | — | — | — (nur Aufdecken) |
+| **Weiter** | aufgedeckt, kein Vorschlag | unverändert | `+= 1` | **unverändert** | Karte verlässt den Batch; nach *Aufgeben* Wiedereinstreuung nach §5, sofern eine Aufnahme möglich war (§13.5) | ein Eintrag: `assessment = nil`, `suggestedStatus = nil`, `suggestionDecision = nil` |
+| **Bestätigen** | aufgedeckt, Vorschlag liegt vor | auf den vorgeschlagenen Wert | `+= 1` | **unverändert** | Karte verlässt den Batch | ein Eintrag: `assessment = nil`, `suggestedStatus` = der Vorschlag, `suggestionDecision = .accepted` |
+| **Ablehnen** | aufgedeckt, Vorschlag liegt vor | unverändert | `+= 1` | **unverändert** | Karte verlässt den Batch | ein Eintrag: `assessment = nil`, `suggestedStatus` = der Vorschlag, `suggestionDecision = .declined` |
+
+Vier Dinge daran sind Entscheidungen, nicht Mechanik:
+
+- **`assessment` bleibt im neuen Flow immer leer.** Das Feld bedeutet
+  ausschließlich „der Lernende hat im alten Flow eine der vier
+  Selbsteinschätzungen abgegeben" und behält diese Bedeutung, damit die
+  Historie aus den Phasen 11 und 12 lesbar bleibt. Eine bestätigte Einstufung
+  ist **etwas anderes** als eine Selbsteinschätzung: Sie ist die Zustimmung zu
+  einem Vorschlag der App und wird deshalb als solche gespeichert
+  ([§13.10](#1310-die-schemaänderung-zwei-felder-und-warum-genau-zwei)) —
+  nicht als die Bewertung, die denselben Übergang erzeugt hätte. Der Unterschied
+  ist später nicht rekonstruierbar, wenn er jetzt eingeschmolzen wird.
+- **`correctCount` bewegt sich im neuen Flow nie.** Es ist in §7 über die
+  Selbsteinschätzung definiert, und die gibt es hier nicht mehr — auch
+  *Bestätigen* ist keine. Die Begründung ist unverändert die aus §7.1:
+  „richtig" ist eine Bewertung, und vorgelegen hat ein Textvergleich, dessen
+  False-Accept-Eigenschaft nicht gemessen ist. `correctCount` wird damit ein
+  Aggregat der Phasen 1 bis 12, das stehen bleibt und nicht mehr wächst; die
+  Folge für `accuracy` steht in [§13.11](#1311-was-das-kostet).
+- **Stop schreibt nichts.** Ein abgebrochener Versuch ist kein Versuch. Der
+  Zähler `reviewCount` bleibt stehen, der Sprachmodus bleibt armiert, und auf
+  **derselben** Karte startet keine neue Aufnahme von selbst — A38 gilt
+  unverändert, ein weiterer Anlauf braucht einen Tap.
+- **Der Status wird bei *Bestätigen* direkt geschrieben**, auf den Wert, den
+  §13.6 vorgeschlagen hat. `StatusTransition` bleibt die einzige Stelle, an der
+  dieser Wert **entsteht** (beim Bilden des Vorschlags); geschrieben wird er
+  danach ohne eine zweite Herleitung. Zwei Wege zum selben Wert wären zwei
+  Wahrheiten.
+
+### 13.5 Wiedereinstreuung: „Aufgeben" ist die einzige Aussage über Nichtwissen
+
+*Nochmal* war bis Phase 12 die einzige Antwort, die eine Karte im Batch
+zurückließ (§5). Ohne die vier Tasten übernimmt **Aufgeben** genau diese Rolle
+— und nur diese. Beschriftung und Wiedereinstreuung sind dabei **zwei
+getrennte Regeln**, und das ist Absicht.
+
+**Der Knopf heißt in Modus A in jedem Zustand *Aufgeben*** — auch bei
+verweigertem Mikrofon und auf einem Gerät ohne Mandarin-Erkennung. Ein
+Bedienelement, das sich je nach Mikrofonzustand umbenennt, ist schwerer zu
+lernen als eines, das es nicht tut, und *Aufgeben* beschreibt in allen diesen
+Fällen dasselbe: Der Lernende beendet diesen Versuch, ohne die Antwort
+produziert zu haben. Nur Modus B heißt weiter *Antwort zeigen*, weil das
+Aufdecken dort der vorgesehene Schritt ist.
+
+**Die Wiedereinstreuung hängt an einer eigenen, engeren Bedingung:**
+
+```text
+Wiedereinstreuung  ⟺  Modus A  ∧  von Hand aufgedeckt
+                                 ∧  eine Aufnahme war auf dieser Karte möglich
+```
+
+„Möglich" heißt: Die Erkennungsphase war keine der beiden dauerhaft
+unmöglichen (`unavailable`, `permissionDenied`). Position und Obergrenze sind
+unverändert §5 — hinter jeder noch ungesehenen Karte, mindestens
+`reinsertGap`, höchstens `maxReinserts` mal, also **genau einmal pro
+Mini-Batch**.
+
+Was dadurch **nicht** passiert: Aufgeben senkt keinen Status (es gibt keinen
+automatischen Downgrade mehr, §13.8), es zählt nicht als korrekt, und es ist
+keine negative Evidenz für die Einstufungsregel — es ist schlicht kein
+sauberer Versuch.
+
+**Warum die dritte Bedingung nötig ist — und warum Beschriftung und Verhalten
+hier auseinandergehen dürfen:** Auf einem Gerät ohne Mandarin-Erkennung oder
+ohne Mikrofonfreigabe ist das Aufdecken der einzige Weg vorwärts. Würde dort
+jede Karte wieder eingestreut, würde **jeder Batch doppelt so lang** —
+7 Karten würden zu 14 Fragen, jede Karte zweimal, immer. Das wäre kein
+Lernvorteil, sondern ein Defekt.
+
+Die Beschriftung bleibt trotzdem überall *Aufgeben*. Dass derselbe Knopf je
+nach Gerät unsichtbar etwas unterschiedlich weiterplant, ist vertretbar, weil
+der Unterschied reine **Terminplanung** ist: Er berührt weder den Lernstand
+noch die Evidenz noch irgendeine Aussage an den Lernenden. Beides sind zwei
+reine Prädikate, beide getestet — eines für den Text, eines für die Queue.
+
+| Richtung | Erkennung verfügbar | Knopf | Wiedereinstreuung |
+| --- | --- | --- | --- |
+| A | ja | „Aufgeben" | ja, nach §5, genau einmal |
+| A | nein (`unavailable`, `permissionDenied`) | **„Aufgeben"** | nein |
+| B | — | „Antwort zeigen" | nein |
+
+Ein **Mismatch streut nicht wieder ein.** Nur *Aufgeben* tut es. Ein Mismatch
+ist ausdrücklich keine negative Evidenz (§13.8), und ihn zur
+Wiederholungsentscheidung zu machen wäre genau das — eine Handlung auf ein
+Signal, dem die App nach eigener Aussage nicht traut. Die einzige Aussage über
+Nichtwissen im neuen Flow kommt vom Lernenden.
+
+Die Bedingung wird **beim Aufdecken** festgehalten, nicht beim Verlassen der
+Karte: Der Erkennungszustand kann sich dazwischen ändern, und welcher Knopf
+gedrückt wurde, steht danach nicht mehr zur Debatte.
+
+### 13.6 Der Vorschlag
+
+Der vorgeschlagene Status ist unverändert **ein Schritt nach oben auf der
+Leiter aus §6** und wird über dieselbe Funktion gebildet:
+
+```text
+Vorschlag = StatusTransition.newStatus(from: aktuellerStatus, for: .good)
+```
+
+Daraus ergeben sich genau vier mögliche Vorschläge — die *Gut*-Spalte der
+Matrix aus §6:
+
+| aktueller Status | Vorschlag |
+| --- | --- |
+| Neu | Mittel |
+| Schwach | Mittel |
+| Mittel | Gut |
+| Gut | Sicher |
+| Sicher | keiner (der Schritt würde nichts ändern) |
+
+**Neu → Mittel und nicht Neu → Schwach**, weil *Neu* laut §6 ein reiner
+Startzustand ist und die Leiter ihn mit Stufe 1 (*Schwach*) verrechnet. Zwei
+saubere Versuche mit *Schwach* zu belohnen wäre eine Beförderung, die wie eine
+Abwertung liest. Das ist keine neue Leiter, sondern dieselbe.
+
+**Nach unten gibt es keinen Vorschlag**, und es gibt keinen zweiten Schritt
+auf einmal.
+
+### 13.7 Die Regel
+
+Eingaben, alle unverändert aus §12.1 plus ein Feld: der aktuelle Status der
+Karte, der laufende Versuch als `ReviewSignal`, und die Historie derselben
+Karte, neueste zuerst, gekappt bei `windowSize`.
+
+Ein **sauberer Versuch** ist unverändert §12.2: Sprache benutzt **und** Text
+übereinstimmend, **kein** Retry, **nichts** vorher aufgedeckt.
+
+Neu ist, welche Versuche überhaupt in denselben Lauf gehören. Der Lauf wird
+vom laufenden Versuch rückwärts gezählt und berücksichtigt nur
+**vergleichbare** Versuche:
+
+1. **Gleiche Richtung.** Ein Versuch in der anderen Richtung wird
+   *übersprungen*, nicht als Bruch gezählt. Modus B trägt keine Information
+   über die Abrufleistung in Modus A — und dürfte sie deshalb auch nicht
+   zerstören.
+2. **Gleicher Ausgangsstatus.** Nur Versuche mit
+   `previousStatus == aktuellerStatus` zählen. Das ist die Evidenz, die *seit
+   der letzten Statusänderung* entstanden ist.
+3. **Abbruch am ersten unsauberen Versuch.** Mismatch, Aufgeben, Retry oder
+   „ohne Sprache" beenden den Lauf.
+4. **Abbruch an einer Ablehnung**, und der ablehnende Versuch selbst zählt
+   **nicht** mit.
+
+Ist der Lauf mindestens `cleanRunBeforeSuggestion` lang und gibt es überhaupt
+einen Schritt nach oben, wird vorgeschlagen; sonst steht *Weiter* da.
+
+```text
+Lauf ≥ 2 vergleichbare saubere Versuche  und  Vorschlag ≠ aktueller Status
+    → „Neue Einstufung"  [ Ablehnen ] [ Bestätigen ]
+sonst
+    → [ Weiter ]
+```
+
+**Regel 2 ist es, die `.new` freigibt.** Phase 11 hatte für `.new` einen
+eigenen Riegel, weil eine von Hand auf *Neu* zurückgesetzte Karte ihre
+Historie behält und die App sofort eine Beförderung hervorgehoben hätte —
+ausgerechnet auf der Karte, die der Nutzer eben als ungelernt erklärt hat. Der
+Riegel war das richtige Verhalten aus dem falschen Grund: Er hat den Status
+geprüft, wo die **Herkunft der Evidenz** das Problem war. Regel 2 erledigt
+beides. Eine zurückgesetzte Karte hat keine Evidenz auf *Neu*, also keinen
+Vorschlag; eine wirklich neue Karte sammelt zwei saubere Versuche auf *Neu*
+und bekommt ihren ersten Vorschlag. Der Riegel entfällt damit.
+
+**Dieselbe Regel begrenzt auch die Kette nach oben.** Nach einer bestätigten
+Beförderung *Mittel → Gut* tragen die Einträge mit `previousStatus == medium`
+nichts mehr bei; die nächste Stufe braucht zwei frische saubere Versuche auf
+*Gut*. Zwei Beförderungen hintereinander sind so nicht möglich.
+
+**Und Regel 4 ist die Ablehnung.** Sie setzt die positive Evidenz für genau
+diesen nächsten Status **vollständig auf null**, und sie zählt selbst nicht
+als positiver Versuch. Bei der Schwelle 2 heißt das:
+
+```text
+Treffer, Treffer            → Vorschlag  Mittel → Gut
+                            → Ablehnen          (protokolliert)
+Treffer                     → kein Vorschlag    (Lauf = 1)
+Treffer                     → Vorschlag  Mittel → Gut
+```
+
+Die Ablehnung wird **persistiert**, damit sie App- und Sessionneustarts
+überlebt — sonst wäre sie eine Höflichkeit für die nächsten zehn Minuten.
+Dafür gibt es die Schemaänderung dieser Phase, einzeln begründet
+[in §13.10](#1310-die-schemaänderung-zwei-felder-und-warum-genau-zwei).
+
+### 13.8 Was die Regel nicht darf
+
+Unverändert und vollständig weiter gültig — jede Zeile aus §12.4 und der
+Roadmap:
+
+- **Ein Mismatch senkt nichts und schlägt nie einen Downgrade vor.** Er
+  beendet einen Lauf. Der exakte Vergleich ist konstruktionsbedingt
+  empfindlich: 8 von 16 normal gesprochenen Zielantworten kamen in Phase 9 als
+  anderer chinesischer Text zurück.
+- **Ein einzelner Treffer trägt nichts.** Die False-Accept-Eigenschaft des
+  Vergleichs ist nicht gemessen.
+- **Ein Retry ist keine gleichwertige positive Evidenz** — er ist gar keine.
+- **Aufdecken und Aufgeben sind keine positive Evidenz.**
+- **Keine automatische Herabstufung**, unter keinen Umständen, auch nicht über
+  mehrere Mismatches. Es gibt in Phase 13 **keinen** Pfad, auf dem die App
+  einen Status senkt. Nach unten kommt eine Karte nur über die Kartenliste
+  (§6.2).
+- **Eine tatsächliche Statusänderung braucht die Zustimmung des Nutzers.** Der
+  Vorschlag ändert nichts; er wird zu einer Änderung durch den Tap auf
+  *Bestätigen* und durch nichts sonst.
+- **Höchstens eine Stufe nach oben.**
+- Kein Score, kein Prozentwert, keine Konfidenz, keine Aussage über Aussprache
+  oder Töne (harte Regel 7), keine Streaks und keine
+  Fortschrittsanzeige (harte Regel 6).
+
+### 13.9 Welche Phase-11-Regeln damit ersetzt sind
+
+| Regel aus §12 | ab Phase 13 |
+| --- | --- |
+| `.ask(suggestion:)` — Vierfachauswahl mit hervorgehobenem Vorschlag | **ersetzt.** Es gibt entweder *Weiter* oder die binäre Einstufungsfrage. Die vier Tasten verschwinden aus dem Lernflow. |
+| `.autoAdvance` — die Frage entfällt, die Karte wechselt von selbst | **ersetzt.** Jede Karte endet mit einem Tap, und der aufgedeckte Zustand wird **immer** gezeigt. Damit ist auch der Phase-11-Vorbehalt „ob der Kartenwechsel ohne Rückmeldung zu abrupt wirkt" erledigt: Es gibt keinen Wechsel ohne Rückmeldung mehr. |
+| `cleanRunBeforeAutoAdvance = 2` | **umbenannt und in der Bedeutung geändert:** `cleanRunBeforeSuggestion = 2` — Schwelle für einen **Vorschlag**, nicht fürs Überspringen einer Frage. Der Wert bleibt, die Begründung aus §12.5 bleibt. |
+| `autoAdvancesBeforeRecalibration = 3` | **entfällt.** Der Parameter existierte, weil eine Karte mit langem Lauf sonst nie wieder gefragt worden wäre und ihr Status eingefroren wäre. Diesen Zustand gibt es nicht mehr: Sobald die Schwelle erreicht ist, liegt ein Vorschlag auf dem Tisch, und Regel 2 setzt den Lauf nach jeder Änderung selbst zurück. Ein Intervall, das nichts mehr schützt, wird nicht beibehalten. |
+| `guard currentStatus != .new` → kein Vorschlag, keine Hervorhebung | **ersetzt** durch die Gleichstatus-Regel (§13.7, Regel 2). `.new` kann einen ersten Vorschlag bekommen; die von Hand zurückgesetzte Karte ist weiterhin geschützt, jetzt aber am richtigen Grund. |
+| `ReviewSignal.isUsable` = `assessment != nil \|\| usedSpeech` | **ersetzt** durch die Richtungsregel. Sonst wäre ein *Aufgeben* ohne Sprache — im neuen Flow ein Alltagsfall, weil kein `assessment` mehr dabei entsteht — **übersprungen** statt als Bruch gezählt worden, und „Treffer, Aufgeben, Treffer" hätte einen Vorschlag erzeugt. |
+| `AssistedAssessment.assessment(leadingTo:from:)` | **entfällt.** Sie übersetzte einen vorgeschlagenen Status in die Taste, die ihn erzeugt — und beides braucht es nicht mehr: Es gibt keine Taste, und *Bestätigen* wird ausdrücklich **nicht** als Selbsteinschätzung gespeichert ([§13.10](#1310-die-schemaänderung-zwei-felder-und-warum-genau-zwei)). Damit verlieren auch `SelfAssessment.countsAsCorrect` und `keepsCardInBatch` ihre Aufrufer; entfernt wird, was eine Aufrufersuche bei der Umsetzung als aufruferlos bestätigt. `statusDelta` und die vier RawValues bleiben — sie tragen die Matrix aus §6 und die Historie |
+| `assessment != nil` als Beleg einer Bewertung | **bleibt, und wird geschützt.** Der neue Flow schreibt `assessment` niemals; eine bestätigte Einstufung wird als solche gespeichert, nicht als die Bewertung, die denselben Übergang erzeugt hätte ([§13.10](#1310-die-schemaänderung-zwei-felder-und-warum-genau-zwei)) |
+| §12.2 „sauberer Versuch", alle vier Bedingungen | **unverändert.** |
+| §12.4 in jedem Punkt | **unverändert**, siehe §13.8. |
+| §12.5 „die freien Parameter sind Produktentscheidungen, keine Messungen" | **unverändert**, und gilt für `cleanRunBeforeSuggestion` genauso. Die Kalibrierung an realer Historie bleibt offen; sie wird durch die Aufzeichnung der Ablehnungen sogar erst möglich. |
+| §7.1 Tabelle (Versuch ohne Bewertung) | **bleibt**, gilt jetzt für *Weiter* und *Ablehnen*. |
+| §6.1 „Statusänderung nur einmal pro Mini-Batch" | **bleibt**, wird aber nicht mehr von der Queue erzwungen, sondern strukturell — siehe unten. |
+| A36 „automatisches Weitergehen ändert den Lernstand nicht" | **in der Form überholt** (es gibt kein automatisches Weitergehen mehr), **in der Substanz übernommen**: *Weiter* hebt nichts. |
+| Phase-12-Regel „Sprachausgabe entwaffnet den Sprachmodus" | **verengt**, siehe [§13.12](#1312-sprachausgabe-und-sprachmodus). |
+
+**Zu §6.1:** Der Status kann nur über *Bestätigen* wandern, *Bestätigen* setzt
+einen sauberen Versuch voraus, und ein sauberer Versuch ist per Definition
+kein Retry. Eine zweite Statusänderung derselben Karte im selben Batch ist
+damit unmöglich, ohne dass irgendwo ein Zähler das verhindern müsste. Das ist
+eine **Invariante, die ein Test festnageln muss** — nicht eine Beobachtung,
+die man beim Lesen des Codes nachvollzieht.
+
+### 13.10 Die Schemaänderung: zwei Felder, und warum genau zwei
+
+Zu protokollieren sind drei Dinge: der **vorgeschlagene Status**, die
+**Annahme** und die **Ablehnung**. Und vier Tatsachen müssen später
+auseinanderzuhalten sein, ohne Raten:
+
+1. eine **historische Selbsteinschätzung** aus dem alten Flow,
+2. eine **vorgeschlagene Einstufung**,
+3. sie wurde **angenommen**,
+4. sie wurde **abgelehnt**.
+
+**`assessment` ist dafür nicht verwendbar**, und das ist der Kern dieses
+Abschnitts. Das Feld bedeutet „der Lernende hat eine der vier
+Selbsteinschätzungen abgegeben". Eine Zustimmung zu einem Vorschlag der App in
+dasselbe Feld zu schreiben, weil sie zufällig denselben Statusübergang
+erzeugt, würde (1) und (3) **ununterscheidbar** machen — rückwirkend und ohne
+Weg zurück, weil die Unterscheidung nirgends sonst festgehalten wäre. Der
+neue Flow schreibt deshalb **immer `assessment = nil`**.
+
+Also zwei additive, optionale Felder auf `ReviewLog`:
+
+```swift
+/// Der Status, den die App bei diesem Versuch vorgeschlagen hat.
+/// `nil` = es gab keinen Vorschlag.
+private(set) var suggestedStatusRaw: Int?
+var suggestedStatus: LearningStatus? { get set }
+
+/// Was aus dem Vorschlag wurde: angenommen oder abgelehnt.
+/// `nil` = es gab keinen Vorschlag.
+private(set) var suggestionDecisionRaw: String?
+var suggestionDecision: SuggestionDecision? { get set }
+```
+
+```swift
+/// Explizit ausgeschriebene RawValues, weil sie Historie sind — dieselbe
+/// Regel wie bei `SelfAssessment`, `SessionDirection` und `SpeechRate`.
+nonisolated enum SuggestionDecision: String, CaseIterable, Sendable {
+    case accepted = "accepted"
+    case declined = "declined"
+}
+```
+
+RawValues im Store aus demselben Grund wie bei `previousStatusRaw`; beide
+Default `nil`, damit die Migration leichtgewichtig bleiben kann. Die beiden
+Felder sind immer gemeinsam gesetzt oder gemeinsam `nil` — das ist eine
+Invariante, die ein Test festnagelt, und kein Vertrauen.
+
+**Sind wirklich beide nötig? Nachgerechnet, nicht angenommen:**
+
+| Alternative | reicht nicht, weil |
+| --- | --- |
+| nur `suggestionDecision` | Der **vorgeschlagene Status** wäre nur über die heutige Regel rekonstruierbar (`previousStatus` + ein Schritt nach oben). Die Regel ist eine Produktentscheidung, die sich ändern darf — danach wären alle Alteinträge falsch gelesen. Eine Historie, deren Bedeutung von der aktuellen Fassung der Regel abhängt, ist keine Historie. Außerdem braucht §13.7 Regel 4 genau diesen Status. |
+| nur `suggestedStatus` | „angenommen" und „abgelehnt" wären nicht unterscheidbar. Aus dem Eintrag selbst geht es nicht hervor — der Status der Karte liegt auf `Card` und wird von jedem späteren Versuch überschrieben —, und aus dem *nächsten* Eintrag es zu folgern wäre eine kartenübergreifende Herleitung, die für den jüngsten Eintrag ohnehin scheitert. |
+| ein gemeinsames Feld („vorgeschlagen & abgelehnt: Mittel") | Das ist `suggestedStatus` plus ein implizites `declined` und verliert die Annahme. Genau die Annahmequote ist aber der Messwert, für den §12.5 die Kalibrierung offenlässt. |
+
+**Zwei Felder, und semantische Eindeutigkeit vor der gesparten Property.** Alle
+vier Tatsachen sind danach direkt ablesbar:
+
+| Fall | `assessment` | `suggestedStatus` | `suggestionDecision` |
+| --- | --- | --- | --- |
+| historische Selbsteinschätzung (Phase 11/12) | gesetzt | `nil` | `nil` |
+| automatisch weitergereicht (Phase 11/12) | `nil` | `nil` | `nil` |
+| *Weiter* ohne Vorschlag (ab Phase 13) | `nil` | `nil` | `nil` |
+| Vorschlag **angenommen** | `nil` | der Vorschlag | `.accepted` |
+| Vorschlag **abgelehnt** | `nil` | der Vorschlag | `.declined` |
+
+Zeile 2 und 3 sind identisch, und das ist richtig: Beides ist ein Versuch ohne
+Bewertung und ohne Vorschlag. Unterscheidbar bleiben sie über `reviewedAt` und
+darüber, ob Phase 13 zu diesem Zeitpunkt schon lief — eine Unterscheidung, die
+keine Regel braucht.
+
+**Keine zweite Bewertungshistorie**, kein zweites Modell, keine
+Parallelstruktur in den `UserDefaults`: ein Versuch, ein Eintrag, und der
+Eintrag trägt auch, was aus dem Vorschlag wurde.
+
+**Was die Engine davon sieht.** `ReviewSignal` bekommt **nicht** beide Felder,
+sondern den einen abgeleiteten Wert, den die Regel liest:
+
+```swift
+let declinedSuggestion: LearningStatus?   // gesetzt nur bei .declined
+```
+
+Abgeleitet an der Abbildungsgrenze `ReviewLog → ReviewSignal`, genau wie
+`Card → CardSnapshot`. Die Annahme braucht die Regel nicht: Ein angenommener
+Vorschlag hat den Status bewegt, also trägt sein Eintrag einen anderen
+`previousStatus` als die Karte jetzt und fällt schon durch Regel 2 heraus. Ein
+Feld, das die Engine nie liest, kommt auch nicht in die Engine — der Store ist
+die Historie, nicht `ReviewSignal`.
+
+**Nicht ins Schema gehört** der Merker, ob eine Aufnahme auf dieser Karte
+möglich war (§13.5). Er entscheidet die Wiedereinstreuung **innerhalb** des
+laufenden Versuchs und wird von keiner Regel später gelesen; `wasManualReveal`
+trägt die Evidenzseite schon. Ein Feld, das es gibt, wird irgendwann benutzt.
+
+**Grenze, die dazugehört:** Für Einträge aus den Phasen 11 und 12 gibt es
+keine Angabe darüber, ob ein damals hervorgehobener Vorschlag angenommen oder
+übergangen wurde — dort ist nur die gewählte Bewertung festgehalten. Die
+Annahmequote ist also erst **ab Phase 13** messbar, nicht rückwirkend.
+
+### 13.11 Was das kostet
+
+Vier Folgen, alle bewusst in Kauf genommen und keine davon versteckt:
+
+1. **Ohne Mikrofon bewegt sich kein Lernstand mehr von selbst.** Die einzige
+   automatische positive Evidenz ist der Textvergleich. Wer in Modus A nie
+   spricht oder auf einem Gerät ohne Mandarin-Erkennung lernt, bekommt nie
+   einen Vorschlag; der Status ändert sich dann ausschließlich über die
+   Kartenliste (§6.2). Das ist die ehrliche Konsequenz aus „keine neue
+   Ersatzheuristik erfinden".
+2. **Dasselbe gilt für Modus B**, dauerhaft und unabhängig vom Gerät.
+3. **Die Gewichtung folgt einem Status, der sich seltener bewegt** (§3.1). Eine
+   gut gelernte, aber nie gesprochene Karte behält ihr hohes Gewicht und kommt
+   weiter häufig. Das ist die richtige Fehlerrichtung — sie fragt zu viel,
+   nicht zu wenig —, aber es ist eine Änderung am Sessiongefühl und gehört auf
+   die Geräteliste.
+4. **`correctCount` wächst ab Phase 13 nicht mehr** und wird damit ein
+   eingefrorenes Aggregat der Phasen 1 bis 12. Es ist in §7 über die
+   Selbsteinschätzung definiert, und die gibt es im Lernflow nicht mehr — auch
+   *Bestätigen* ist keine (§13.4). Das abgeleitete `accuracy` wird dadurch auf
+   Dauer bedeutungslos: `reviewCount` wächst weiter, `correctCount` nicht.
+   Gelesen wird es von keiner Ansicht, und die Fehlerrichtung ist unverändert
+   die untertreibende — es kann nie mehr behaupten, als der Lernende gezeigt
+   hat. **Ein Umbau oder eine Neuberechnung findet nicht statt:** beides wäre
+   eine Änderung mit Migrationsrisiko an einem Wert, den nichts liest.
+
+`SelfAssessment` bleibt als Typ erhalten — als Wert im Store (Historie des
+alten Flows) und als Eingang von `StatusTransition`, das den Vorschlag bildet.
+Die Übergangsmatrix aus §6 behält alle zwanzig
+Zellen; erreichbar ist im normalen Flow nur noch die *Gut*-Spalte. Die anderen
+drei bleiben stehen, weil sie die Historie erklären und weil ein
+Spaced-Repetition-Ausbau (§11) sie wieder braucht.
+
+### 13.12 Sprachausgabe und Sprachmodus
+
+Die Phase-12-Regel „eine bewusst gestartete Sprachausgabe entwaffnet den
+Session-Sprachmodus" wird **verengt: sie gilt nur, solange die Karte verdeckt
+ist.**
+
+Der Grund der Regel war, dass nie gleichzeitig gesprochen und aufgenommen
+wird, und dass ein Modus, der nach dem Zuhören sofort wieder mitschneidet,
+dem Lernenden die Entscheidung wegnimmt. Auf der **aufgedeckten** Karte
+greift beides nicht: Die Aufnahme dieses Versuchs ist beendet, die nächste
+beginnt erst nach dem Kartenwechsel, und der Kartenwechsel stoppt die
+Sprachausgabe ohnehin.
+
+Ohne diese Verengung hätte Phase 13 die Phase-12-Funktion praktisch
+abgeschafft: Der Lernende landet jetzt auf **jeder** Karte im aufgedeckten
+Zustand, in dem der große Lautsprecher steht — einmal die Antwort anhören
+hätte den Sprachmodus jedes Mal gekostet.
+
+**Damit wird die Reihenfolge beim Kartenwechsel tragend, und sie ist deshalb
+festgeschrieben.** Weil die Sprachausgabe den Modus auf der aufgedeckten Karte
+nicht mehr entwaffnet, ist diese Reihenfolge das Einzige, was verhindert, dass
+ein laufender Ton und ein neues Mikrofon aufeinandertreffen. Läuft beim Tap auf
+*Weiter*, *Bestätigen* oder *Ablehnen* noch eine Sprachausgabe:
+
+```text
+Weiter / Bestätigen / Ablehnen
+  → Sprachausgabe stoppen
+  → Kartenwechsel
+  → erst danach die automatische Aufnahme der neuen Karte
+```
+
+**Niemals Sprachausgabe und Mikrofon gleichzeitig** — die Regel aus Phase 9,
+unverändert. Die drei Schritte gehören an **eine** Stelle und an **einen**
+Beobachter je Kartenübergang; zwei getrennte Beobachter wären der Doppelstart,
+den das Phase-12-Review schon einmal gefunden hat, und ihre Reihenfolge ist
+nicht zugesichert. Die Reihenfolge ist ein Akzeptanzkriterium und über
+`SessionSpeechState` als Sequenz prüfbar, ohne View.
+
+Alles andere aus Phase 12 bleibt: Hintergrund, Audio-Unterbrechung,
+technischer Fehler, dauerhaft unmögliche Erkennung und Sessionende entwaffnen
+den Modus weiterhin, und ein Neustart braucht immer einen Tap.

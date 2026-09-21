@@ -1,9 +1,19 @@
 # Entwicklungs-Roadmap
 
 Eine vorgeschaltete Bootstrap-Phase (**B**) für die Entwicklungsinfrastruktur,
-danach 11 Produktphasen (**0–10**) und, nach v1, die Phasen 11 und 12. Jede
+danach 11 Produktphasen (**0–10**) und, nach v1, die Phasen 11 bis 14. Jede
 Produktphase endet in einem Zustand, der überprüfbar ist. Nach jeder Phase
 wird getestet, bevor die nächste beginnt.
+
+**Die finale Abnahme ist am 2026-09-21 erneut nach hinten gerückt**, hinter
+[Phase 13](#phase-13--lernflow--assisted-classification-ux) und
+[Phase 14](#phase-14--ai-integration). Der Grund ist derselbe wie beim ersten
+Mal: Beide Phasen verändern das Produkt real — Phase 13 den gesamten
+Bedienfluss der Lernkarte und das Schema, Phase 14 ist noch nicht einmal im
+Umfang entschieden —, und eine Abnahme vor ihnen würde etwas abnehmen, das so
+nicht ausgeliefert wird. **Die bisherige Abnahme- und Gerätetesthistorie
+bleibt vollständig stehen**; sie sind Entwicklungsbelege für die jeweils
+geprüften Pfade.
 
 **Die vollständige Geräteprüfung und der mehrtägige Alltagstest sind seit dem
 2026-09-13 kein Gate der einzelnen Phase mehr**, sondern ein gemeinsames Gate
@@ -66,6 +76,10 @@ Modus A funktioniert vollständig ohne sie.
 | 8 | Lernmodus B | chinesisches Audio → Deutsch |
 | 9 | Spracherkennung | Mandarin-Spracheingabe mit einfachem Textvergleich |
 | 10 | Einstellungen, Fehlerbehandlung & Polish | Release-fähiger Zustand für den privaten Gebrauch |
+| 11 | Review History & Assisted Assessment | Antwort-Historie, Vorschlag statt Vierfachfrage im sauberen Fall |
+| 12 | Session-Sprachmodus | Aufnahme startet je Karte von selbst, beendet wird sie per Tap |
+| 13 | Lernflow & Assisted Classification UX | Aufgeben statt Nochmal, Stop im Aufnahmepfad, *Weiter* statt vier Tasten, Einstufung auf Zustimmung |
+| 14 | AI-Integration | Umfang noch nicht spezifiziert |
 
 ---
 
@@ -709,7 +723,7 @@ Karteneditor (Tasks 6.10 bis 6.14), die zweite am Kategorienfilter und an der
 Tastatur (6.15, 6.16), die dritte an zwei Regressionen derselben
 Container-Gesture — erst legte `Hinzufügen` keine Kategorie mehr an, dann ließ
 sich keine Kategorie mehr an- oder abwählen. Beide sind über den in
-[A27](architecture.md#anhang-entscheidungen-und-begründungen) hinterlegten
+[A27](architecture.md#10-zusammenfassung-der-architekturentscheidungen) hinterlegten
 Rückweg erledigt: Die Gesture ist entfernt, jeder Weg aus der Tastatur liegt in
 der Aktion des angetippten Controls.
 
@@ -778,12 +792,12 @@ Session-Setup, Abfrage-UI, Anbindung der Engine an SwiftData.
   eine Karte in zwei Kategorien liegt. Die Kartenliste behielt damals UND,
   weil die beiden Bildschirme verschiedene Fragen zu stellen schienen —
   Begründung in
-  [architecture.md A26](architecture.md#anhang-entscheidungen-und-begründungen).
+  [architecture.md A26](architecture.md#10-zusammenfassung-der-architekturentscheidungen).
   Der Kartentyp bleibt außerhalb dieser Regel — Wörter und Sätze mischen sich
   nie. **Nachtrag:** Der Satz „die Kartenliste behält UND" gilt nicht mehr.
   Dasselbe Argument — kaum eine Karte liegt in zwei Kategorien — hat später
   auch die Kartenliste auf ODER gebracht, siehe
-  [architecture.md A32](architecture.md#anhang-entscheidungen-und-begründungen).
+  [architecture.md A32](architecture.md#10-zusammenfassung-der-architekturentscheidungen).
 - **6.16** **Die Tastatur der Kategorieneingabe lässt sich wieder schließen.**
   Jeder Weg aus der Tastatur liegt **in der Aktion des Controls**, das der
   Nutzer angefasst hat: `Hinzufügen` legt die Kategorie an und gibt danach —
@@ -808,7 +822,7 @@ Session-Setup, Abfrage-UI, Anbindung der Engine an SwiftData.
   an- oder abwählen**, Auswahl entstand nur noch beim Anlegen. Drei Varianten
   gemessen, drei gescheitert — die Gesture ist jetzt vollständig entfernt und
   wird nicht durch eine fünfte ersetzt. Die Lehre daraus steht als Entscheidung
-  [A27](architecture.md#anhang-entscheidungen-und-begründungen), weil sie über
+  [A27](architecture.md#10-zusammenfassung-der-architekturentscheidungen), weil sie über
   diese Phase hinaus gilt — samt dem festgelegten Rückweg: Verliert am Gerät
   doch ein Control seine Aktion, wird die Container-Gesture **entfernt** und
   die freie Fläche kostet eine Wischbewegung. Kein Ausweichen auf
@@ -882,7 +896,7 @@ Wort 0,28 ms, langer Satz 0,57 ms.
   `nonisolated`, **33 eigene Tests in 41 Fällen**. Eine Silbe schreibt immer
   nur ihren *eigenen* Oberflächenton; welchen Ton eine Regel **liest**, ist
   dagegen von Fall zu Fall verschieden und in
-  [A28](architecture.md#anhang-entscheidungen-und-begründungen)/[A30](architecture.md#anhang-entscheidungen-und-begründungen)
+  [A28](architecture.md#10-zusammenfassung-der-architekturentscheidungen)/[A30](architecture.md#10-zusammenfassung-der-architekturentscheidungen)
   festgehalten: erster Dritt-Ton-Zyklus lexikalisch, zweiter Zyklus über die
   Fußgrenze auf dem Oberflächenton, `一`/`不` auf dem Grundton des Nachbarn.
   Diese drei auseinanderzuhalten ist nicht Pedanterie — wer den zweiten
@@ -2411,6 +2425,518 @@ Bewertung verlangen und damit seinen eigenen Zweck verfehlen.
 
 ---
 
+## Phase 13 — Lernflow & Assisted Classification UX
+
+**Spezifiziert am 2026-09-21, nicht implementiert.** Diese Phase ist vor dem
+Produktcode vollständig ausgeschrieben worden — Flow, UI-Zustände, Regel,
+Schemaänderung und Akzeptanzkriterien —, damit bei der Umsetzung keine
+Designentscheidung implizit getroffen werden muss. Die verbindliche
+Lernlogik steht in
+[learning-engine.md §13](learning-engine.md#13-lernflow-und-assistierte-einstufung-phase-13);
+hier steht, was gebaut wird und woran es gemessen wird.
+
+### Ziel
+
+Der Lernflow soll in der Hand liegen und nicht in vier Tasten. Zwei Probleme
+sind gemeint:
+
+1. **Die Vierfachauswahl ist die falsche Frage.** Phase 11 hat sie nur im
+   sauberen Fall gespart; in jedem anderen Fall — Mismatch, Aufdecken, Retry,
+   kein Mikrofon, Modus B, Rekalibrierung — stand sie weiter da. Und sie kommt
+   **nach** dem Aufdecken: Der Unterschied zwischen *Schwer* und *Gut* ist
+   dann eine Stimmung, keine Beobachtung.
+2. **Der Aufnahmepfad hat keinen Abbruch.** Während einer Aufnahme gibt es nur
+   „Aufnahme beenden", und das wertet aus. Ein verstolpertes „Moment, nochmal"
+   kostet damit einen Versuch und ein Aufdecken.
+
+Danach gilt: höchstens **eine binäre Frage** je Karte, und nur, wenn die App
+für einen konkreten Schritt nach oben Evidenz hat. Sonst ein Knopf weiter.
+
+### Scope
+
+- Neuer Bedienfluss der Lernkarte in beiden Richtungen, inklusive Stop-Button
+  und der Animation zwischen den beiden Aufnahmezuständen.
+- *Antwort zeigen* wird in Modus A zu **Aufgeben** und übernimmt die Rolle,
+  die bis Phase 12 „Nochmal" hatte — inklusive Wiedereinstreuung.
+- Die vier `SelfAssessment`-Tasten verlassen den Lernflow.
+- Neue assistierte Einstufung: *Weiter* oder „Neue Einstufung" mit *Ablehnen*
+  / *Bestätigen*, `.new` eingeschlossen, Ablehnung berücksichtigt.
+- **Eine** additive Schemaerweiterung auf `ReviewLog` für die Ablehnung.
+- Verengung der Phase-12-Regel „Sprachausgabe entwaffnet den Sprachmodus".
+- Dokumentation des Produktwunsches „chinesische Tastatur im Hanzi-Feld"
+  und seiner Grenze (unten, Q12).
+
+### Die UI-Zustände und ihre Übergänge
+
+**Modus A, verdeckte Karte.** Zwei Zeilen. Zeile 2 ist immer der
+Aufdeck-Knopf, Zeile 1 gehört dem Aufnahmepfad und hängt allein an
+`SpeechRecognitionService.Phase` — dieselbe Tabelle wie in Phase 9, um einen
+Zustand erweitert:
+
+| Phase | Zeile 1 | Zeile 2 | Tap auf Zeile 1 |
+| --- | --- | --- | --- |
+| `idle`, `ready` | `[ Antwort sprechen ]` volle Breite | `[ Aufgeben ]` | startet Aufnahme **und** armiert den Sprachmodus (A39) |
+| `recording` | `[ Fertig ][ ■ ]` | `[ Aufgeben ]` | *Fertig* beendet und wertet aus, *■* verwirft |
+| `finalizing` | `[ Wird ausgewertet … ]`, inaktiv | `[ Aufgeben ]` | — |
+| `preparing` | `[ Wird vorbereitet … ]`, inaktiv | `[ Aufgeben ]` | — |
+| `downloading` | `[ Sprachmodell wird geladen … ]`, inaktiv, mit Apples `Progress` | `[ Aufgeben ]` | — |
+| `noSpeechDetected` | `[ Antwort sprechen ]` + „Nichts erkannt. …" | `[ Aufgeben ]` | startet erneut (Tap nötig, A38) |
+| `failed` | `[ Antwort sprechen ]` + Fehlertext | `[ Aufgeben ]` | startet erneut |
+| `permissionDenied` | `[ Mikrofon nicht freigegeben ]` + Hinweis | `[ Aufgeben ]` | fragt erneut nach der Freigabe |
+| `unavailable` | Zeile 1 entfällt, nur der Hinweissatz | `[ Aufgeben ]` | — |
+
+**In Modus A heißt Zeile 2 in jedem dieser Zustände *Aufgeben*** — auch ohne
+Mikrofonfreigabe und auf einem Gerät ohne Erkennung. Ein Bedienelement, das
+sich je nach Mikrofonzustand umbenennt, ist schwerer zu lernen als eines, das
+es nicht tut. Nur Modus B heißt weiter *Antwort zeigen*, weil das Aufdecken
+dort der vorgesehene Schritt ist.
+
+**Die Wiedereinstreuung hängt an einer eigenen, engeren Bedingung** und nicht
+an der Beschriftung: Modus A **und** von Hand aufgedeckt **und** eine Aufnahme
+war auf dieser Karte möglich, also die Phase war keine der beiden dauerhaft
+unmöglichen. Ohne die dritte Bedingung würde auf einem Gerät ohne Erkennung
+jede Karte wieder eingestreut und **jeder Batch doppelt so lang** — sieben
+Karten würden zu vierzehn Fragen. Dass derselbe Knopf unsichtbar
+unterschiedlich weiterplant, ist vertretbar, weil der Unterschied reine
+Terminplanung ist: Er berührt weder Lernstand noch Evidenz noch irgendeine
+Aussage an den Lernenden. Zwei Prädikate, eines für den Text, eines für die
+Queue, beide rein und beide getestet
+([learning-engine.md §13.5](learning-engine.md#135-wiedereinstreuung-aufgeben-ist-die-einzige-aussage-über-nichtwissen)).
+
+**Die Animation.** `[ Antwort sprechen ]` → `[ Fertig ][ ■ ]`: Der breite
+Knopf schrumpft nach rechts auf die Stop-Fläche, *Fertig* erscheint im frei
+gewordenen Bereich. Rückweg umgekehrt. **Eine** Animation auf dem aus der
+Phase abgeleiteten Zustand, nicht zwei unabhängige Übergänge — A33 steht für
+genau diese Lektion. Zeile 2 bewegt sich dabei nicht; Zeile 1 behält ihre
+Höhe.
+
+**Was *■* tut und was nicht:** Es beendet oder verwirft **nur den laufenden
+Aufnahmeversuch**. Keine Auswertung, kein Aufdecken, kein `ReviewLog`-Eintrag,
+kein Zähler. Die Oberfläche animiert zurück zu `[ Antwort sprechen ]`, der
+**Session-Sprachmodus bleibt aktiv**, und auf derselben Karte startet keine
+Aufnahme von selbst — ein weiterer Anlauf braucht einen Tap (A38).
+
+**Ist der Sprachmodus armiert und die nächste Karte startet ihre Aufnahme von
+selbst, erscheint direkt `[ Fertig ][ ■ ]`** — nicht erst *Antwort sprechen*.
+Das ergibt sich aus der Tabelle, weil der Zustand an der Phase hängt und nicht
+daran, wer die Aufnahme gestartet hat; es ist trotzdem ein Akzeptanzkriterium,
+weil es der sichtbare Kern des Zusammenspiels mit Phase 12 ist.
+
+**Modus A, aufgedeckte Karte.** Die Antwort wie bisher
+(`LearnRevealedAnswerView`, A34), darunter das Vergleichsergebnis aus Phase 9,
+darunter genau einer von zwei Zuständen:
+
+```text
+kein Vorschlag                      Vorschlag liegt vor
+
+[ Weiter ]                          Neue Einstufung
+                                    Mittel → Gut
+
+                                    [ Ablehnen ]  [ Bestätigen ]
+```
+
+*Bestätigen* ist der hervorgehobene Knopf, *Ablehnen* der gewöhnliche. **Kein
+zusätzliches *Weiter* daneben:** *Ablehnen* **ist** der neutrale Ausgang, es
+senkt nichts und ändert nichts. Keine Farbcodierung — ein Vorschlag ist kein
+Urteil. Für VoiceOver wird der Pfeil ausgeschrieben („Neue Einstufung: von
+Mittel auf Gut"), weil ein Pfeil kein Wort ist.
+
+**Modus B.** Unverändert `nur Audio → [ Hanzi anzeigen ] → [ Antwort zeigen ]`,
+danach `[ Weiter ]`. **Nie ein Vorschlag, nie eine Statusänderung, nie eine
+Wiedereinstreuung** — ohne die vier Tasten gibt es dort kein
+Correctness-Signal, und eine Ersatzheuristik wird nicht erfunden.
+
+**Der Versuch ist mit dem Verlassen der Karte abgeschlossen** — mit *Weiter*,
+*Bestätigen* oder *Ablehnen* —, und genau dann entsteht **genau ein**
+`ReviewLog`-Eintrag. Das ist eine bewusste Präzisierung gegenüber „schreibt
+den Review, deckt danach die Karte auf": Ausgewertet wird vor dem Aufdecken,
+protokolliert beim Verlassen, weil der Eintrag tragen muss, wie die
+Einstufungsfrage ausgegangen ist.
+
+### Die neue Assisted-Classification-Regel
+
+Vollständig in
+[learning-engine.md §13.7](learning-engine.md#137-die-regel). Kurzfassung:
+
+Ein **sauberer Versuch** ist unverändert Phase 11 — Sprache benutzt und Text
+übereinstimmend, kein Retry, nichts vorher aufgedeckt. Neu ist, welche
+Versuche in denselben Lauf gehören. Rückwärts vom laufenden Versuch, und nur
+**vergleichbare**:
+
+1. **gleiche Richtung** — ein Modus-B-Versuch wird übersprungen, nicht als
+   Bruch gezählt;
+2. **gleicher Ausgangsstatus** (`previousStatus == aktueller Status`) — das ist
+   die Evidenz seit der letzten Statusänderung;
+3. Abbruch am ersten unsauberen Versuch;
+4. Abbruch an einer **Ablehnung**, die selbst nicht mitzählt.
+
+Ab zwei vergleichbaren sauberen Versuchen gibt es einen Vorschlag: genau ein
+Schritt nach oben über `StatusTransition.newStatus(from:for: .good)`, also die
+*Gut*-Spalte der Matrix aus §6 — `Neu → Mittel`, `Schwach → Mittel`,
+`Mittel → Gut`, `Gut → Sicher`, bei *Sicher* keiner.
+
+**Regel 2 ist es, die `.new` freigibt.** Phase 11 hatte dort einen eigenen
+Riegel, weil eine von Hand auf *Neu* zurückgesetzte Karte ihre Historie behält
+und sofort eine Beförderung angeboten bekommen hätte. Der Riegel war richtig
+aus dem falschen Grund — er prüfte den Status, wo die **Herkunft der Evidenz**
+das Problem war. Regel 2 erledigt beides und entfällt damit.
+
+**Ersetzte Phase-11-Regeln**, einzeln und mit Begründung in
+[learning-engine.md §13.9](learning-engine.md#139-welche-phase-11-regeln-damit-ersetzt-sind):
+`.ask` mit Vierfachauswahl, `.autoAdvance`, `autoAdvancesBeforeRecalibration`
+(entfällt vollständig), der `.new`-Riegel, `ReviewSignal.isUsable`,
+`cleanRunBeforeAutoAdvance` (umbenannt zu `cleanRunBeforeSuggestion`, Wert
+unverändert 2). **Unverändert weiter gültig:** der saubere Versuch, alle
+Verbote aus §12.4, „die Zahlen sind Produktentscheidungen, keine Messungen",
+§7.1 und §6.1.
+
+### Die Schemaänderung: zwei Felder
+
+Vier Tatsachen müssen später ohne Raten auseinanderzuhalten sein: eine
+**historische Selbsteinschätzung** aus dem alten Flow, eine **vorgeschlagene
+Einstufung**, ihre **Annahme** und ihre **Ablehnung**.
+
+**`assessment` ist dafür nicht verwendbar.** Das Feld bedeutet „der Lernende
+hat eine der vier Selbsteinschätzungen abgegeben" und behält diese Bedeutung.
+Eine Zustimmung zu einem Vorschlag der App dort hineinzuschreiben, weil sie
+zufällig denselben Statusübergang erzeugt, würde die erste und die dritte
+Tatsache ununterscheidbar machen — rückwirkend und ohne Weg zurück. **Der neue
+Flow schreibt deshalb immer `assessment = nil`.**
+
+Zwei additive, optionale Felder auf `ReviewLog`, im Store als RawValue wie
+`previousStatusRaw`, beide Default `nil`:
+
+| Feld | Typ | Bedeutung |
+| --- | --- | --- |
+| `suggestedStatusRaw` | `Int?` | der Status, den die App vorgeschlagen hat; `nil` = kein Vorschlag |
+| `suggestionDecisionRaw` | `String?` | `SuggestionDecision`: `accepted` oder `declined`; `nil` = kein Vorschlag |
+
+`SuggestionDecision` ist ein eigenes `nonisolated enum String` mit
+ausgeschriebenen RawValues, weil sie Historie sind — dieselbe Regel wie bei
+`SelfAssessment`, `SessionDirection` und `SpeechRate`. Die beiden Felder sind
+immer gemeinsam gesetzt oder gemeinsam `nil`; das ist eine Invariante mit Test,
+kein Vertrauen.
+
+**Beide sind erforderlich**, nachgerechnet in
+[learning-engine.md §13.10](learning-engine.md#1310-die-schemaänderung-zwei-felder-und-warum-genau-zwei):
+Ohne `suggestedStatus` wäre der Vorschlag nur über die **heutige Fassung der
+Regel** rekonstruierbar — eine Historie, deren Bedeutung an der aktuellen Regel
+hängt, ist keine Historie; und §13.7 Regel 4 braucht genau diesen Status. Ohne
+`suggestionDecision` wären Annahme und Ablehnung nicht unterscheidbar, denn der
+Status der Karte liegt auf `Card` und wird vom nächsten Versuch überschrieben.
+**Semantische Eindeutigkeit hat Vorrang vor der gesparten Property.**
+
+`ReviewSignal` bekommt **nicht** beide Felder, sondern den einen abgeleiteten
+Wert, den die Regel liest — `declinedSuggestion: LearningStatus?`, gebildet an
+der Abbildungsgrenze wie `Card → CardSnapshot`. Die Annahme braucht die Regel
+nicht: Ein angenommener Vorschlag hat den Status bewegt, sein Eintrag trägt
+also einen anderen `previousStatus` und fällt schon durch Regel 2 heraus.
+
+**Keine zweite Bewertungshistorie**, kein zweites Modell, nichts in den
+`UserDefaults`: ein Versuch, ein Eintrag.
+
+Das ist die **zweite** Schemaänderung des Projekts und die erste an einem
+**bestehenden** Modell. Q7 ist für ein neues Modell plus Beziehung gemessen,
+für neue Properties **nicht** — deshalb ist die Messung ein Akzeptanzkriterium
+dieser Phase und Q7 hat dafür einen offenen Teil.
+
+### Am 2026-09-21 entschieden — keine offenen Produktentscheidungen mehr
+
+Diese sechs Punkte standen im Spezifikationsdurchgang zur Klärung und sind
+**entschieden**. Sie werden bei der Umsetzung nicht neu aufgemacht:
+
+1. **Modus A ohne verwertbare Speech-Evidenz und Modus B sind in Phase 13
+   statusneutral.** Ohne sauberen Versuch gibt es keinen Vorschlag, also bewegt
+   sich der Lernstand dort nicht von selbst — er ändert sich ausschließlich
+   über die Kartenliste (§6.2). Das ist die angenommene Folge aus „keine neue
+   Ersatzheuristik erfinden", keine Lücke. Die Rückfallebene liegt im Backlog
+   und wird erst nach dem Alltagstest bewertet.
+2. **`Neu → Mittel` ist der erste Vorschlag** nach ausreichender sauberer
+   Evidenz — die *Gut*-Spalte der Matrix aus §6, keine neue Leiter. *Schwach*
+   wird dabei übersprungen, weil *Neu* laut §6 mit Stufe 1 verrechnet wird und
+   zwei saubere Versuche mit *Schwach* zu belohnen wie eine Abwertung läse.
+3. **Ein ASR-Mismatch bewirkt keine Wiedereinstreuung.** Er ist ausdrücklich
+   keine negative Evidenz; ihn zur Wiederholungsentscheidung zu machen wäre
+   eine Handlung auf ein Signal, dem die App nach eigener Aussage nicht traut.
+4. **Nur *Aufgeben* streut wieder ein, und genau einmal pro Mini-Batch** —
+   `maxReinserts` = 1, Position nach §5 unverändert, und nur, wenn eine
+   Aufnahme auf dieser Karte möglich war.
+5. **Die toten Produktionspfade `SessionQueue.assess` und `AssessmentOutcome`
+   werden bei der Umsetzung entfernt** — sofern die Aufrufersuche bestätigt,
+   dass sie nicht mehr gebraucht werden. Dasselbe gilt für
+   `SelfAssessment.countsAsCorrect`, `keepsCardInBatch` und
+   `AssistedAssessment.assessment(leadingTo:from:)`. **Die Queue- und
+   Wiedereinstreuungssemantik bleibt dabei testgesichert:** Position hinter den
+   ungesehenen Karten, Mindestabstand, Obergrenze und Batchende werden gegen
+   die neue API erneut festgenagelt, nicht aufgegeben.
+6. **Der Toolbar-Knopf der Session heißt *Beenden*** statt *Fertig* — sonst
+   stünde „Fertig" zweimal mit zwei Bedeutungen auf demselben Bildschirm.
+
+Offen bleibt ausschließlich der **Umfang von Phase 14**, und das ist keine
+Phase-13-Entscheidung.
+
+### Tasks
+
+- **13.1** `SuggestionDecision` als eigenes `nonisolated enum String` anlegen;
+  `ReviewLog` um `suggestedStatusRaw: Int?` und `suggestionDecisionRaw: String?`
+  samt der beiden berechneten Properties erweitern; `ReviewSignal` um den
+  abgeleiteten `declinedSuggestion`. `SchemaMigrationTests` um den Fall
+  „Phase-12-Store öffnet mit Phase-13-Schema" erweitern, und die
+  Gemeinsam-gesetzt-Invariante der beiden Felder festnageln.
+- **13.2** `AssistedAssessment` auf die neue Regel umstellen: Entscheidung
+  `.continueOnly` / `.propose(LearningStatus)`, Lauf nach §13.7,
+  `cleanRunBeforeSuggestion`, `autoAdvancesBeforeRecalibration` und den
+  `.new`-Riegel entfernen, `isUsable` durch die Richtungsregel ersetzen.
+  `assessment(leadingTo:from:)` **entfällt** — es gibt keine Taste mehr, und
+  *Bestätigen* wird ausdrücklich nicht als Selbsteinschätzung gespeichert.
+- **13.3** `SessionQueue`: `assess(_:currentStatus:)` und `AssessmentOutcome`
+  durch `closeCurrentCard(reinserting:)` und ein `AttemptOutcome` ohne
+  `assessment`/`newStatus` ersetzen. Position, `maxReinserts` und
+  „ungesehene zuerst" bleiben unverändert — nur der Auslöser ändert sich.
+  `SelfAssessment.keepsCardInBatch` verliert damit seinen Aufrufer und
+  entfällt; `statusDelta` und `countsAsCorrect` bleiben.
+- **13.4** Neue reine Regeln in `Features/Learn/LearnFlow.swift`: Beschriftung
+  des Aufdeck-Knopfes (*Aufgeben* in Modus A immer, *Antwort zeigen* in Modus B)
+  und — **davon getrennt** — „streut wieder ein" aus Richtung und
+  Erkennungsphase. Zwei Prädikate, nicht eines: Die Beschriftung ist in Modus A
+  konstant, die Wiedereinstreuung nicht. Keine dieser Bedingungen darf allein
+  in einem `body` stehen.
+- **13.5** `RecordAnswerButton` um den geteilten Zustand `[ Fertig ][ ■ ]`
+  und einen `cancel`-Aufrufer erweitern, samt Animation. Symbol `stop.circle`
+  wiederverwenden — kein neuer SF-Symbol-Name.
+- **13.6** `SelfAssessmentBar` durch `RevealedDecisionBar` ersetzen:
+  `[ Weiter ]` oder „Neue Einstufung" mit *Ablehnen* / *Bestätigen*,
+  inklusive VoiceOver-Beschriftung des Übergangs.
+- **13.7** `LearnSessionModel`: Aufdecken mit und ohne Aufgeben trennen, den
+  Versuch beim Verlassen der Karte protokollieren — **immer mit
+  `assessment = nil`** —, *Bestätigen* als `.accepted` plus den neuen Status,
+  *Ablehnen* als `.declined`, beide mit `suggestedStatus`. `correctCount`
+  bewegt sich auf keinem dieser Pfade. Wiedereinstreuung an die eigene,
+  engere Bedingung hängen. Fehlerpfad wie bisher: `rollback()`, Karte bleibt
+  aufgedeckt, **Vorschlag bleibt stehen**, dieselbe Entscheidung ist erneut
+  möglich.
+- **13.8** `SessionSpeechEvent` um den vom Lernenden abgebrochenen Versuch
+  erweitern (Modus bleibt aktiv, Aufnahme wird verworfen, kein neuer Versuch
+  auf derselben Karte) und die Sprachausgabe-Regel auf den verdeckten Zustand
+  verengen. Die Reihenfolge **Sprachausgabe stoppen → Kartenwechsel → erst
+  danach die automatische Aufnahme** bleibt an **einem** Beobachter je
+  Kartenübergang und wird als Sequenz über `SessionSpeechState` geprüft; sie
+  ist das Einzige, was nach der Verengung noch verhindert, dass Ton und
+  Mikrofon aufeinandertreffen. Das Ereignis „Bewertung abgegeben" heißt jetzt inhaltlich
+  „Versuch abgeschlossen" und wird entsprechend benannt.
+- **13.9** Texte: der Toolbar-Knopf zum Beenden der Session heißt **Beenden**
+  statt *Fertig* — sonst stünde „Fertig" zweimal mit zwei Bedeutungen auf dem
+  Bildschirm. Hinweistexte, die auf *Antwort zeigen* verweisen, auf die neue
+  Beschriftung bringen.
+- **13.10** Tests: `LearnFlowTests` neu; `AssistedAssessmentTests`,
+  `SessionQueueTests`, `LearnSessionModelTests`, `ReviewHistoryTests`,
+  `SessionSpeechModeTests`, `SchemaMigrationTests` und die Wortlautprüfung in
+  `SpeechRecognitionTests` erweitern. Die verbotenen Wortlaute gelten für
+  jede neue sichtbare Zeichenkette — „Ton" ist als Teilwort verboten.
+- **13.11** Dokumentation: `learning-engine.md` §13 (liegt vor),
+  `architecture.md` §3, §9.1 und die Entscheidungstabelle, `apple-frameworks.md`
+  Q7 und Q12, `README.md`, `CLAUDE.md`.
+
+### Akzeptanzkriterien
+
+**Flow und UI**
+
+- [ ] In Modus A stehen auf der verdeckten Karte zwei Zeilen, und Zeile 1
+      folgt in allen zehn Erkennungsphasen der Tabelle oben.
+- [ ] Ein Tap auf *Antwort sprechen* startet die Aufnahme **und** armiert den
+      Sprachmodus, und Zeile 1 zeigt danach `[ Fertig ][ ■ ]`.
+- [ ] *■* verwirft den Versuch: keine Auswertung, kein Aufdecken, **kein**
+      `ReviewLog`-Eintrag, kein Zähler bewegt sich, der Sprachmodus bleibt
+      aktiv, und auf derselben Karte startet keine Aufnahme von selbst.
+- [ ] *Fertig* finalisiert, vergleicht über den unveränderten Phase-9-Pfad und
+      deckt die Karte auf.
+- [ ] *Aufgeben* während `finalizing` gewinnt: Das Ergebnis der laufenden
+      Analyse erreicht die Karte nicht mehr, und der Versuch gilt als von Hand
+      aufgedeckt.
+- [ ] Scheitert das Speichern bei *Bestätigen* oder *Ablehnen*, bleibt die
+      Karte aufgedeckt **und der Vorschlag stehen**; dieselbe Entscheidung ist
+      erneut möglich.
+- [ ] Startet die Aufnahme einer neuen Karte von selbst, erscheint direkt
+      `[ Fertig ][ ■ ]` und nicht *Antwort sprechen*.
+- [ ] Der Übergang zwischen den beiden Aufnahmezuständen ist **eine**
+      Animation; Zeile 2 bewegt sich dabei nicht.
+- [ ] *Aufgeben* verwirft eine laufende Aufnahme, deckt auf, zählt als
+      manueller Reveal, liefert **keine** positive Evidenz und verbessert
+      **keinen** Status.
+- [ ] Die Vierfachauswahl erscheint in keinem Zustand des Lernflows mehr.
+- [ ] Nach dem Aufdecken steht entweder `[ Weiter ]` oder die Einstufungsfrage
+      mit *Ablehnen* und *Bestätigen* — nie beides, nie ein drittes Element.
+- [ ] Modus B: `[ Weiter ]` nach dem Aufdecken, **nie** ein Vorschlag, **nie**
+      eine Statusänderung, **nie** eine Wiedereinstreuung.
+- [ ] Zeile 2 heißt in Modus A in **jedem** Erkennungszustand *Aufgeben* —
+      auch bei `permissionDenied` und `unavailable`. Nur Modus B heißt
+      *Antwort zeigen*.
+- [ ] Wieder eingestreut wird genau dann, wenn in Modus A von Hand aufgedeckt
+      wurde **und** eine Aufnahme auf dieser Karte möglich war — und dann
+      **genau einmal** pro Mini-Batch (`maxReinserts`).
+- [ ] Auf einem Gerät ohne Erkennung wird **nichts** wieder eingestreut; ein
+      Batch bleibt so lang wie seine Kartenzahl.
+- [ ] Läuft beim Verlassen der Karte noch eine Sprachausgabe, ist die
+      Reihenfolge: **Sprachausgabe stoppen → Kartenwechsel → erst danach die
+      automatische Aufnahme.** Nie Sprachausgabe und Mikrofon gleichzeitig,
+      und **ein** Auslöser je Kartenübergang.
+- [ ] „Fertig" steht nicht zweimal mit zwei Bedeutungen auf dem Bildschirm.
+
+**Regel**
+
+- [ ] Ein einzelner Exact-Match erzeugt keinen Vorschlag.
+- [ ] Ein Mismatch senkt nichts, schlägt nichts vor, beendet den Lauf und
+      bewirkt **keine** Wiedereinstreuung.
+- [ ] Ein Retry ist keine positive Evidenz.
+- [ ] Manueller Reveal und *Aufgeben* sind keine positive Evidenz **und
+      brechen den Lauf** — auch dann, wenn dabei weder Sprache benutzt noch
+      eine Bewertung abgegeben wurde.
+- [ ] Es existiert **kein** Pfad, auf dem die App einen Status senkt.
+- [ ] Ohne Tap auf *Bestätigen* ändert sich kein Status.
+- [ ] Ein Vorschlag ist höchstens eine Stufe nach oben.
+- [ ] Eine Karte auf `.new` bekommt nach zwei sauberen Versuchen ihren ersten
+      Vorschlag (`Neu → Mittel`).
+- [ ] Eine von Hand auf `.new` zurückgesetzte Karte bekommt **keinen**
+      Vorschlag aus ihrer alten Historie.
+- [ ] Nach *Ablehnen* erscheint derselbe Vorschlag erst wieder, wenn nach der
+      Ablehnung erneut die vollständige Schwelle sauberer Versuche erreicht
+      ist — und das gilt **über einen App-Neustart hinweg**.
+- [ ] Nach *Bestätigen* braucht die nächste Stufe zwei frische saubere
+      Versuche; zwei Beförderungen hintereinander sind unmöglich.
+- [ ] Ein Versuch in der anderen Richtung bricht den Lauf **nicht**.
+- [ ] Die Regel liegt vollständig in `Learning/`, ist rein, deterministisch,
+      Foundation-only und kennt weder `Card` noch `ModelContext`.
+- [ ] Kein Score, kein Prozentwert, keine Konfidenz, keine Aussage über
+      Aussprache oder Töne, keine Streaks.
+
+**Persistenz**
+
+- [ ] Pro abgeschlossenem Versuch entsteht **genau ein** `ReviewLog`-Eintrag,
+      geschrieben beim Verlassen der Karte.
+- [ ] Der neue Flow schreibt `assessment` **niemals** — auf keinem der drei
+      Abschlusswege. Das Feld bleibt ausschließlich die historische
+      Selbsteinschätzung des alten Flows.
+- [ ] `correctCount` bewegt sich auf **keinem** Pfad des neuen Flows, auch
+      nicht bei *Bestätigen*.
+- [ ] *Weiter* ohne Vorschlag schreibt `suggestedStatus = nil` und
+      `suggestionDecision = nil` und lässt `status` unberührt.
+- [ ] *Bestätigen* schreibt `suggestedStatus` = den Vorschlag,
+      `suggestionDecision = .accepted` und den neuen Status auf die Karte.
+- [ ] *Ablehnen* schreibt `suggestedStatus` = den Vorschlag,
+      `suggestionDecision = .declined` und lässt `status` unberührt.
+- [ ] Die vier Fälle — historische Selbsteinschätzung, Vorschlag angenommen,
+      Vorschlag abgelehnt, Versuch ohne Vorschlag — sind aus einem einzelnen
+      Eintrag **eindeutig** unterscheidbar, ohne eine Regel anzuwenden.
+- [ ] `suggestedStatus` und `suggestionDecision` sind immer gemeinsam gesetzt
+      oder gemeinsam `nil`.
+- [ ] Die Ablehnung ist persistiert und nach einem Neustart wirksam.
+- [ ] Die Erweiterung ist additiv: Ein mit dem **Phase-12-Schema**
+      geschriebener Store öffnet mit dem Phase-13-Schema ohne Verlust und ohne
+      Migrationsplan — gemessen, nicht angenommen (Q7, neue Properties auf
+      einem bestehenden Modell).
+- [ ] Es entsteht **keine** zweite Bewertungshistorie.
+
+**Unverändert**
+
+- [ ] Gewichtung, Batch-Auswahl, Recency und Pool-Regeln sind unberührt.
+- [ ] Wiedereinstreuungsposition, `reinsertGap` und `maxReinserts` verhalten
+      sich wie in §5 beschrieben, nur mit *Aufgeben* als Auslöser.
+- [ ] „Statusänderung nur einmal pro Mini-Batch" (§6.1) gilt und ist durch
+      einen Test festgenagelt, obwohl sie strukturell folgt.
+- [ ] Der Phase-9-Erkennungspfad, `AnswerNormalization` und `SpeechCheck` sind
+      unverändert; kein Fuzzy Matching, keine Konfidenz.
+- [ ] Phase 12 bleibt vollständig wirksam; geändert ist ausschließlich, dass
+      Sprachausgabe den Modus nur bei verdeckter Karte entwaffnet.
+- [ ] Kein eigenes Endpointing, kein Timeout als Ersatz.
+- [ ] Keine externe Dependency, keine Analytics, kein Netzwerk.
+
+### Der Produktwunsch „chinesische Tastatur im Hanzi-Feld"
+
+**Wunsch:** Bekommt das Hanzi-Feld im Karteneditor den Fokus, soll möglichst
+die chinesische Eingabe verwendet werden.
+
+**Geprüft am 2026-09-21 gegen die Apple-Dokumentation — das ist so nicht
+zulässig, und für SwiftUI gar nicht** (Q12 in
+[apple-frameworks.md §10](apple-frameworks.md#10-offene-technische-fragen-zu-klären-vor-der-jeweiligen-phase)).
+Kurz:
+
+- Es gibt **keine setzende Input-Mode-API.** `UITextInputMode` ist in allen
+  Membern lesend, `currentInputMode` ist seit iOS 7 deprecated, und die
+  einzigen umschaltenden Symbole gehören zu einem Keyboard-Extension-Target —
+  ausgeschlossen, weil diese App kein eigenes Keyboard baut.
+- Dokumentiert möglich ist nur **Bevorzugen** pro Feld, durch Überschreiben
+  von `UIResponder.textInputMode` in einer UIKit-Subklasse, und der Wert muss
+  aus `UITextInputMode.activeInputModes` kommen — also aus den Tastaturen, die
+  der Nutzer **selbst** hinzugefügt hat. Eine Tastatur hinzuzufügen kann keine
+  App, und einen Deep Link in die Tastatur-Einstellungen gibt es nicht.
+- **SwiftUI hat dafür nichts.** `.keyboardType` wählt den Stil, nicht die
+  Sprache; `typesettingLanguage` betrifft die Darstellung.
+
+**Konsequenz: In Phase 13 wird dazu nichts gebaut, und es wird nichts
+versprochen.** Die Einschränkung ist dokumentiert, statt ein Verhalten
+anzukündigen, das iOS nicht erlaubt. Der bestehende Weg bleibt der Weg: Die
+Kette `Deutsch → Hanzi → Pinyin` erzeugt das Hanzi ohne chinesische Tastatur,
+und wer von Hand tippen will, schaltet die Tastatur wie in jeder anderen App
+um. Was **falls überhaupt** später in Frage kommt, steht im Backlog — in der
+dort begründeten Reihenfolge und ausdrücklich ohne Erzwingen.
+
+### Abhängigkeiten
+
+Phase 9 (Erkennungspfad, unverändert benutzt), Phase 11 (Historie und
+Bewertungspfad, hier ersetzt) und Phase 12 (Sprachmodus, hier an einer Stelle
+verengt).
+
+### Ausdrücklich nicht in dieser Phase
+
+- **Kein automatischer Downgrade** und keine negative Evidenz aus ASR, auch
+  nicht aus mehreren Mismatches.
+- **Keine Ersatzheuristik für Modus B** und keine für Modus A ohne Mikrofon.
+  Dort bewegt sich der Lernstand nur über die Kartenliste, und das ist die
+  benannte Folge, keine Lücke
+  ([learning-engine.md §13.11](learning-engine.md#1311-was-das-kostet)).
+- **Kein Endpointing**, kein Silence-Timer, kein `SpeechDetector`-Polling.
+- **Keine Kalibrierung** der Schwelle an realer Historie — sie wird durch die
+  aufgezeichneten Ablehnungen erst möglich und bleibt offen.
+- **Keine Tastatur-Umschaltung** und kein Lesen von `activeInputModes` (das
+  wäre „required reason API" und zöge ein Privacy-Manifest nach sich, für eine
+  Bequemlichkeit).
+- Keine Statistiken, keine Fortschrittsanzeige, keine Streaks.
+- Keine AI-Funktion — die ist Phase 14.
+
+---
+
+## Phase 14 — AI-Integration
+
+**Platzhalter. Umfang noch nicht spezifiziert — Stand 2026-09-21.**
+
+Diese Phase steht in der Reihenfolge, damit die finale Abnahme das fertige
+Produkt prüft und nicht einen Zwischenstand. **Was sie enthält, ist nicht
+entschieden**, und es wird hier auch nicht vorweggenommen: Ein Scope, der vor
+seiner eigenen Entscheidung aufgeschrieben wird, ist eine Vermutung mit
+Kästchen davor.
+
+Zu klären ist sie nach demselben Muster wie jede technisch unsichere Phase
+dieses Projekts — **erst Spike und Dokumentation, dann Produktcode** (Phasen 9
+und 12) —, und mindestens diese Fragen gehören vor den ersten Task:
+
+- **Welches Lernproblem** löst sie, das die vorhandenen Modi nicht lösen?
+- **Auf dem Gerät oder über einen Dienst?** Harte Regel 2 (keine externen
+  Dependencies, kein Backend, kein Laufzeit-SDK) und harte Regel 8 (keine
+  Telemetrie, kein Server, kein Login) gelten unverändert. Eine Lösung, die
+  Kartentexte an einen Dienst gibt, widerspricht dem local-first-Anspruch
+  dieser App und wäre eine ausdrückliche, begründete Ausnahme — keine
+  Nebenwirkung einer Feature-Entscheidung.
+- **Was darf sie behaupten?** Harte Regel 7 gilt: keine
+  Aussprachebewertung, kein Score. Ein Modell, das „gut ausgesprochen" sagt,
+  sagt es auf derselben unbelegten Grundlage wie ein Textvergleich.
+- **Was passiert, wenn sie nicht verfügbar ist?** Harte Regel 5: Automatik
+  blockiert nie. Die App muss ohne sie vollständig benutzbar bleiben.
+
+Bis diese Fragen beantwortet sind, hat diese Phase **keine
+Akzeptanzkriterien** — und ohne Akzeptanzkriterien wird nichts implementiert.
+
+---
+
 ## Finale Geräte- und Release-Abnahme
 
 **Kein Feature und keine Produktphase, sondern das abschließende Gate der
@@ -2434,7 +2960,12 @@ Sie belegen namentlich genannte Pfade auf dem jeweiligen Stand. Sie sind nicht
 die Abnahme des fertigen Produkts und waren es rückblickend auch nie.
 
 **Voraussetzung:** alle Implementierungsphasen abgeschlossen, verifiziert und
-auf `main` committet.
+auf `main` committet — **einschließlich der Phasen 13 und 14**. Am 2026-09-21
+ist dieses Gate ein zweites Mal nach hinten gerückt, aus demselben Grund wie
+beim ersten Mal: Phase 13 baut den Bedienfluss der Lernkarte um und ändert das
+Schema, und Phase 14 ist im Umfang noch offen. Die Begründung steht oben in der
+Einleitung; die bisherigen Gerätetests bleiben als Entwicklungsbelege
+unverändert dokumentiert.
 
 ### Vorbereitung
 
@@ -2458,6 +2989,10 @@ auf `main` committet.
 - [ ] Verwaltung der Sprachmodelle
 - [ ] alle Funktionen aus Phase 11
 - [ ] alle Funktionen aus Phase 12
+- [ ] der Lernflow aus Phase 13: Stop im Aufnahmepfad, *Aufgeben* samt
+      Wiedereinstreuung, *Weiter*, *Bestätigen*, *Ablehnen* — und die
+      Ablehnung, die einen App-Neustart überlebt
+- [ ] alle Funktionen aus Phase 14, sobald deren Umfang entschieden ist
 
 ### 2. Persistenz und Migration
 
@@ -2468,7 +3003,10 @@ Nutzers vernichten kann.
       — kein frisch angelegter, kein Simulator-Store
 - [ ] Keine bestehenden Karten, Kategorien oder Lernstände gehen verloren
 - [ ] Alle bis dahin hinzugekommenen Modelle und Migrationen prüfen,
-      insbesondere `ReviewLog` aus Phase 11 und dessen Beziehung zu `Card`
+      insbesondere `ReviewLog` aus Phase 11 mit seiner Beziehung zu `Card` und
+      die in Phase 13 ergänzten `suggestedStatusRaw` und
+      `suggestionDecisionRaw` — die ersten neuen Properties auf einem
+      **bestehenden** Modell
 - [ ] Damit ist auch **Q7** fällig
       ([apple-frameworks.md §10](apple-frameworks.md#10-offene-technische-fragen-zu-klären-vor-der-jeweiligen-phase)):
       ob die automatische SwiftData-Migration reicht, entscheidet sich hier
@@ -2557,6 +3095,15 @@ wird vor Abschluss von Phase 10 begonnen.
 **Lernlogik**
 - Echtes Spaced Repetition mit Fälligkeitsdaten (Vorbereitung siehe
   [learning-engine.md §11](learning-engine.md#11-vorbereitung-auf-echtes-spaced-repetition))
+- **Manuelle Vierfachbewertung als optionale Rückfallebene.** Phase 13 nimmt
+  sie aus dem Lernflow; damit bewegt sich in Modus B und in Modus A ohne
+  Mikrofon kein Lernstand mehr von selbst. Wieder aufnehmen, wenn sich im
+  Alltagstest zeigt, dass die Kartenliste als einziger Weg nicht reicht — dann
+  aber als ausdrückliche Einstellung, nicht als Rückfall in den Standardflow.
+- **Kalibrierung der Einstufungsschwelle an realer Historie**, jetzt
+  einschließlich der Annahmequote: Phase 13 zeichnet Ablehnungen auf, also ist
+  erstmals messbar, wie oft ein Vorschlag angenommen wird
+  ([learning-engine.md §13.10](learning-engine.md#1310-die-schemaänderung-zwei-felder-und-warum-genau-zwei)).
 - Wiederaufnahme einer unterbrochenen Session
 - Gemischte Sessions über mehrere Richtungen
 
@@ -2581,6 +3128,21 @@ wird vor Abschluss von Phase 10 begonnen.
   und Stillezeit zu kalibrieren statt zu raten.
 - Echte Aussprachebewertung inklusive Tonanalyse
 - Phonetischer Ähnlichkeitsvergleich statt exaktem Textvergleich
+
+**Eingabe**
+- **Chinesische Tastatur im Hanzi-Feld.** Am 2026-09-21 gegen die
+  Apple-Dokumentation geprüft (Q12): Es gibt keine setzende Input-Mode-API,
+  und SwiftUI hat dafür überhaupt nichts. Dokumentiert möglich ist nur
+  *Bevorzugen* pro Feld über `UIResponder.textInputMode` in einer
+  UIKit-Subklasse, begrenzt auf Tastaturen, die der Nutzer selbst hinzugefügt
+  hat. Falls es überhaupt kommt, in dieser Reihenfolge und nicht anders:
+  (1) `textInputContextIdentifier`, damit sich das Feld die dort zuletzt
+  benutzte Tastatur merkt — keine Sprachannahme, kein Erzwingen;
+  (2) ein Hinweis, wenn keine chinesische Tastatur aktiv ist — braucht
+  `activeInputModes`, also ein Privacy-Manifest; (3) der
+  `textInputMode`-Override zuletzt und nur mit einem Messwert dafür, was eine
+  chinesische Tastatur als `primaryLanguage` meldet. Erzwingen ist belegt
+  unmöglich und bleibt es.
 
 **Technik**
 - iCloud-Synchronisation

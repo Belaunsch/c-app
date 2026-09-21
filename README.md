@@ -17,9 +17,11 @@ Gerätetests hat es in jeder Phase gegeben, zuletzt am **2026-09-12** und
 **Abgenommen ist das Produkt damit nicht.** Die vollständige Geräteprüfung
 inklusive Migration, Offline-Kette, Barrierefreiheit, Audio-Lebenszyklus und
 einem mehrtägigen Alltagstest ist seit dem 2026-09-13 ein **gemeinsames Gate
-am Ende der Roadmap** statt eines Gates je Phase — weil die Phasen 11 und 12
-das Produkt erneut verändern und ein Stabilitätsbeleg für einen Zwischenstand
-am Ende nichts über das ausgelieferte Produkt sagt. Der Abschnitt
+am Ende der Roadmap** statt eines Gates je Phase — weil die Phasen danach das
+Produkt erneut verändern und ein Stabilitätsbeleg für einen Zwischenstand am
+Ende nichts über das ausgelieferte Produkt sagt. Am 2026-09-21 ist das Gate
+aus genau diesem Grund ein zweites Mal nach hinten gerückt, hinter die
+Phasen 13 und 14. Der Abschnitt
 [Finale Geräte- und Release-Abnahme](docs/roadmap.md) führt auf, was dazu
 gehört.
 
@@ -175,8 +177,13 @@ ursprünglich „Hands-free" und heißt jetzt nicht mehr so. Sprachausgabe,
 Hintergrund, Unterbrechung, Fehler und Sessionende schalten den Modus ab; ein
 leerer Versuch startet auf derselben Karte nichts Neues.
 
-Nächster Schritt: die **finale Geräte- und Release-Abnahme** auf dem fertigen
-Produkt.
+Nächster Schritt: **Phase 13 — Lernflow & Assisted Classification UX**, am
+2026-09-21 spezifiziert und noch nicht implementiert: Die vier Bewertungstasten
+verlassen den Lernflow, *Antwort zeigen* wird in Modus A zu *Aufgeben*, die
+Aufnahme bekommt einen Abbruch, und aus dem Vorschlag wird eine
+Zustimmungsfrage („Neue Einstufung: Mittel → Gut"). Danach **Phase 14 —
+AI-Integration**, deren Umfang noch nicht entschieden ist, und **erst dann**
+die finale Geräte- und Release-Abnahme auf dem fertigen Produkt.
 
 ## Drittanbieter-Daten
 

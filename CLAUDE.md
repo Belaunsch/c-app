@@ -44,8 +44,28 @@ Unterbrechung, technischer Fehler und Sessionende entwaffnen den Modus; ein
 Neustart braucht immer einen Tap. Regeln in
 `CApp/Features/Learn/SessionSpeechMode.swift`, Entscheidungen A37 bis A39.
 
-**Nächster Schritt: die finale Geräte- und Release-Abnahme** am Ende der
-Roadmap. Alle Implementierungsphasen sind durch.
+**Nächster Schritt: Phase 13 — Lernflow & Assisted Classification UX**
+(`/implement-phase 13`). Die Phase ist am 2026-09-21 vollständig spezifiziert
+worden, **Produktcode gibt es dafür noch keinen**: Der Lernflow der Karte wird
+umgebaut, und die Abschnitte oben über Phase 11 und 12 beschreiben bis dahin
+weiterhin das laufende Produkt. In Stichworten — Aufnahme mit Stop-Button,
+*Antwort zeigen* heißt in Modus A **in jedem Zustand** *Aufgeben* und übernimmt
+die Wiedereinstreuung von „Nochmal" (genau einmal pro Batch, und nur, wenn eine
+Aufnahme möglich war), die vier Bewertungstasten verlassen den Lernflow, danach
+steht dort *Weiter* oder eine Zustimmungsfrage („Neue Einstufung: Mittel → Gut",
+*Ablehnen* / *Bestätigen*), `.new` kann einen ersten Vorschlag bekommen, und es
+gibt **keinen** Pfad, auf dem die App einen Status senkt. Vorschlag, Annahme
+und Ablehnung werden in **zwei neuen `ReviewLog`-Feldern** festgehalten
+(`suggestedStatus`, `suggestionDecision`); `assessment` bleibt ausschließlich
+die historische Selbsteinschätzung des alten Flows und wird im neuen Flow
+**nie** geschrieben. Verbindlich sind
+[roadmap.md § Phase 13](docs/roadmap.md) und
+[learning-engine.md §13](docs/learning-engine.md) — §13.9 listet einzeln auf,
+welche Phase-11-Regeln dadurch ersetzt werden.
+
+**Die Reihenfolge danach: Phase 14 — AI-Integration** (Umfang noch nicht
+entschieden, keine Akzeptanzkriterien, also auch keine Implementierung), und
+**erst dann** die finale Geräte- und Release-Abnahme.
 
 Die Kette `Deutsch → Hanzi → Pinyin` läuft mit Return oder beim Verlassen des
 Feldes automatisch, beide Werte bleiben editierbar, und ein von Hand gesetzter
