@@ -3144,9 +3144,11 @@ verengt).
 
 ## Phase 14 — AI-Erklärung zu einer Karte
 
-**Spezifiziert, gemessen und zugeschnitten am 2026-09-21, implementiert am
-2026-09-22.** Offen sind nur die hardwareabhängigen Punkte unter
-[§ Finale Geräte- und Release-Abnahme, Nr. 8](#8-ai-erklärung-phase-14).
+**Spezifiziert, gemessen und zugeschnitten am 2026-09-21, implementiert und
+verifiziert am 2026-09-22 — Verdict READY.** Offen sind ausschließlich die neun
+realen Geräte- und Interaktionsprüfungen unter
+[§ Finale Geräte- und Release-Abnahme, Nr. 8](#8-ai-erklärung-phase-14); sie sind
+kein Gate dieser Phase. Einzelheiten unter „Stand am 2026-09-22".
 
 Die Phase begann mit zwei Produktfällen und endet mit einem. **Fall B — eine
 kurze, deutsche Erklärung zu einer vorhandenen Karte — ist gebaut worden, weil
@@ -3685,6 +3687,70 @@ Rohquelle liegt nicht im Repository. Er müsste neu spezifiziert und **neu
 gemessen** werden, gegen neu festgelegte Kriterien. Der Eintrag steht im
 [Backlog](#backlog-ausdrücklich-nicht-im-mvp).
 
+
+### Stand am 2026-09-22 — implementiert und verifiziert (READY)
+
+**Verdict: READY.** Build, Tests, alle technischen Akzeptanzkriterien und die
+Scope-Prüfung sind erfüllt. Die **neun** realen Geräte- und Interaktionsprüfungen
+stehen in der finalen Geräte- und Release-Abnahme unter
+[Nr. 8](#8-ai-erklärung-phase-14) und sind ausdrücklich **kein** Gate dieser
+Phase — so sieht es die Regelung vom 2026-09-13 vor.
+
+**686 Testfunktionen / 753 Einzelausführungen grün, 0 übersprungen**,
+Debug-Build von null und Release-Build von null mit **0 Compilerdiagnosen**.
+**Zwei** unabhängige Code Reviews und **zwei** unabhängige Testaudits, die
+zweite Runde als Nachprüfung der Behebungen; alle Findings abgearbeitet, in der
+zweiten Runde von beiden Seiten **keine Blocker**. **26 Gegenmutationen, 25
+greifen** — die eine ungefangene ist inzwischen konstruktiv unmöglich, weil der
+SF-Symbol-Name eine geteilte Konstante ist, die `SystemSymbolTests` mitprüft.
+
+**Drei Punkte, die vorher als Phase-Blocker geführt waren, sind am 2026-09-22 zu
+offenen Punkten der finalen Abnahme klassifiziert worden.** Sie sind weder
+gelöscht noch als bestanden markiert, sondern stehen namentlich unter Nr. 8: der
+Session-Sprachmodus über die Sheet-Präsentation, die Bedienbarkeit des Sheets
+während einer laufenden Anfrage, und die Darstellung des Begründungstexts im
+Kontextmenü. Alle drei sind Folgen dieser Phase — und alle drei sind
+Interaktionsprüfungen, die kein Unit-Test sehen kann.
+
+**Was die Prüfungen an der Phase real verbessert haben**, weil es sonst wie
+Formalie aussieht:
+
+- **Ein echter Fehler, den erst die Kombination aus SDK-Lesung und eigener
+  Messung sichtbar machte:** Auf iOS 27 wirft das Framework die **neue**
+  Fehlerfamilie. In den Gerätelogs stehen sechzehn Rate-Limit-Fehler und **null**
+  erkannte `GenerationError` — der Cast hat nie gegriffen. Eine Abbildung nur auf
+  die dokumentierte Familie hätte auf dem Zielgerät ausgerechnet den Pfad
+  verloren, den diese Phase als „kein Randfall" führt
+  ([apple-frameworks.md §12.8](apple-frameworks.md#128-nachbefund-ios-27-wirft-die-neue-fehlerfamilie)).
+- **Zwei tragende Zusagen waren überzeichnet.** „Die Phase schreibt nichts" und
+  „kein Sessionzustand bewegt sich" waren mit „durch einen Test belegt"
+  ausgezeichnet, und die Tests riefen drei **reine** Funktionen auf; „ein offener
+  Vorschlag bleibt offen" verglich sogar `nil == nil`. Behoben über die
+  injizierbare Anfrage (A52).
+- **Eine Lücke bei „zwei gleichzeitige Anfragen":** Schließen und Wiederöffnen
+  während einer laufenden Anfrage gab einer frischen View ein saubere Flag.
+  Geschlossen — und die Kehrseite (kein Ausgang, solange die Anfrage läuft) steht
+  als Fehlermatrix-Zeile 29b und als Gerätepunkt.
+- **Die A51-Regel lag halb im View** und ihr Test behauptete das Gegenteil des
+  Bildschirms. Vollständig in `CardExplanationEntry` geholt.
+
+**Drei Zusagen sind ehrlich zurückgestuft statt abgehakt:** dass `availability`
+nirgends gecacht wird, ist Codelesung — `SystemLanguageModel` ist nicht
+ersetzbar, ein `static let` würde kein Test bemerken; die Kennzeichnung und
+`ChineseText` im Sheet ebenso, weil ohne UI-Testgerüst kein Test sie berührt; und
+für den Modelltext gibt es **keinen Ausgabefilter** — die Instruction verbietet
+Aussprache- und Tonaussagen, garantieren kann die App sie nicht.
+
+**`promptRevision = 1` ist nicht Teil der Q13-Qualitätsmessung gewesen**, und das
+bleibt so dokumentiert: §12.5 lief mit dem Wortlaut des gelöschten Spikes. In der
+finalen Abnahme wird Revision 1 **nur als ausgelieferter Produktpfad funktional**
+geprüft — keine zweite Qualitätsmessung, kein neues Go/No-Go. Q13 ist
+geschlossen.
+
+**Fall A bleibt gestrichen und blockiert.** P1 bis P4 stehen als getroffene
+Entscheidungen des blockierten Falls; der Ansatz mit unabhängiger
+Bedeutungsprüfung liegt im Backlog und müsste neu spezifiziert und neu gemessen
+werden.
 ---
 
 ## Finale Geräte- und Release-Abnahme
@@ -3839,14 +3905,21 @@ Reine Dokumentationsänderungen tun das nicht.
 ### 8. AI-Erklärung (Phase 14)
 
 Neun Punkte, die sich ohne das Gerät nicht belegen lassen. Sie sind **kein
-versteckter Nachtrag zum Scope**, sondern die hardwareabhängigen Reste einer
+versteckter Nachtrag zum Scope**, sondern die Geräte- und Interaktionsreste einer
 Phase, deren Regeln vollständig getestet sind.
+
+**Am 2026-09-22 klassifiziert:** Phase 14 ist implementiert und technisch
+verifiziert (READY); diese neun Punkte gehören nach der Regelung vom 2026-09-13
+hierher und sind kein Gate der Phase. **Drei von ihnen waren zuvor als
+Phase-14-Blocker geführt** und sind jetzt offene Punkte dieser Abnahme — sie sind
+unten mit *(ehemals Phase-14-Blocker)* gekennzeichnet, weder gelöscht noch als
+bestanden markiert.
 
 - [ ] **Eine echte Erklärung erzeugen**, aus der Kartenliste und von einer
       aufgedeckten Lernkarte. Beide Male dasselbe Sheet, deutscher Text,
       höchstens zwei Beispiele, chinesische Anteile in der richtigen Stimme
       (VoiceOver).
-- [ ] **Der Session-Sprachmodus übersteht das Sheet.** Armieren, Erklärung
+- [ ] **Der Session-Sprachmodus übersteht das Sheet.** *(ehemals Phase-14-Blocker)* Armieren, Erklärung
       öffnen und schließen, danach muss die nächste Karte weiterhin von selbst
       aufnehmen. Das ist der eine Punkt, den ein Unit-Test nicht sehen kann: ob
       die Sheet-Präsentation `onDisappear` der präsentierenden Hierarchie
@@ -3867,7 +3940,7 @@ Phase, deren Regeln vollständig getestet sind.
       verschwinden, ohne die App neu zu starten. Das ist der Gerätebeleg für
       „`availability` wird nirgends gecacht" — die eine Regel dieser Phase, die
       kein Test decken kann, weil `SystemLanguageModel` nicht ersetzbar ist.
-- [ ] **Antippen und warten: wird das Sheet wieder frei?** Während einer Anfrage
+- [ ] **Antippen und warten: wird das Sheet wieder frei?** *(ehemals Phase-14-Blocker)* Während einer Anfrage
       ist *Fertig* deaktiviert und Wegwischen gesperrt — das ist die Behebung der
       Lücke „schließen und wiederöffnen startet eine zweite Anfrage". Die
       Gegenrichtung ist damit aber offen: Kehrt `respond` nicht zurück, gibt es
@@ -3877,7 +3950,7 @@ Phase, deren Regeln vollständig getestet sind.
       Grundlage für eine zweite Anfrage ist. **Vom zweiten Review aufgeworfen:
       seltener, aber schlimmer als der verhinderte Fall.** Fällt die Prüfung
       negativ aus, ist die Abwägung neu zu treffen.
-- [ ] **Der Begründungstext im Kontextmenü.** Er ist als nackter `Text` in
+- [ ] **Der Begründungstext im Kontextmenü.** *(ehemals Phase-14-Blocker)* Er ist als nackter `Text` in
       `.contextMenu` gesetzt; ob SwiftUI daraus einen deaktivierten Menüeintrag
       macht oder ihn schluckt, ist nicht dokumentiert. Fällt er weg, ist
       „sichtbar, deaktiviert, **mit Erklärung**" an diesem Einstieg nicht
@@ -3886,13 +3959,24 @@ Phase, deren Regeln vollständig getestet sind.
       Gemessen wurde es im XCTest-Host (§12.1), und ob das dasselbe ist, sagt
       die Messung selbst ausdrücklich nicht. Davon hängt ab, ob *Neu erzeugen*
       in der Praxis je durchgeht.
-- [ ] **Der ausgelieferte Prompt** im Vergleich zum gemessenen: Revision 1 hängt
-      an keiner eigenen Messung, weil §12.5 mit dem Wortlaut des gelöschten
-      Spikes lief
-      ([apple-frameworks.md §12.7](apple-frameworks.md#127-prompt-revisionen)).
-      Hier wird gesehen, ob die Eigenschaften halten — deutsch, knapp, keine
-      erfundene Grammatikregel, **keine Aussage über Töne oder Aussprache**.
-      Ausdrücklich **keine** zweite Qualitätsmessung: Q13 ist geschlossen.
+- [ ] **Revision 1 als ausgelieferter Produktpfad** — funktional, nicht als
+      Qualitätsmessung. Fünf Punkte, alle beobachtbar:
+
+      - Die Anfrage funktioniert auf dem echten Gerät.
+      - Eine **deutsche** Erklärung erscheint.
+      - Die Struktur trägt: Bedeutung, Gebrauch, Beispiele — und ein Beispiel hat
+        wirklich chinesischen **und** deutschen Teil.
+      - Die Kennzeichnung „Automatisch erzeugt – kann Fehler enthalten." ist
+        sichtbar.
+      - Die Fehlerrouten funktionieren, insbesondere `rateLimited`: verständliche
+        Meldung, Sheet bleibt bedienbar, die Karte bleibt unberührt.
+
+      **Ausdrücklich keine zweite Q13-Qualitätsmessung und kein neues
+      Go/No-Go.** Q13 ist geschlossen. Dass `promptRevision = 1` nicht Teil der
+      damaligen Messung war — §12.5 lief mit dem Wortlaut des gelöschten Spikes —
+      bleibt als Tatsache dokumentiert
+      ([apple-frameworks.md §12.7](apple-frameworks.md#127-prompt-revisionen))
+      und wird hier **nicht** nachgeholt, sondern nur funktional abgedeckt.
 
 Dazu im Flugmodus (§3) und in der Fehlerliste: `rateLimited` ist ein normaler
 Produktzustand, nicht ein Randfall — er ist am 2026-09-21 im Vordergrund

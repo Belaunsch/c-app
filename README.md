@@ -6,10 +6,12 @@ Text-to-Speech und Spracheingabe über die Mandarin-Spracherkennung des Systems.
 
 ## Status
 
-**Phasen 0 bis 13 implementiert. Finale Roadmap-Abnahme: ausstehend.**
+**Phasen 0 bis 14 implementiert und technisch verifiziert. Finale
+Roadmap-Abnahme: ausstehend.**
 
-Die Implementierung von v1 steht: Tests grün, Debug- und Release-Build sauber,
-vier unabhängige Code Reviews und vier Testaudits abgearbeitet. Physische
+Die Implementierung von v1 steht vollständig: Tests grün, Debug- und
+Release-Build von null sauber, sechs unabhängige Code Reviews und sechs
+Testaudits abgearbeitet. Physische
 Gerätetests hat es in jeder Phase gegeben, zuletzt am **2026-09-12** und
 **2026-09-13** auf einem iPhone 16 Pro (iOS 26.6) — sie sind
 **Entwicklungsbelege** für die jeweils geprüften Pfade.

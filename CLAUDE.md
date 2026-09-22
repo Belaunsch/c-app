@@ -25,8 +25,13 @@ Phase bleiben erlaubt, wo sich ein hardwareabhängiger Pfad sonst nicht
 belegen lässt — sie sind dann **Entwicklungsbelege**. Die Testhistorie steht
 vollständig in der Roadmap und wird nicht hierher kopiert.
 
-**Projektstatus: `Finale Roadmap-Abnahme: ausstehend`.** Das Produkt ist nicht
-abgenommen, solange dieses Gate offene Punkte hat.
+**Projektstatus: `Phasen 0–14 implementiert und technisch READY. Finale
+Roadmap-Abnahme: ausstehend`.** Alle Implementierungsphasen sind durch und
+einzeln verifiziert; das Produkt ist nicht abgenommen, solange das gemeinsame
+Gate am Ende der Roadmap offene Punkte hat. Dort stehen für Phase 14 **neun**
+Geräte- und Interaktionsprüfungen unter Nr. 8, davon drei, die am 2026-09-22 von
+Phase-14-Blockern zu offenen Punkten der finalen Abnahme klassifiziert wurden —
+weder gelöscht noch bestanden.
 
 Seit Phase 11 gibt es die **Review-Historie** (`ReviewLog`, erste
 Schemaerweiterung seit Phase 1 — Q7 ist daran gemessen und beantwortet). Die

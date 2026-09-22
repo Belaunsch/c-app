@@ -1525,13 +1525,19 @@ Das wird hier benannt statt geglättet, weil die Revision genau dafür existiert
 „Eine Messung ohne Angabe, welcher Prompt sie erzeugt hat, ist eine Anekdote" —
 und eine Revision ohne Messung ist die Gegenrichtung desselben Problems.
 
-**Nachgemessen wird nicht innerhalb der Phase**, und zwar aus einem
-ausdrücklichen Grund: Q13 ist geschlossen, eine zweite Qualitätsmessung ist
-nicht vorgesehen, und der belegte Befund aus §12.5 — deutsch, knapp, ohne
-erfundene Grammatikregel, ohne Tonaussage, dafür mit dünnem Inhalt und
-gelegentlich schiefem Deutsch — hängt an den Eigenschaften, die beide Wortlaute
-teilen. Der Abgleich des ausgelieferten Prompts gehört in die **finale Geräte-
-und Release-Abnahme**, wo die Funktion ohnehin am Gerät bedient wird.
+**Nachgemessen wird nicht**, und zwar aus einem ausdrücklichen Grund: Q13 ist
+geschlossen, eine zweite Qualitätsmessung ist nicht vorgesehen, und der belegte
+Befund aus §12.5 — deutsch, knapp, ohne erfundene Grammatikregel, ohne
+Tonaussage, dafür mit dünnem Inhalt und gelegentlich schiefem Deutsch — hängt an
+den Eigenschaften, die beide Wortlaute teilen.
+
+**Was stattdessen passiert, ist am 2026-09-22 festgelegt:** In der finalen
+Geräte- und Release-Abnahme wird Revision 1 **nur als ausgelieferter Produktpfad
+funktional** geprüft — Anfrage funktioniert, deutsche Erklärung erscheint,
+Struktur aus Bedeutung, Gebrauch und Beispielen trägt, Kennzeichnung ist
+sichtbar, Fehlerrouten funktionieren. **Keine zweite Q13-Messung, kein neues
+Go/No-Go, keine Trefferzählung.** Die Prüfhandlungen stehen in
+`docs/roadmap.md` § *Finale Geräte- und Release-Abnahme*, Nr. 8.
 
 Der Wortlaut selbst ist gegen unbemerkte Änderung gesichert:
 `AIPromptsTests.revisionTracksTheInstruction` pinnt seinen **SHA256-Digest**
