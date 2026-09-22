@@ -83,6 +83,12 @@ struct CardListView: View {
     /// state for two meanings is how an alert ends up lying about what failed.
     @State private var statusFailure: AppError?
 
+    /// The card whose explanation is open, as plain strings.
+    ///
+    /// `ExplainedCard` rather than `Card` on purpose — the sheet is a lookup
+    /// and gets nothing it could write to.
+    @State private var cardBeingExplained: ExplainedCard?
+
     /// Every card of the current type, ignoring search and filters. Used to
     /// tell "nothing created yet" apart from "filtered everything away".
     private var cardsOfCurrentType: [Card] {
@@ -159,6 +165,9 @@ struct CardListView: View {
             }
             .sheet(isPresented: $isShowingSettings) {
                 SettingsView()
+            }
+            .sheet(item: $cardBeingExplained) { explained in
+                CardExplanationSheet(card: explained)
             }
             .sheet(isPresented: $isShowingFilterSheet) {
                 CardFilterSheet(allTags: allTags, selection: $filter)
@@ -390,6 +399,33 @@ struct CardListView: View {
         // list is the purpose of this screen (A25). Not a swipe action either —
         // swiping already deletes, and five statuses do not fit there.
         .contextMenu {
+            // Resolved each time the menu is built, never stored: the system
+            // can switch Apple Intelligence off while the app runs, and a
+            // cached answer would keep offering a function that is gone.
+            let availability = AIAvailability.current()
+            if CardExplanationEntry.isOfferedInList(availability) {
+                Button {
+                    cardBeingExplained = ExplainedCard(card)
+                } label: {
+                    Label("Erklärung anzeigen", systemImage: CardExplanationEntry.symbolName)
+                }
+                .disabled(availability.isEnabled == false)
+
+                // „Sichtbar, deaktiviert, **mit Erklärung**" — ohne diese Zeile
+                // wäre der graue Eintrag ein toter Knopf, der nichts sagt, und
+                // genau das sollte das Ausblenden der unbehebbaren Zustände
+                // vermeiden. Als eigener deaktivierter Eintrag, weil ein Menü
+                // keine Fußzeile hat.
+                //
+                // **Ob SwiftUI daraus wirklich einen sichtbaren Eintrag macht
+                // oder ihn schluckt, ist nicht dokumentiert** und steht als
+                // eigener Punkt in der Geräteabnahme (Roadmap § Finale Abnahme
+                // Nr. 8). Fällt er weg, muss hier eine andere Darstellung her.
+                if let reason = availability.disabledReason {
+                    Text(reason)
+                }
+            }
+
             Menu("Lernstand setzen") {
                 ForEach(LearningStatusCorrection.menuOrder, id: \.self) { status in
                     Button {

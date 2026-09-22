@@ -45,6 +45,14 @@ struct LearnRevealedAnswerView: View {
     /// is unchanged; it only moves when the user asks for larger text.
     @ScaledMetric(relativeTo: .largeTitle) private var hanziSize: CGFloat = 44
 
+    /// The explanation sheet, presented from the revealed card.
+    ///
+    /// Lives here and **not** in `LearnSessionModel`: the model owns what the
+    /// session is, and looking a word up is not part of that. Keeping the state
+    /// out of the model is what makes „the sheet changes no session state" a
+    /// structural fact instead of a claim.
+    @State private var explainedCard: ExplainedCard?
+
     var body: some View {
         VStack(spacing: 20) {
             LearnPromptSpeaker(card: card)
@@ -79,9 +87,54 @@ struct LearnRevealedAnswerView: View {
             if let speechCheck {
                 SpeechCheckNote(check: speechCheck)
             }
+
+            explanationEntry
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 8)
+        // Presented from here, with `ExplainedCard` — plain strings, no `Card`,
+        // no `ModelContext`, no session model. The sheet therefore *cannot*
+        // touch the session state, rather than being trusted not to.
+        .sheet(item: $explainedCard) { explained in
+            CardExplanationSheet(card: explained)
+        }
+    }
+
+    /// The way into the explanation, on the revealed card only.
+    ///
+    /// „Revealed only" is not enforced by a condition here — it is enforced by
+    /// **where this view is used**: both modes reach `LearnRevealedAnswerView`
+    /// exclusively from their revealed branch. The rule is still asked, so that
+    /// availability governs it and the call site says out loud what it relies
+    /// on.
+    ///
+    /// Resolved on every render rather than stored: the system can switch Apple
+    /// Intelligence off while the app runs.
+    ///
+    /// **The learning screen shows the entry only when it is usable** — no
+    /// greyed-out button and no explanatory text here. Everywhere else the
+    /// recoverable states are shown with a reason, and this screen is the one
+    /// exception, for two reasons the review made concrete: the text would stand
+    /// under *every* revealed card for the whole session, which is the prose
+    /// phase 13 just removed; and this stack has no `ScrollView`, so a sentence
+    /// card with a mismatch note plus a three-line reason can overflow. The
+    /// reason stays reachable in the card list's menu and in the settings, so
+    /// nothing becomes unexplainable — only quieter where the learner is working.
+    @ViewBuilder
+    private var explanationEntry: some View {
+        // The whole rule is in the function — including „only when usable" (A51),
+        // which used to sit here as a second condition. A rule at a call site is
+        // a rule no test can reach, and the second audit found exactly that.
+        if CardExplanationEntry.isOfferedOnLearningCard(AIAvailability.current(), isRevealed: true) {
+            Button {
+                explainedCard = ExplainedCard(card)
+            } label: {
+                Label("Erklärung anzeigen", systemImage: CardExplanationEntry.symbolName)
+                    .font(.subheadline)
+            }
+            .buttonStyle(.bordered)
+            .padding(.top, 4)
+        }
     }
 }
 

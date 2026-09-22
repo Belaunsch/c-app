@@ -48,6 +48,7 @@ struct SettingsView: View {
                 voiceSection
                 learningSection
                 modelSection
+                aiSection
                 statusSection
             }
             .navigationTitle("Einstellungen")
@@ -252,6 +253,32 @@ struct SettingsView: View {
     }
 
     // MARK: - Status counts
+
+    /// What the on-device model can do right now, in words.
+    ///
+    /// Informative only. **No download button, no model management, no progress
+    /// bar** — the framework offers none of that (`docs/apple-frameworks.md`
+    /// §11.9), unlike the recognition models above, where a download is a real
+    /// thing the user can start. Inventing a control here would promise an
+    /// influence the app does not have.
+    ///
+    /// The line exists so that a hidden explanation entry stays explainable:
+    /// without it, a missing function is a riddle.
+    ///
+    /// Resolved on each render instead of stored — the state changes behind the
+    /// app's back, and `SystemLanguageModel` is `Observable`, so following it is
+    /// the cheap path.
+    private var aiSection: some View {
+        Section {
+            Text(AIAvailability.current().settingsText)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } header: {
+            Text("Erklärungen auf dem Gerät")
+        } footer: {
+            Text("Erklärungen werden auf Knopfdruck erzeugt und nicht gespeichert.")
+        }
+    }
 
     private var statusSection: some View {
         Section {

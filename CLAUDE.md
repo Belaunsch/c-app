@@ -6,12 +6,15 @@ Private, native iOS-App zum Lernen von Mandarin-Chinesisch (Lernkarten).
 Swift, SwiftUI, SwiftData, keine externen Dependencies, kein Backend,
 local-first.
 
-**Aktueller Stand: Phasen 0–13 implementiert, Phase 13 verifiziert (READY).** Stand des Gates: **649
-Testfunktionen / 707 Einzelausführungen grün** — parametrisierte Tests machen
+**Aktueller Stand: Phasen 0–14 implementiert.** Stand des Gates: **686
+Testfunktionen / 753 Einzelausführungen grün** — parametrisierte Tests machen
 daraus zwei Zahlen, also immer mit Einheit nennen —, 0 fehlgeschlagen, 0
 Compilerdiagnosen auf einem Debug-Build von null, Release-Build von null
-ebenso, dazu **zwei** unabhängige Code Reviews, **zwei** Testaudits und
-**einundzwanzig Gegenmutationen, die alle greifen**.
+ebenso, dazu **vier** unabhängige Code Reviews, **vier** Testaudits und
+**sechsundzwanzig Gegenmutationen**, von denen fünfundzwanzig greifen. Die eine
+ungefangene — ein verschriebener SF-Symbol-Name an einer Aufrufstelle — ist
+inzwischen **konstruktiv unmöglich**: Der Name ist eine geteilte Konstante, die
+auch `SystemSymbolTests` prüft, und ein Tippfehler darin wird gefangen.
 
 **Die vollständige Geräteprüfung und der mehrtägige Alltagstest sind seit dem
 2026-09-13 kein Gate der einzelnen Phase mehr**, sondern ein gemeinsames Gate
@@ -89,38 +92,47 @@ API. Die Einschränkung steht dokumentiert in
 [apple-frameworks.md](docs/apple-frameworks.md) Q12; der Weg zum Hanzi bleibt
 die Kette `Deutsch → Hanzi → Pinyin`.
 
-**Nächster Schritt: Phase 14 — AI-Erklärung zu einer Karte.** Spezifiziert und
-**gemessen** am 2026-09-21, noch nicht implementiert. Die Phase begann mit zwei
-Produktfällen und endet mit einem.
+Seit Phase 14 gibt es die **AI-Erklärung**: auf Knopfdruck ein kurzer deutscher
+Text zu einer vorhandenen Karte — Bedeutung, Gebrauch, höchstens zwei Beispiele
+—, erzeugt von Apples On-Device-Modell (`SystemLanguageModel`, Systemframework,
+also keine externe Dependency). Erreichbar aus dem Kontextmenü der Kartenliste
+**und** von einer **aufgedeckten** Lernkarte, beide Male dasselbe Sheet.
+Sichtbar als erzeugt gekennzeichnet, **nicht persistiert**.
 
-**Gebaut wird:** eine kurze, deutsche, lernorientierte Erklärung zu einer
-vorhandenen Karte — Bedeutung, Gebrauch, höchstens zwei Beispiele —, erreichbar
-aus dem Kontextmenü der Kartenliste **und** von einer **aufgedeckten** Lernkarte,
-sichtbar als erzeugt gekennzeichnet und **nicht persistiert**. Die Phase führt
-deshalb **keinen einzigen Schreibzugriff** auf den Store ein: kein neues Attribut,
-keine Migration, kein `ReviewLog`, keine Änderung an `Card` oder
-`LearningStatus`. `Learning/` bleibt unverändert.
+**Die Phase schreibt nichts.** Kein neues Attribut, keine Migration, kein
+`ReviewLog`, keine Änderung an `Card` oder `LearningStatus`, `Learning/`
+unverändert. Getragen wird das nicht von einem Vorsatz, sondern vom Compiler:
+Das Sheet bekommt `ExplainedCard` — vier Strings — und niemals eine `Card`, einen
+`ModelContext` oder das Sessionmodell (A48). Der Sheet-Zustand liegt in der View,
+nicht in `LearnSessionModel`.
 
-**Gestrichen wird der Bulk-Fall** — Kartenentwürfe aus einer Beschreibung. Er ist
-an der **vor** der Messung festgelegten No-Go-Bedingung gescheitert: In 50
-generierten Einträgen trugen vier eine falsche Bedeutung bei völlig unauffälligem
-Hanzi (`Abbruch|结账`, `Speisekarte|菜谱`, `Toast|面包`, `Töpfe|碗`), und eine
-Vorschau aus Deutsch, Hanzi und Pinyin kann das nicht sichtbar machen. **Die
-Schwelle ist nach Kenntnis der Ergebnisse nicht verändert worden**, es ist kein
-externer Dienst und kein Plan B an die Stelle getreten. Der Ansatz „Bulk mit
-unabhängiger Bedeutungsprüfung" steht als **neu zu spezifizierende und neu zu
-messende** Idee im Backlog. Die Entscheidungen P1 bis P4 sind als getroffen
-dokumentiert und dem blockierten Fall zugeordnet.
+Drei Regeln sind **gemessen** begründet, nicht vermutet: `availability` wird bei
+jeder Öffnung neu bestimmt und **nie gecacht**; geprüft werden `de_DE` und
+`zh_CN` **namentlich**, weil `Locale.current` auf dem Testgerät `en_DE` ist; und
+es gibt **genau eine Modellanfrage je Nutzeraktion**, weil `rateLimited` am
+2026-09-21 im **Vordergrund** auftrat und Warten nicht half. Sessions sind
+Einwegware — je Anfrage eine neue, damit ist `concurrentRequests` unmöglich
+(A47, Gegenteil der TTS-Regel A31). Das Sheet lässt sich während einer Anfrage
+nicht wegwischen, sonst wäre Schließen und Wiederöffnen ein Weg zu zwei
+Anfragen.
 
-Alles ausschließlich **on-device** über `SystemLanguageModel`; dass es kein Dienst
-wird, folgt aus den harten Regeln 2 und 8. Q13 ist geschlossen — API-Oberfläche in
-[apple-frameworks.md §11](docs/apple-frameworks.md), Gerätemessung in §12. Drei
-Messbefunde prägen den Entwurf: `availability` wird **nie gecacht**,
-`Locale.current` war auf dem Gerät `en_DE` (also beide Ziel-Locales **namentlich**
-prüfen), und `rateLimited` trat **im Vordergrund** auf — deshalb **eine Anfrage je
-Nutzeraktion** und ein echter Fehlerpfad dafür.
+**Der Bulk-Fall ist gemessen gescheitert und gestrichen.** Geplant war
+zusätzlich, Karten in Serie aus einer Beschreibung zu erzeugen. In 50 Entwürfen
+trugen vier eine falsche Bedeutung bei völlig unauffälligem Hanzi
+(`Abbruch|结账`, `Speisekarte|菜谱`, `Toast|面包`, `Töpfe|碗`) — wörtlich die vor
+der Messung festgelegte No-Go-Bedingung, weil eine Vorschau aus Deutsch, Hanzi
+und Pinyin das nicht sichtbar machen kann. **Die Schwelle wurde nach Kenntnis
+der Ergebnisse nicht verändert**, kein externer Dienst und kein Plan B ist an
+die Stelle getreten. Der Ansatz mit unabhängiger Bedeutungsprüfung liegt im
+Backlog; P1 bis P4 sind als Entscheidungen des blockierten Falls dokumentiert.
+Q13 ist geschlossen — API in [apple-frameworks.md §11](docs/apple-frameworks.md),
+Gerätemessung in §12, Prompt-Revisionen in §12.7.
 
-**Erst danach** die finale Geräte- und Release-Abnahme.
+**Nächster Schritt: die finale Geräte- und Release-Abnahme.** Alle
+Implementierungsphasen sind durch. **Neun** hardwareabhängige Punkte der Phase 14
+stehen dort unter § 8 — darunter zwei, die kein Unit-Test sehen kann: ob der
+Session-Sprachmodus das Sheet übersteht, und ob das Sheet während einer Anfrage
+wieder frei wird.
 
 Die Kette `Deutsch → Hanzi → Pinyin` läuft mit Return oder beim Verlassen des
 Feldes automatisch, beide Werte bleiben editierbar, und ein von Hand gesetzter

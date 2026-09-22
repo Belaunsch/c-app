@@ -25,6 +25,10 @@ import UIKit
 struct SystemSymbolTests {
 
     static let usedSymbols = [
+        // Phase 14: über die Konstante, nicht als zweites Literal — so kann ein
+        // Tippfehler nicht an einer Aufrufstelle überleben, während die Liste
+        // richtig bleibt.
+        CardExplanationEntry.symbolName,
         // Cards
         "rectangle.stack.badge.plus", "rectangle.stack", "magnifyingglass",
         "tag", "plus", "pencil", "line.3.horizontal.decrease.circle",

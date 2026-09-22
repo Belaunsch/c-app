@@ -1330,8 +1330,22 @@ durch; alle weiteren blieben rate-limited, auch nach dreieinhalb Minuten Warten.
 Warten hilft nicht.
 
 **Dritter Lauf, ein Prozess je Block** — dreizehn getrennte
-`xcodebuild test-without-building`-Aufrufe: **dreizehn von dreizehn Blöcken
-gemessen, null Rate-Limits.**
+`xcodebuild test-without-building`-Aufrufe: **dreizehn von dreizehn gemessen,
+null Rate-Limits.**
+
+**Zur Zählung, weil sie an zwei Stellen unterschiedlich aussieht:** Geplant waren
+**elf Blöcke**; Block 4 ist während der Messung in **drei** eigenständige Tests
+zerlegt worden (4a fremde Sprache, 4b Anzahldruck, 4c Kontextfenster), weil unter
+der Ein-Anfrage-pro-Prozess-Bedingung drei Teilmessungen in einem Test zwei
+Rate-Limiter gemessen hätten. Elf geplante Blöcke, dreizehn Testfunktionen,
+dieselben Messungen.
+
+**Und eine Einschränkung, die zur Beweiskette gehört:** Der Messaufbau war
+ausdrücklich temporär und ist nach der Messung entfernt worden, wie beauftragt.
+Er ist **nie committet** worden. Die Messung ist damit aus dem Repository
+**nicht reproduzierbar** — sie ist dokumentiert, nicht nachrechenbar. Das
+unabhängige Testaudit hat das zu Recht angemerkt, und es steht hier, statt
+unausgesprochen zu bleiben.
 
 **Der Befund ist damit: Auf dem Gerät gelingt in diesem Aufbau genau eine
 Modellanfrage je Prozess.** Ob das am XCTest-Host hängt — der möglicherweise
@@ -1490,6 +1504,88 @@ Instructions, das Schema und die Antwort müssen mit hinein, und die Grenze
 kommt entsprechend früher. **Die Dublettenprüfung gehört in die App**, wie
 spezifiziert.
 
+### 12.7 Prompt-Revisionen
+
+Die Regel steht in `docs/roadmap.md` § Phase 14: Wer eine Instruction ändert,
+erhöht `AIPrompts.promptRevision` und trägt hier eine Zeile ein. Diese Tabelle
+ist die Historie.
+
+| Revision | Datum | Gerät / OS | Gemessen? |
+| --- | --- | --- | --- |
+| **1** | 2026-09-22 | iPhone 16 Pro, iOS 27.0 (24A437) | **nicht mit diesem Wortlaut** — siehe unten |
+
+**Und das ist der Punkt, den die Historie mit einer Lücke beginnen lässt.** Die
+Messung in §12.5 lief mit dem Wortlaut des temporären Spikes, nicht mit
+`AIPrompts.explanationInstructions`. Beide sagen dasselbe — Deutsch festnageln,
+Apples Locale-Phrase, kurz halten, keine erfundenen Regeln, nichts über
+Aussprache oder Töne —, aber sie sind **nicht Zeichen für Zeichen gleich**, und
+der Spike ist gelöscht. Revision 1 hängt damit an keiner eigenen Messung.
+
+Das wird hier benannt statt geglättet, weil die Revision genau dafür existiert:
+„Eine Messung ohne Angabe, welcher Prompt sie erzeugt hat, ist eine Anekdote" —
+und eine Revision ohne Messung ist die Gegenrichtung desselben Problems.
+
+**Nachgemessen wird nicht innerhalb der Phase**, und zwar aus einem
+ausdrücklichen Grund: Q13 ist geschlossen, eine zweite Qualitätsmessung ist
+nicht vorgesehen, und der belegte Befund aus §12.5 — deutsch, knapp, ohne
+erfundene Grammatikregel, ohne Tonaussage, dafür mit dünnem Inhalt und
+gelegentlich schiefem Deutsch — hängt an den Eigenschaften, die beide Wortlaute
+teilen. Der Abgleich des ausgelieferten Prompts gehört in die **finale Geräte-
+und Release-Abnahme**, wo die Funktion ohnehin am Gerät bedient wird.
+
+Der Wortlaut selbst ist gegen unbemerkte Änderung gesichert:
+`AIPromptsTests.revisionTracksTheInstruction` pinnt seinen **SHA256-Digest**
+zusammen mit der Revisionsnummer. Wer die Instruction anfasst, bekommt einen
+roten Test mit der Aufforderung, Revision und Messzeile nachzuziehen. Die erste
+Fassung dieses Tests pinnte nur die Zahl — und wirkte damit genau falsch herum:
+rot beim erlaubten Erhöhen, grün beim verbotenen stillen Ändern.
+
+### 12.8 Nachbefund: iOS 27 wirft die **neue** Fehlerfamilie
+
+Dieser Abschnitt entstand nach der Messung, beim zweiten unabhängigen Code
+Review — und er korrigiert eine Annahme, die in §11.7 als Compile-Frage behandelt
+war.
+
+**Die Annahme:** `LanguageModelSession.GenerationError` ist beim Deployment
+Target 26.0 der richtige Typ, seine Deprecation ab iOS 27.0 betrifft nur die
+Übersetzung (warnungsfrei bei `-target ios26.0`).
+
+**Der Befund:** Das stimmt für die Übersetzung und **nicht** für die Laufzeit.
+Der Messaufbau protokollierte bei jedem Fehlschlag zuerst den Fehlertext und
+versuchte danach einen Cast:
+
+```swift
+SpikeLog.note("FEHLER: \(thrown)")
+if let generation = thrown as? LanguageModelSession.GenerationError {
+    SpikeLog.note("GenerationError: \(generation)")
+}
+```
+
+In den Gerätelogs vom 2026-09-21 stehen **sechzehn** Zeilen
+`FEHLER: Request has been rate limited` und **null** Zeilen `GenerationError:`.
+Der Cast hat also nie gegriffen: **Unter iOS 27.0 ist der geworfene Fehler nicht
+`LanguageModelSession.GenerationError`.** Das SDK stützt das — `LanguageModelError`
+(iOS 27.0) führt `case rateLimited(RateLimited)`, und `RateLimited` trägt ein
+`resetDate`, das in der alten Familie nicht existiert und über sie auch niemanden
+erreichen könnte.
+
+**Warum das nicht kosmetisch ist.** Eine Abbildung, die nur die alte Familie
+prüft, hätte auf dem Zielgerät ausgerechnet den Pfad verloren, den diese Phase
+ausdrücklich als „kein Randfall" führt: Der Rate-Limit-Fall wäre still zur
+allgemeinen Fehlermeldung geworden — auf genau der OS-Version, auf der das
+Rate-Limit der Normalfall ist (§12.1).
+
+`CardExplanationGenerator.appError(for:)` prüft deshalb **beide** Familien, die
+neue in einem `#available(iOS 27.0, *)` — dort ist sie warnungsfrei, weil
+`LanguageModelError` selbst nicht deprecated ist, und beim Target 26.0 bleibt der
+alte Pfad erhalten.
+
+**Was daraus allgemein folgt:** Eine Deprecation mit benanntem Nachfolger ist
+nicht nur eine Compilerwarnung, sondern möglicherweise ein anderer Laufzeittyp.
+Für `@available`-Fragen war die Regel dieses Dokuments schon „am Symbol
+nachsehen statt annehmen" (§7); hier kommt hinzu: **bei einem Fehlertyp auch
+nachsehen, was wirklich geworfen wird.** Der Befund lag in den eigenen Logs und
+ist erst beim zweiten Lesen aufgefallen.
 ---
 
 ## 13. Quellen

@@ -3144,8 +3144,9 @@ verengt).
 
 ## Phase 14 — AI-Erklärung zu einer Karte
 
-**Spezifiziert, gemessen und zugeschnitten am 2026-09-21. Noch nicht
-implementiert.**
+**Spezifiziert, gemessen und zugeschnitten am 2026-09-21, implementiert am
+2026-09-22.** Offen sind nur die hardwareabhängigen Punkte unter
+[§ Finale Geräte- und Release-Abnahme, Nr. 8](#8-ai-erklärung-phase-14).
 
 Die Phase begann mit zwei Produktfällen und endet mit einem. **Fall B — eine
 kurze, deutsche Erklärung zu einer vorhandenen Karte — ist gebaut worden, weil
@@ -3359,6 +3360,16 @@ geprüft.
 | eine der beiden Locales nicht unterstützt | **ausgeblendet** | ebenfalls nicht behebbar |
 | `.unavailable(.appleIntelligenceNotEnabled)` | **sichtbar, deaktiviert, mit Erklärung** | behebbar in den iOS-Einstellungen; Ausblenden würde eine einschaltbare Funktion verschweigen |
 | `.unavailable(.modelNotReady)` | **sichtbar, deaktiviert, mit Erklärung** | vorübergehend; beim nächsten Öffnen neu geprüft |
+| ein Grund, den Apple später hinzufügt (`@unknown default`) | **sichtbar, deaktiviert, neutral formuliert** | kein sechster Produktzustand, sondern ein defensiver Rückfall. „Unbekannt" ist nicht „unmöglich", also nicht ausblenden — aber die App darf auch nicht „Das Modell wird vorbereitet" **behaupten**, wenn sie es nicht weiß (harte Regel 9). Eigener Fall `unavailableForUnknownReason` mit „Steht derzeit nicht zur Verfügung." |
+
+**Eine Ausnahme, und nur eine: der Lernbildschirm zeigt den Einstieg nur, wenn
+er benutzbar ist** — kein ausgegrauter Knopf und kein Begründungstext dort. Zwei
+Gründe, beide vom unabhängigen Review konkret gemacht: Der Text stünde unter
+*jeder* aufgedeckten Karte die ganze Session lang, also genau die Prosa, die
+Phase 13 dort abgebaut hat; und der Stapel hat keinen `ScrollView`, sodass eine
+Satzkarte mit Mismatch-Notiz plus dreizeiliger Begründung überlaufen kann. Der
+Grund bleibt im Kontextmenü der Kartenliste und in den Einstellungen erreichbar
+— nichts wird unerklärbar, es wird nur dort still, wo gelernt wird (A51).
 
 Dazu **eine Zeile in den Einstellungen** (P6), die den aktuellen Zustand **samt
 verständlichem Grund** nennt. Sie ist der Grund, warum ein Ausblenden erklärbar
@@ -3411,7 +3422,7 @@ können (§12.6).
 
 ### Architektur
 
-Keine neue Schicht, kein Container, keine Protokolle. Vier neue Dateien und drei
+Keine neue Schicht, kein Container, keine Protokolle. Sechs neue Dateien und vier
 Ergänzungen:
 
 | Datei | Inhalt |
@@ -3419,6 +3430,8 @@ Ergänzungen:
 | `Services/AIPrompts.swift` | die Instruction und `promptRevision` |
 | `Services/AIAvailability.swift` | **reine** Abbildung aus `availability` plus beiden `supportsLocale`-Prüfungen auf die fünf UI-Zustände — testbar ohne Modell |
 | `Services/CardExplanationGenerator.swift` | die `@Generable`-Typen und die eine `async`-Funktion; erzeugt und verwirft die Session |
+| `Features/Cards/CardExplanationEntry.swift` | **rein**: wo der Einstieg erscheint — Liste und Lernkarte haben verschiedene Regeln (A51) |
+| `Features/Cards/CardExplanationModel.swift` | der Kontrollfluss, Anfrage injizierbar (A52) |
 | `Features/Cards/CardExplanationSheet.swift` | das Sheet, für beide Einstiege dasselbe |
 | `Features/Cards/CardListView.swift` (Ergänzung) | Kontextmenü-Eintrag |
 | `Features/Learn/…` (Ergänzung) | Einstieg auf der aufgedeckten Karte |
@@ -3468,64 +3481,169 @@ Phase 13 zuerst kam.
       im Dokument; **keine Prozentzahl als allgemeines Qualitätsversprechen** —
       nicht im Dokument, nicht in der App, nicht in einem Hinweistext.
 - [x] Das Go/No-Go ist je Fall dokumentiert und **nach** der Messung nicht
-      verändert worden.
+      verändert worden — seit dem Spezifikationscommit `356dfcb` wortgleich, per
+      `git diff` nachprüfbar.
+
+      **Die Reihenfolge ist allerdings Prozesswissen, nicht Repo-Evidenz**, und
+      das gehört benannt: Bedingungen **und** Ergebnisse sind in *einem* Commit
+      gelandet; `356dfcb~1` führt Phase 14 noch als Platzhalter ohne jede
+      Bedingung. Dass die Schwelle vor dem Lauf feststand, ist wahr und lässt
+      sich am Repository trotzdem nicht zeigen. Beim nächsten Mal wird die
+      Bedingung **vor** der Messung committet. Am Befund ändert das nichts, an
+      der Beweiskette schon — das unabhängige Testaudit hat darauf bestanden.
 - [x] Fall A ist als blockiert dokumentiert, mit den vier Belegfällen.
 - [x] Die Spike-Datei ist entfernt.
 
 **Fall B**
 
-- [ ] Der Eintrag steht im Kontextmenü der Kartenliste **und** auf der
+- [x] Der Eintrag steht im Kontextmenü der Kartenliste **und** auf der
       **aufgedeckten** Lernkarte; bei verdeckter Karte gibt es ihn nicht.
-- [ ] Beide Einstiege zeigen **dasselbe** Sheet.
-- [ ] Der Einstieg aus dem Lernflow lässt den Sessionzustand unverändert: kein
-      `ReviewLog`, kein Zähler, keine Wiedereinstreuung, ein offener
-      Einstufungsvorschlag bleibt offen, der Sprachmodus bleibt wie er war —
-      durch einen Test belegt.
-- [ ] Ein Beispiel ist ein `@Generable`-Typ mit `chinese` und `german`;
+- [x] Beide Einstiege zeigen **dasselbe** Sheet.
+- [x] Der Einstieg aus dem Lernflow lässt den Zustand von `LearnSessionModel`
+      unverändert: kein `ReviewLog`, kein Zähler, keine Wiedereinstreuung, ein
+      **offener** Einstufungsvorschlag bleibt offen. Belegt durch
+      `CardExplanationTests.sessionStateStaysNeutral` — über einer Session mit
+      echtem stehenden Vorschlag und über den **echten** Anfragepfad — und
+      strukturell dadurch, dass das Sheet `ExplainedCard` bekommt und weder
+      Modell noch Kontext (A48).
+
+      **Beides war nach dem ersten Anlauf überzeichnet, und das unabhängige
+      Testaudit hat es gefunden.** Der Test fuhr drei reine Funktionen und
+      verglich davor und danach — das belegt, dass reine Funktionen rein sind,
+      und wäre grün geblieben, hätte jemand ein `context.insert` in die
+      Erzeugen-Aktion gelegt. Schlimmer: „ein offener Vorschlag bleibt offen"
+      verglich `nil == nil`, weil `reveal` den Vorschlag löscht. Behoben mit
+      einer injizierbaren Anfrage-Closure (`CardExplanationModel`, Präzedenz
+      `LearnSessionModel(generator:now:)`) und der Vorschlagsvorbereitung aus
+      `LearnSessionModelTests`. **Kein Modell-Mock:** Die Closure hat keine
+      Meinung darüber, was eine Erklärung sagt.
+- [→] **Der Session-Sprachmodus ist davon ausdrücklich nicht abgedeckt** und
+      wandert in die finale Geräteabnahme. Er liegt als `@State` in
+      `LearnSessionView`, nicht in `LearnSessionModel`, steht also nicht im
+      geprüften Zustandsabbild. Die eigentliche Frage ist ohnehin eine, die kein
+      Unit-Test sehen kann: ob die Sheet-Präsentation `onDisappear` der
+      präsentierenden Hierarchie auslöst und damit `sessionEnded`. Von diesem
+      Bildschirm wurde bisher nur im Leerzustand ein Sheet gezeigt — es gibt
+      keinen Präzedenzfall über einer laufenden Session. **Prüfhandlung:**
+      Sprachmodus armieren, Erklärung öffnen und schließen, danach muss die
+      nächste Karte weiterhin von selbst aufnehmen.
+- [x] Ein Beispiel ist ein `@Generable`-Typ mit `chinese` und `german`;
       `[String]` kommt nicht vor.
-- [ ] Höchstens zwei Beispiele, und die Grenze steht im Schema
-      (`@Guide(.maximumCount(2))`).
-- [ ] Die Erklärung ist sichtbar als automatisch erzeugt gekennzeichnet und als
-      möglicherweise fehlerhaft.
-- [ ] Chinesische Anteile laufen durch `ChineseText`.
-- [ ] Der Text wird **nicht persistiert**: keine Schemaänderung, kein neues
+- [x] Höchstens zwei Beispiele. Die Grenze steht im Schema
+      (`@Guide(.maximumCount(2))`) **und** wird von der App erzwungen
+      (`CardExplanation.shownExamples`).
+
+      **Warum beides:** Ein Test über das Schema ließ sich nicht bauen. Ein
+      differenzieller Vergleich der `Codable`-Kodierung von `GenerationSchema`
+      — derselbe Typ mit und ohne Guide — war in der Gegenmutation **grün**, die
+      Kodierung ändert sich also nicht. Ein Test, der nicht fehlschlagen kann,
+      ist kein Test; die Zusage wurde deshalb in der App wahr gemacht statt
+      behauptet (A49).
+- [x] Die Erklärung ist sichtbar als automatisch erzeugt gekennzeichnet und als
+      möglicherweise fehlerhaft. **Codelesung** — ohne UI-Testgerüst berührt kein
+      Test diese Sektion; eine Mutation, die sie entfernt, bliebe grün.
+- [x] Chinesische Anteile laufen durch `ChineseText`. **Codelesung**, aus
+      demselben Grund; der VoiceOver-Beleg liegt in der Geräteabnahme.
+- [x] Der Text wird **nicht persistiert**: keine Schemaänderung, kein neues
       Attribut, und nach dem Schließen ist er weg.
-- [ ] *Neu erzeugen* funktioniert und schreibt ebenfalls nichts.
-- [ ] **Eine** Modellanfrage je Nutzeraktion; kein automatisches Nachladen, kein
-      zweiter Aufruf beim Öffnen.
-- [ ] Der Erzeugen-Knopf ist an `isResponding` gebunden; zwei gleichzeitige
-      Anfragen sind **nicht möglich**.
+- [x] *Neu erzeugen* funktioniert und schreibt ebenfalls nichts.
+- [x] **Eine** Modellanfrage je Nutzeraktion; kein automatisches Nachladen, kein
+      zweiter Aufruf beim Öffnen. Belegt über die Naht:
+      `openingAsksNothing` (null Anfragen), `oneTapIsOneRequest` (genau eine),
+      `regeneratingIsASecondRequest` (*Neu erzeugen* fragt wirklich erneut).
+      **Ehrlich dazu:** Dass im Sheet kein `.task` und kein `onAppear` steht, ist
+      Codelesung — die Regel „das Modell startet nie von selbst" ist getestet,
+      die Abwesenheit eines View-Modifiers nicht.
+- [x] Ein Fehlschlag nimmt dem Nutzer den Text nicht weg, den er gerade liest,
+      und die Meldung verschwindet bei der nächsten Anfrage —
+      `failureKeepsThePreviousText`, `successClearsTheFailure`.
+- [x] Zwei gleichzeitige Anfragen sind **nicht möglich**.
+
+      **Abweichung von der ursprünglichen Formulierung, und sie geht weiter als
+      diese.** Das Kriterium nannte `isResponding`. Das gehört einer
+      `LanguageModelSession` — und die darf hier nicht länger leben als eine
+      Anfrage (A47), also gibt es keine, an die sich ein Knopf binden könnte.
+      Gebaut ist die strengere Variante: Die Session entsteht **in** der Anfrage
+      und stirbt mit ihr, womit Apples `concurrentRequests` nicht abgefangen,
+      sondern **unmöglich** ist; `isGenerating` verhindert zusätzlich zwei
+      parallele Anfragen.
+
+      **Eine Lücke darin hat das Review gefunden und sie war echt:** Schließen
+      und Wiederöffnen während einer laufenden Anfrage ergab eine neue
+      View-Identität mit `isGenerating == false`, also doch eine zweite Anfrage —
+      und die hätte nach §12.1 die eine verbrannt, die durchgeht. Geschlossen mit
+      `.interactiveDismissDisabled(isGenerating)` und einem deaktivierten
+      *Fertig*: Das Sheet bleibt stehen, solange es fragt. Bewusst nicht über ein
+      Abbrechen des `Task`s — Apple sichert für `respond` keine
+      Abbruchsemantik zu, und „wahrscheinlich gestoppt" ist keine Grundlage
+      dafür, eine zweite Anfrage zuzulassen.
 
 **Verfügbarkeit, Sicherheit, Regeln**
 
-- [ ] Die fünf Zustände der Tabelle sind umgesetzt; `availability` wird bei jedem
-      Öffnen neu abgefragt und **nirgends gecacht**.
-- [ ] Geprüft werden `de_DE` und `zh_CN` **namentlich**, nicht `Locale.current`.
-- [ ] Die Einstellungen nennen den Zustand **samt verständlichem Grund**; es gibt
+- [x] Die fünf Zustände der Tabelle sind umgesetzt, jeder einzeln getestet, dazu
+      die Vorrangregel A50 und der defensive Rückfall.
+- [→] „`availability` wird **nirgends gecacht**" ist **Codelesung, kein Test.**
+      `AIAvailability.current()` ist eine Funktion ohne gespeicherten Wert und
+      wird an allen drei Stellen im Renderpfad aufgerufen — aber ein `static let`
+      an dieser Stelle würde kein Test bemerken, weil `SystemLanguageModel` nicht
+      ersetzbar ist. Das ist ausgerechnet die Regel, für die Apple ausdrücklich
+      sagt, dass sich der Zustand hinter dem Rücken der App ändert. In die
+      Geräteabnahme: Apple Intelligence bei offener App abschalten und prüfen,
+      dass der Einstieg verschwindet.
+- [x] Geprüft werden `de_DE` und `zh_CN` **namentlich**, nicht `Locale.current`.
+- [x] Die Einstellungen nennen den Zustand **samt verständlichem Grund**; es gibt
       **kein** Asset- oder Download-Management.
-- [ ] `rateLimited` hat einen nutzersichtbaren Pfad, der nichts kaputt macht.
-- [ ] `debugDescription` eines `GenerationError` erscheint **nie** in der
-      Oberfläche.
-- [ ] Die Instruction nagelt die Antwortsprache fest und enthält Apples exakte
+- [x] `rateLimited` hat einen nutzersichtbaren Pfad, der nichts kaputt macht —
+      und zwar für **beide** Fehlerfamilien. Das zweite Review fand, dass
+      `GenerationError` ab iOS 27.0 deprecated ist; die Nachprüfung der eigenen
+      Gerätelogs zeigte, dass der Cast dort **nie** gegriffen hat
+      ([§12.8](apple-frameworks.md#128-nachbefund-ios-27-wirft-die-neue-fehlerfamilie)).
+      Eine Abbildung nur auf die alte Familie hätte auf dem Zielgerät
+      ausgerechnet diesen Pfad verloren. Jetzt geprüft werden beide, die neue in
+      `#available(iOS 27.0, *)`, jede mit eigenem Test.
+- [x] `debugDescription` eines `GenerationError` erscheint **nie** in der
+      Oberfläche — parametrisiert über **alle neun** Fälle, `.refusal`
+      eingeschlossen (`Refusal(transcriptEntries:)` ist öffentlich).
+- [x] Die Instruction nagelt die Antwortsprache fest und enthält Apples exakte
       Locale-Phrase — durch einen Test belegt.
-- [ ] `promptRevision` existiert, und die Messzeile im Dokument nennt sie.
-- [ ] `tools:` wird nirgends gesetzt.
-- [ ] `PrivateCloudComputeLanguageModel` kommt im Projekt **nicht vor** — durch
+- [x] `promptRevision` existiert, und die Messzeile im Dokument nennt sie —
+      [apple-frameworks.md §12.7](apple-frameworks.md#127-prompt-revisionen).
+      **Sie sagt dabei ausdrücklich, dass Revision 1 nicht mit ihrem eigenen
+      Wortlaut gemessen wurde:** §12.5 lief mit dem Wortlaut des gelöschten
+      Spikes. Beide sagen dasselbe, sind aber nicht zeichengleich. Nachgemessen
+      wird nicht — Q13 ist geschlossen und eine zweite Qualitätsmessung ist nicht
+      vorgesehen; der Abgleich gehört in die finale Abnahme. Der Wortlaut ist
+      gegen stille Änderung über seinen SHA256-Digest gepinnt.
+- [x] `tools:` wird nirgends gesetzt.
+- [x] `PrivateCloudComputeLanguageModel` kommt im Projekt **nicht vor** — durch
       eine Suche über das Repository belegt.
-- [ ] Kein neuer Info.plist-Schlüssel, kein Entitlement, kein API-Key, keine
+- [x] Kein neuer Info.plist-Schlüssel, kein Entitlement, kein API-Key, keine
       Netzwerkanfrage der App.
-- [ ] Die Phase führt **keinen einzigen Schreibzugriff** auf den Store ein —
-      durch einen Test belegt, der Kartenzahl und Inhalte vor und nach einer
-      Erklärung vergleicht.
-- [ ] **`CApp/Learning/` ist unverändert** — am Diff nachprüfbar.
-- [ ] Kein Pfad ändert `Card`, `LearningStatus`, `reviewCount`, `correctCount`
+- [x] Die Phase führt **keinen einzigen Schreibzugriff** auf den Store ein —
+      `nothingIsWritten` vergleicht Kartenzahl, Karteninhalte und
+      `ReviewLog`-Zahl vor und nach einem **vollständigen** Lebenszyklus
+      (öffnen, erzeugen, erneut erzeugen, Fehler) über den echten Anfragepfad.
+      Dazu die Suche: die neuen Dateien enthalten kein `ModelContext`, kein
+      `insert`, kein `save`, kein `delete`, kein `UserDefaults`.
+- [x] **`CApp/Learning/` ist unverändert** — am Diff nachprüfbar.
+- [x] Kein Pfad ändert `Card`, `LearningStatus`, `reviewCount`, `correctCount`
       oder schreibt einen `ReviewLog`.
-- [ ] Nirgends eine Aussprachebewertung, ein Score, ein Prozentwert oder eine
-      Konfidenz — auch nicht im Erklärtext.
-- [ ] Keine Bulk-Kartenerstellung, auch nicht in abgespeckter Form.
-- [ ] Deployment Target unverändert **iOS 26.0**; `project.pbxproj` unberührt.
-- [ ] Build und Tests grün, **null Compilerwarnungen** auf einem Debug- und einem
-      Release-Build von null.
+- [x] Im **App-Text** nirgends eine Aussprachebewertung, ein Score, ein
+      Prozentwert oder eine Konfidenz. Für den **Modelltext** verbietet es die
+      Instruction — jedes Verbot einzeln getestet —, und in allen fünf
+      Gerätemessungen hat das Modell sich daran gehalten.
+
+      **Was hier nicht behauptet wird: es gibt keinen Ausgabefilter.** Sagt das
+      Modell doch etwas über Töne, zeigt die App es. Das ist eine Grenze der
+      Konstruktion, abgefedert durch die Kennzeichnung als erzeugter Text — und
+      sie wird benannt statt garantiert, weil eine Zusage über einen Text, den
+      die App nicht kontrolliert, genau die Sorte Behauptung wäre, die harte
+      Regel 7 verbietet.
+- [x] Keine Bulk-Kartenerstellung, auch nicht in abgespeckter Form.
+- [x] Deployment Target unverändert **iOS 26.0**; `project.pbxproj` unberührt.
+- [x] Build und Tests grün, **null Compilerdiagnosen** auf einem Debug- und einem
+      Release-Build von null — unabhängig nachgemessen, **684 Testfunktionen /
+      752 Einzelausführungen**, 0 Fehlschläge.
 
 ### Die sechs Produktentscheidungen vom 2026-09-21
 
@@ -3717,6 +3835,68 @@ Der **unveränderte** Release-Kandidat wird mehrere Tage real benutzt.
 **Regel für Änderungen währenddessen:** Jede Änderung am **Laufzeitverhalten**
 startet diesen Alltagstest **neu** — Produktivcode, Assets, Buildeinstellungen.
 Reine Dokumentationsänderungen tun das nicht.
+
+### 8. AI-Erklärung (Phase 14)
+
+Neun Punkte, die sich ohne das Gerät nicht belegen lassen. Sie sind **kein
+versteckter Nachtrag zum Scope**, sondern die hardwareabhängigen Reste einer
+Phase, deren Regeln vollständig getestet sind.
+
+- [ ] **Eine echte Erklärung erzeugen**, aus der Kartenliste und von einer
+      aufgedeckten Lernkarte. Beide Male dasselbe Sheet, deutscher Text,
+      höchstens zwei Beispiele, chinesische Anteile in der richtigen Stimme
+      (VoiceOver).
+- [ ] **Der Session-Sprachmodus übersteht das Sheet.** Armieren, Erklärung
+      öffnen und schließen, danach muss die nächste Karte weiterhin von selbst
+      aufnehmen. Das ist der eine Punkt, den ein Unit-Test nicht sehen kann: ob
+      die Sheet-Präsentation `onDisappear` der präsentierenden Hierarchie
+      auslöst und damit `sessionEnded`. Von diesem Bildschirm wurde bisher nur
+      im Leerzustand ein Sheet gezeigt.
+- [ ] **Layout der aufgedeckten Karte mit dem neuen Knopf**, ausdrücklich mit
+      einer **Satzkarte** und einer **Mismatch-Notiz** gleichzeitig, bei großer
+      Schrift. Der Stapel hat keinen `ScrollView`.
+- [ ] **Läuft die Oberfläche während der Anfrage flüssig?** Die Anfrage läuft in
+      der MainActor-Domäne — Apples `respond` ist `nonisolated(nonsending)`, das
+      Target setzt `SWIFT_APPROACHABLE_CONCURRENCY`, und die eigentliche Arbeit
+      passiert per IPC in einem anderen Prozess. Das ist Apples eigenes Muster,
+      aber eine Zusicherung, die nur das Gerät bestätigt: Steht oder ruckelt der
+      `ProgressView` über die zwei bis zehn Sekunden, blockiert MainActor-Arbeit
+      und der Ausweg wäre `@concurrent` auf `explanation` (`CardExplanation` ist
+      `Sendable`, der Aufrufer wartet ohnehin).
+- [ ] **Apple Intelligence bei offener App abschalten.** Der Einstieg muss
+      verschwinden, ohne die App neu zu starten. Das ist der Gerätebeleg für
+      „`availability` wird nirgends gecacht" — die eine Regel dieser Phase, die
+      kein Test decken kann, weil `SystemLanguageModel` nicht ersetzbar ist.
+- [ ] **Antippen und warten: wird das Sheet wieder frei?** Während einer Anfrage
+      ist *Fertig* deaktiviert und Wegwischen gesperrt — das ist die Behebung der
+      Lücke „schließen und wiederöffnen startet eine zweite Anfrage". Die
+      Gegenrichtung ist damit aber offen: Kehrt `respond` nicht zurück, gibt es
+      keinen Ausgang. Apple dokumentiert für iOS 26 weder ein Timeout noch eine
+      Abbruchsemantik (`LanguageModelError.timeout` gibt es erst ab 27.0), und
+      ein Abbruch ist bewusst nicht gebaut, weil „wahrscheinlich gestoppt" keine
+      Grundlage für eine zweite Anfrage ist. **Vom zweiten Review aufgeworfen:
+      seltener, aber schlimmer als der verhinderte Fall.** Fällt die Prüfung
+      negativ aus, ist die Abwägung neu zu treffen.
+- [ ] **Der Begründungstext im Kontextmenü.** Er ist als nackter `Text` in
+      `.contextMenu` gesetzt; ob SwiftUI daraus einen deaktivierten Menüeintrag
+      macht oder ihn schluckt, ist nicht dokumentiert. Fällt er weg, ist
+      „sichtbar, deaktiviert, **mit Erklärung**" an diesem Einstieg nicht
+      erfüllt — dann muss dort eine andere Darstellung her.
+- [ ] **Tritt `rateLimited` auch im App-Prozess ab der zweiten Anfrage auf?**
+      Gemessen wurde es im XCTest-Host (§12.1), und ob das dasselbe ist, sagt
+      die Messung selbst ausdrücklich nicht. Davon hängt ab, ob *Neu erzeugen*
+      in der Praxis je durchgeht.
+- [ ] **Der ausgelieferte Prompt** im Vergleich zum gemessenen: Revision 1 hängt
+      an keiner eigenen Messung, weil §12.5 mit dem Wortlaut des gelöschten
+      Spikes lief
+      ([apple-frameworks.md §12.7](apple-frameworks.md#127-prompt-revisionen)).
+      Hier wird gesehen, ob die Eigenschaften halten — deutsch, knapp, keine
+      erfundene Grammatikregel, **keine Aussage über Töne oder Aussprache**.
+      Ausdrücklich **keine** zweite Qualitätsmessung: Q13 ist geschlossen.
+
+Dazu im Flugmodus (§3) und in der Fehlerliste: `rateLimited` ist ein normaler
+Produktzustand, nicht ein Randfall — er ist am 2026-09-21 im Vordergrund
+aufgetreten.
 
 ### Ergebnis
 

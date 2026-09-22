@@ -50,6 +50,23 @@ enum AppError: Error {
     /// Rückfrage bestätigt, und das Modell liegt weiterhin auf dem Gerät.
     case speechModelNotReleased
 
+    /// Eine AI-Erklärung ließ sich nicht erzeugen.
+    ///
+    /// Der Fehler wird mitgeführt, weil ein leeres `catch` verboten ist — aber
+    /// er erreicht die Oberfläche **nicht**, siehe `technicalDetail`.
+    case explanationFailed(any Error)
+
+    /// Das System hat die Anfrage begrenzt.
+    ///
+    /// Eigener Fall statt eines Sonderwegs in ``explanationFailed``, weil er
+    /// **kein Edge Case ist**: Der Gerätelauf vom 2026-09-21 hat `rateLimited`
+    /// im Vordergrund ausgelöst, ab der zweiten Anfrage, und Warten half nicht
+    /// (`docs/apple-frameworks.md` §11.6). Er trägt kein Fehlerobjekt, weil der
+    /// einzige verfügbare Text englisch ist und obendrein in die Irre führt —
+    /// Apple rät dort zu nicht-streamenden Anfragen im Hintergrund, und hier
+    /// lief weder das eine noch das andere.
+    case explanationRateLimited
+
     /// Short, German, aimed at the user.
     var message: String {
         switch self {
@@ -77,6 +94,10 @@ enum AppError: Error {
             "Das Sprachmodell für Chinesisch konnte nicht geladen werden."
         case .speechRecognitionFailed:
             "Die Spracherkennung hat nicht funktioniert. Die Selbsteinschätzung geht weiterhin."
+        case .explanationFailed:
+            "Die Erklärung konnte nicht erzeugt werden. An der Karte wurde nichts geändert."
+        case .explanationRateLimited:
+            "Das System hat die Anfrage gerade begrenzt. In einem Moment noch einmal auf Neu erzeugen tippen."
         case .speechModelNotReleased:
             "Es gab keine Reservierung zurückzugeben. Das Sprachmodell bleibt auf dem Gerät."
         case .tagDeleteFailed:
@@ -87,7 +108,16 @@ enum AppError: Error {
     /// The underlying system message, if there is one.
     var technicalDetail: String? {
         switch self {
-        case .cardIncomplete, .tagNameRejected, .speechModelNotReleased:
+        case .cardIncomplete, .tagNameRejected, .speechModelNotReleased,
+             .explanationRateLimited:
+            nil
+        case .explanationFailed:
+            // **Bewusst nichts.** Bei jedem anderen Fall ist der technische
+            // Text eine Diagnosehilfe; hier ist er der `Context` eines
+            // `GenerationError`, der laut Doku außer `debugDescription` nichts
+            // hergibt — und ein `debugDescription` darf nie in der Oberfläche
+            // landen (`docs/roadmap.md` § Phase 14). Der Fehler bleibt im
+            // Fall mitgeführt, er wird nur nicht angezeigt.
             nil
         case .speechAssetsUnavailable(let status):
             // Kein Fehlerobjekt, sondern der gemessene Zustand — und genau
